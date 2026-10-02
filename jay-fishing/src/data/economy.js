@@ -19,3 +19,7 @@ export const XP = {                                                             
 export const PRICE = { trophyPct: 0.90, legendPct: 0.99, legendTargetRatio: 5.0, dzLegendTrophy: 0.97763 };   // 🔒
 export const HOLD = { capacity: 12 };                                           // 🔒
 export const FREE_BAIT = { baitId: 'worm', count: 10, moneyBelow: 2000 };        // moneyBelow = 가장 싼 미끼 팩 값 — 살 수 없으면 준다
+export const LOSS = { rodBreakDragFrac: 0.9 };                                   // 로드 파손 뒤 드랙 상한 = 0.9 × 예비 로드 maxLoadKg(§5.6 — 바로 또 부러지지 않게)
+export const SHOP = { maxQty: 99 };                                             // buy qty 는 정수 1..99(§6.7)
+export const LIMITS = { ownedMax: 99, baitMax: 9999, moneyMax: 1e12, xpMax: 1e9, statMax: 1e9 };   // sanitize · 구매 상한(세이브 손상 · 오버플로 방지)
+export const SETTINGS_RANGE = { mouseSens: [0.2, 3], fov: [60, 90], quality: ['low', 'medium', 'high'], volumeKeys: ['master', 'sfx', 'ambience', 'ui'] };   // §3.7

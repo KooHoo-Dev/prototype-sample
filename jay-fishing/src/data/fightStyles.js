@@ -54,3 +54,6 @@ export const TRAITS = {
   shortThrash: { addStates: { thrash: { kind: 'run', f: 1.0, along: 0.8, sp: 1.2, dur: [0.3, 0.6], next: { wiggle: 0.6, rest: 0.4 } } },
                  addNext: { wiggle: { thrash: 0.3 }, rest: { thrash: 0.2 } } },
 };
+
+/** §5.3.4 — 상태 정의에 lateral 이 없을 때의 방향(bearing) 변화 속도 배율(kind 별 · 그 밖은 other) */
+export const LATERAL_DEFAULT = { turn: 0.8, run: 0.3, charge: 0.2, other: 0.1 };

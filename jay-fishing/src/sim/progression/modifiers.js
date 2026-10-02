@@ -1,27 +1,39 @@
 // OWNER: P4 — 계약 §6.7 · §3.6 · §7.7
-// STUB — W0 스텁(§6.14): computeModifiers = 스킬 0단계 값 · isOwned = 1단계면 true(그 밖 owned > 0)
-//   · availableCount = 1단계 Infinity(그 밖 owned 수). rigStats 는 §3.6 식 그대로 W0 완성(스텁 상태의 HUD · 테스트가 쓴다).
-// 순수 — view · ui 도 써도 된다.
+// 스킬 효과의 합(Modifiers) · 세트의 RigStats · 장비 보유 판정. 순수 — view · ui 도 써도 된다.
 
 import { FIGHT } from '../../data/fight.js';
 import { SIGNAL } from '../../data/bite.js';
 import { GEAR_BY_ID } from '../../data/gear.js';
 import { SKILLS } from '../../data/skills.js';
+import { SET_IDS } from '../../core/constants.js';
 
 /** @typedef {import('../../types.js').Profile} Profile */
 /** @typedef {import('../../types.js').Modifiers} Modifiers */
 /** @typedef {import('../../types.js').RigStats} RigStats */
 /** @typedef {import('../../types.js').SetId} SetId */
 
+/** 스킬의 최고 랭크 — effects 배열의 [0단계, 1, 2, 3] 에서 센다(§7.7) */
+export const SKILL_MAX_RANK = Math.min(...SKILLS.flatMap(sk => Object.values(sk.effects).map(a => a.length))) - 1;
+
+/** 스킬 랭크(정수 0..SKILL_MAX_RANK — 모르는 값은 0) @param {Profile} profile @param {string} id @returns {number} */
+export function skillRank(profile, id) {
+  const r = profile && profile.skills ? profile.skills[id] : 0;
+  if (typeof r !== 'number' || !Number.isFinite(r)) return 0;
+  const n = Math.round(r);
+  return n < 0 ? 0 : n > SKILL_MAX_RANK ? SKILL_MAX_RANK : n;
+}
+
 /**
- * STUB — 스킬 효과의 합(§7.7). 지금은 모든 스킬 0단계 값.
+ * 스킬 효과의 합(§7.7) — mods[필드] = effects[필드][skills[id]].
  * @param {Profile} profile @returns {Modifiers}
  */
 export function computeModifiers(profile) {
-  void profile;
   /** @type {Record<string, number|boolean>} */
   const mods = {};
-  for (const sk of SKILLS) for (const [field, ranks] of Object.entries(sk.effects)) mods[field] = ranks[0];
+  for (const sk of SKILLS) {
+    const rank = skillRank(profile, sk.id);
+    for (const field of Object.keys(sk.effects)) mods[field] = sk.effects[field][rank];
+  }
   return /** @type {Modifiers} */ (/** @type {unknown} */ (mods));
 }
 
@@ -81,22 +93,39 @@ export function rigStats(profile, set, mods) {
     jumpPumpMul: mods.jumpPumpMul,
     earlyBaitKeep: mods.earlyBaitKeep,
     baitKeepOnFail: mods.baitKeepOnFail,
-    showStamina: mods.knowledge >= 3,
+    showStamina: mods.knowledge >= SKILL_MAX_RANK,   // 어종 지식 3단계(§7.7)
   };
 }
 
-/** STUB — 1단계는 언제나 true @param {Profile} profile @param {string} gearId */
+/** 1단계는 언제나 true · 2·3단계는 owned > 0 · 모르는 ID false @param {Profile} profile @param {string} gearId @returns {boolean} */
 export function isOwned(profile, gearId) {
   const g = GEAR_BY_ID[gearId];
   if (!g) return false;
   return g.tier === 1 || (profile.owned[gearId] ?? 0) > 0;
 }
 
-/** STUB — 보유 − 다른 세트가 끼운 수(1단계 Infinity). 지금은 보유 수 그대로 @param {Profile} profile @param {string} gearId @param {SetId} exceptSet */
+/** 세트가 그 장비를 끼운 수(부위 하나당 1) @param {Profile} profile @param {SetId} set @param {string} gearId @returns {number} */
+function usedBySet(profile, set, gearId) {
+  const cfg = profile.sets[set];
+  if (!cfg) return 0;
+  let n = 0;
+  if (cfg.rod === gearId) n++;
+  if (cfg.reel === gearId) n++;
+  if (cfg.hook === gearId) n++;
+  if (cfg.float === gearId) n++;
+  if (cfg.sinker === gearId) n++;
+  return n;
+}
+
+/**
+ * 보유 − 다른 세트가 끼운 수(exceptSet 이 끼운 것은 세지 않는다 · 생략하면 모든 세트를 뺀다). 1단계 Infinity · 모르는 ID 0.
+ * @param {Profile} profile @param {string} gearId @param {SetId} [exceptSet] @returns {number}
+ */
 export function availableCount(profile, gearId, exceptSet) {
-  void exceptSet;
   const g = GEAR_BY_ID[gearId];
   if (!g) return 0;
   if (g.tier === 1) return Infinity;
-  return profile.owned[gearId] ?? 0;
+  let n = profile.owned[gearId] ?? 0;
+  for (const set of SET_IDS) if (set !== exceptSet) n -= usedBySet(profile, set, gearId);
+  return Math.max(0, n);
 }

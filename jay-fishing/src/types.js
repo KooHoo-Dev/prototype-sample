@@ -240,6 +240,7 @@
  * @property {SpotId|null} spotId      mode === 'fish'일 때 선 자리
  * @property {number} speed            m/s 실제 이동 속도(걸음 흔들림 연출)
  * @property {InteractTarget|null} nearby   지금 E를 누르면 상호작용할 대상(프롬프트)
+ * @property {Vec2} [vel]              (W1 확정) sim 내부 — 걷기 가속(WORLD.accel)용 속도. 없으면 updateWalk 가 0 으로 만든다 · placePlayer 가 0 으로. view · ui 는 읽지 않는다
  */
 /** @typedef {{kind:InteractKind, id:string, dist:number}} InteractTarget   id: 자리면 SpotId, 그 밖은 InteractPoint.id */
 

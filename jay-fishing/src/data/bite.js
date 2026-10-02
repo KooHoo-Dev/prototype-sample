@@ -1,5 +1,5 @@
 // OWNER: P1 — 계약 §7.5
-// SEED — P0 이 W0 에 계약 값 그대로 넣었다. 조정은 소유 패키지만 §7.0 규칙 안에서(🔒 값은 밸런스 게이트만).
+// 계약 값 그대로(🔒 값은 밸런스 게이트만). P1 이 W1 에 더한 내부 값: BITE.pctMin/pctMax · RIG.timeEps · RIG.debug*CastFrac.
 
 export const BITE = {
   t0: 28, minWait: 5,                                    // 🔒 평균 대기 = minWait + t0 / W
@@ -13,6 +13,7 @@ export const BITE = {
   driftMinFlow: 0.15, driftMul: 1.4,                     // 흘림: 흐름 ≥ 0.15m/s 에서만 · 입질 ×1.4(+ 먼 곳의 farMul — §5.4.2)
   bottomSlipMul: 0.5, bottomSlipSpeed: 0.5,              // 봉돌이 밀리면 입질 ×0.5 · (흐름 − 버팀) × 0.5 m/s 로 밀린다
   zMin: -2.5, zMax: 3.3,
+  pctMin: 0.0005, pctMax: 0.9995,                        // rollFish(pct) 입력 클램프(§5.4.5)
 };
 export const LAYER = { surfaceMaxM: 1.2, surfaceFrac: 0.25, bottomGapM: 0.5 };
 export const CAST = {
@@ -30,4 +31,6 @@ export const SIGNAL = {
   bottom: { tremble: [1.0, 2.5], pulse: 0.4, takeWindow: 1.1 },                     // 🔒 takeWindow
   earlyGrace: 0.10,
 };
-export const RIG = { failNotice: 1.0, netTime: 0.8 };                               // 🔒 failNotice
+export const RIG = { failNotice: 1.0, netTime: 0.8,                                 // 🔒 failNotice
+  timeEps: 1e-6,                                    // 누적 DT 비교의 부동소수 여유(60틱 × 1/60 이 1.0 에 못 미치는 것을 막는다)
+  debugBiteCastFrac: 0.8, debugFightCastFrac: 0.6 };  // 디버그 forceBite · forceFight 의 착수 거리 = castMaxM × 이 값(§6.5 · §6.3)

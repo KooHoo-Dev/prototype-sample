@@ -1,19 +1,53 @@
 // OWNER: P8 — 계약 §10.2
-// STUB — UIRoot 내부 패널(모양은 P8 재량). W0 스텁 UIRoot 는 패널 이름 한 줄만 그린다.
+// 지도(문) — getTravel() 의 카드: 이름 · 참고 장소 · 오늘 날씨 · 잠김 사유(「아직 갈 수 없다(레벨 5)」). Enter = actions.travel(id).
+
+import { t, has } from '../i18n.js';
+import { PanelBase, el, reasonText } from '../widgets.js';
+
+class MapPanel extends PanelBase {
+  /** @param {import('../widgets.js').PanelCtx} ctx */
+  constructor(ctx) {
+    super(ctx, 'map', { size: 'm' });
+  }
+
+  build() {
+    const sim = /** @type {any} */ (this.sim);
+    const actions = /** @type {any} */ (this.ctx.actions);
+    /** @type {any[]} */
+    let list = [];
+    try { list = sim.getTravel() || []; } catch (e) { void e; }
+    const grid = el('div', 'map-grid');
+    this.addInfo(grid);
+    for (const d of list) {
+      const card = el('div', 'map-card' + (d.ok ? '' : ' is-locked'));
+      card.append(el('div', 'map-name', t('stage.' + d.id)));
+      if (has('stagePlace.' + d.id)) card.append(el('div', 'map-place', t('stagePlace.' + d.id)));
+      if (d.weather) card.append(el('div', 'map-weather', t('map.weather', { w: t('weather.' + d.weather) })));
+      if (d.id !== 'home') card.append(el('div', 'map-level', t('map.level', { n: d.unlockLevel })));
+      if (!d.ok) card.append(el('div', 'row-reason', reasonText(d.reason, d.reasonParams)));
+      else card.append(el('div', 'map-go', t('map.go')));
+      this.addItem(card, {
+        disabled: !d.ok,
+        activate: () => {
+          if (!d.ok) {
+            this.ui.toast('reason.' + (d.reason || 'invalid'), d.reasonParams || {});
+            return;
+          }
+          this.ui.closePanel('confirm');
+          const r = actions.travel(d.id);
+          if (r && typeof r === 'object' && 'ok' in r && !r.ok) this.ui.toast('reason.' + (r.reason || 'invalid'), r.params || {});
+        },
+      }, grid);
+    }
+    if (!list.length) grid.append(el('div', 'empty', t('map.none')));
+    this.addInfo(el('div', 'row-note', t('map.note')));
+  }
+}
 
 /**
- * STUB
- * @param {{root:HTMLElement, sim:Object, actions:Object, bus:Object}} ctx
- * @returns {{id:'map', open(args?:Object):void, close():void, update(state:Object, dt:number):void, handleKey(e:KeyboardEvent):boolean, dispose():void}}
+ * @param {import('../widgets.js').PanelCtx} ctx
+ * @returns {MapPanel}
  */
 export function createMapPanel(ctx) {
-  void ctx;
-  return {
-    id: 'map',
-    open(args) { void args; },
-    close() {},
-    update(state, dt) { void state; void dt; },
-    handleKey(e) { void e; return false; },
-    dispose() {},
-  };
+  return new MapPanel(ctx);
 }

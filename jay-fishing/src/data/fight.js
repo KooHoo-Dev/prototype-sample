@@ -1,16 +1,17 @@
 // OWNER: P2 — 계약 §7.8
-// SEED — P0 이 W0 에 계약 값 그대로 넣었다. 조정은 소유 패키지만 §7.0 규칙 안에서(🔒 값은 밸런스 게이트만).
+// 계약 값 그대로에서 P2(W1)가 §7.0 의 ±20% 안에서 다섯 값을 조정했다(🔒 아님 — NOTES-P2 「수치 조정」):
+//   fatigueFloor 0.3 → 0.36 · pumpLiftTime 0.8 → 0.64 · rodLowerTime 0.4 → 0.48 · slipRef 0.25 → 0.3 · tensionLambda 18 → 21.6
 
 export const FIGHT = {
   forceExp: 0.75, speedExp: 0.5, enduranceExp: 0.3,                 // 🔒
-  fatigueFloor: 0.3, runFatigueMin: 0.4,
+  fatigueFloor: 0.36, runFatigueMin: 0.4,
   reelLoadK: 0.25, reelLoadExp: 0.6,
-  pumpTension: 0.35, pumpLiftTime: 0.8, rodLowerTime: 0.4, pumpDrain: 1.7,   // 🔒 pumpTension · pumpDrain
+  pumpTension: 0.35, pumpLiftTime: 0.64, rodLowerTime: 0.48, pumpDrain: 1.7,   // 🔒 pumpTension · pumpDrain
   pumpStroke: 2.4, pumpGainFrom: 0.5,                                // 펌핑 거리는 rodLift 0.5 → 1 구간에서만(완전한 스트로크 = 2.4 × 0.5 = 1.2m)
   baseDrain: 0.18, recoverRate: 0.25, recoverBelow: 0.35,            // 🔒 baseDrain
-  slipRef: 0.25, minSlipSp: 0.3, stick: 0.5, stickTime: 0.25,        // 🔒 stick · stickTime
+  slipRef: 0.3, minSlipSp: 0.3, stick: 0.5, stickTime: 0.25,        // 🔒 stick · stickTime
   hookGrace: 0.6, startTele: 0.6,                                    // 챔질 뒤 0.6초는 정지 마찰 과부하 없음 · 시작 상태가 질주류면 0.6초 예고
-  tensionLambda: 18, minDistPad: 0.5, slackFlowFrac: 0.5, flowLoadK: 0.02,   // 최소 거리 = spot.edgeM + 0.5
+  tensionLambda: 21.6, minDistPad: 0.5, slackFlowFrac: 0.5, flowLoadK: 0.02,   // 최소 거리 = spot.edgeM + 0.5
   teleF: 0.4, teleAlong: 0.5, teleSp: 0.3, teleDepth: 1.5,
   jumpSpike: 1.1, lowRodAbsorb: 0.55,
   shakePulse: 0.3, shakePulseOn: 0.1, shakeAmp: 0.6,

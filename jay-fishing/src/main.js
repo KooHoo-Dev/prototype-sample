@@ -345,6 +345,15 @@ function boot() {
     closePanel: () => ui.closePanel('code'),
     loadFixture,
     setBot: () => false,
+    // §11.7 의 sim 디버그 위임(W1 통합 게이트 — sim 이 도는 화면을 정지 화면으로 보려고. W2 의 debugApi 가 같은 이름으로 대신한다)
+    setTime: (h) => { fixtureMode = false; return sim.debugSetTime(h); },
+    setWeather: (id) => { fixtureMode = false; return sim.debugSetWeather(id); },
+    forceBite: (id, pct) => { fixtureMode = false; return sim.debugForceBite(id, pct); },
+    forceFight: (id, pct) => { fixtureMode = false; return sim.debugForceFight(id, pct); },
+    grant: (g) => sim.debugGrant(g),
+    setGear: (slot, id, set) => sim.debugSetGear(slot, id, set),
+    skipToResult: (id, pct) => { fixtureMode = false; return sim.debugSkipToResult(id, pct); },
+    hash: () => sim.hash(),
   };
 
   // 첫 화면을 동기로 그리고 표식을 붙인다(rAF 가 늦거나 돌지 않아도 check:dist 가 본다)

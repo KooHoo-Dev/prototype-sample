@@ -33,7 +33,7 @@ import { typeKeys } from './helpers.js';
 const HEX = /^#[0-9a-f]{6}$/i;
 const PATTERNS = ['none', 'bars', 'spots', 'stripe', 'mottled', 'scales', 'mirror', 'scutes', 'gold', 'zombie', 'ghost'];
 const TRAIT_IDS = ['dash', 'shake', 'twist', 'rareJump', 'shortRun', 'longRun', 'repeatRun', 'multiJump', 'stopBurst', 'spin', 'vanish', 'firstRun', 'cautious', 'abrade', 'tremble', 'shortThrash'];
-const REASON_KEYS = ['stub', 'busy', 'locked', 'same', 'holdFull', 'noBait', 'noLine', 'money', 'level', 'mastery', 'notOwned', 'inUse', 'wrongSlot', 'wrongSet', 'maxRank', 'noPoints', 'notHere', 'invalid', 'holdFullCast'];
+const REASON_KEYS = ['stub', 'busy', 'locked', 'same', 'holdFull', 'noBait', 'noLine', 'money', 'level', 'mastery', 'notOwned', 'inUse', 'wrongSlot', 'wrongSet', 'maxRank', 'noPoints', 'notHere', 'invalid', 'full', 'holdFullCast'];
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isPos = (v) => isNum(v) && v > 0;
 const subsetOf = (arr, list) => Array.isArray(arr) && arr.every(x => list.includes(x));

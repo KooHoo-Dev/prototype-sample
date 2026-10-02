@@ -286,9 +286,11 @@ test('helpers: 리터럴이 실제 함수 · 계약 모양과 같다', () => {
   assert.deepEqual(fish.rig.origin, getSpot('lake_gravel').stand);
   assert.equal(makeTestState({ spotId: 'lake_gravel', hour: 22 }).env.headlamp, true);
 
-  // 리터럴 시계 = GameSim 의 시계
-  const sim = new GameSim({ bus: new EventBus(), seed: 1, start: { scene: 'lake', hour: 8 } });
+  // 리터럴 시계 = GameSim 의 시계 — 리터럴은 맑음이므로 같은 날씨로 비교한다(W1 확정: 실제 날씨는 시드 해시라 seed 1 · 1일 · lake 는 비)
+  const sim = new GameSim({ bus: new EventBus(), seed: 1, start: { scene: 'lake', hour: 8, weather: 'clear' } });
   assert.deepEqual(makeTestState({ hour: 8 }).clock, sim.state.clock);
+  const simRain = new GameSim({ bus: new EventBus(), seed: 1, start: { scene: 'lake', hour: 8 } });
+  assert.deepEqual(makeTestState({ hour: 8, weather: simRain.state.weather.current }).clock, simRain.state.clock, '시드 날씨에서도 리터럴 시계 = GameSim 시계');
 
   const gen = randomInputs(5);
   assert.deepEqual(gen(123), gen(123), 'randomInputs 는 (seed, tick) 의 함수');
