@@ -246,9 +246,12 @@ export function sanitizeProfile(raw) {
 
 /**
  * 개발용 프로필 — level 이면 그 레벨 · skillPoints = 누적 지급분(= level) · xp 0 · xpTotal = 그 레벨까지의 누적. money 면 그 돈.
- * @param {{level?:number|null, money?:number|null}} opts @returns {Profile}
+ * gear 2 · 3 이면 두 세트의 로드 · 릴 · 라인(가득) · 찌/봉돌을 그 단계로 끼우고 보유 수를 채운다(밸런스 게이트 — ?gear=:
+ * 갯바위 · 강을 그 스테이지에서 가질 법한 장비로 바로 본다. 1단계 장비로 강에 서면 꼬리물 랜딩 13–36% — NOTES-BALANCE).
+ * 드랙 눈금은 그대로(5/20 → 2단계 2.25kg = 라인의 28% · 3단계 4kg = 22% — 드랙을 만지지 않는 기본 봇 근처).
+ * @param {{level?:number|null, money?:number|null, gear?:number|null}} opts @returns {Profile}
  */
-export function makeDevProfile({ level, money } = {}) {
+export function makeDevProfile({ level, money, gear } = {}) {
   const p = createNewProfile();
   if (typeof level === 'number' && Number.isFinite(level)) {
     const lv = Math.max(1, Math.min(XP.levelCap, Math.round(level)));
@@ -258,5 +261,20 @@ export function makeDevProfile({ level, money } = {}) {
     p.xpTotal = cumulativeXp(lv);
   }
   if (typeof money === 'number' && Number.isFinite(money)) p.money = Math.max(0, Math.min(LIMITS.moneyMax, Math.round(money)));
+  if (gear === 2 || gear === 3) {
+    const t = gear;
+    for (const set of SET_IDS) {
+      const c = p.sets[set];
+      const rod = GEAR.find(g => g.slot === 'rod' && g.set === set && g.tier === t);
+      const reel = GEAR.find(g => g.slot === 'reel' && g.tier === t);
+      const line = GEAR.find(g => g.slot === 'line' && g.tier === t);
+      if (rod) { c.rod = rod.id; p.owned[rod.id] = (p.owned[rod.id] ?? 0) + 1; }
+      if (reel) { c.reel = reel.id; p.owned[reel.id] = (p.owned[reel.id] ?? 0) + 1; }
+      if (line && reel) { c.lineId = line.id; c.lineM = reel.capacityM; }
+      const bobSlot = c.float ? 'float' : c.sinker ? 'sinker' : null;
+      const bob = bobSlot ? GEAR.find(g => g.slot === bobSlot && g.tier === t) : null;
+      if (bob && bobSlot) { c[bobSlot] = bob.id; p.owned[bob.id] = (p.owned[bob.id] ?? 0) + 1; }
+    }
+  }
   return p;
 }

@@ -173,6 +173,7 @@ export const STRINGS = {
   'fail.cause.jump': '점프 때 로드를 세웠다',
   'fail.cause.shake': '머리를 흔들 때 줄이 느슨했다',
   'fail.cause.active': '몸부림에 바늘이 빠졌다',
+  'fail.cause.abrasion': '바위에 쓸려 줄이 닳았다',
 
   // ── 결과 사유(§0.5 — t('reason.' + reason, params))
   'reason.busy': '지금은 할 수 없다',
@@ -207,7 +208,7 @@ export const STRINGS = {
   'hint.bottomRig.title': '바닥 채비',
   'hint.holdFull.title': '어창',
   'hint.start.body': 'WASD 이동 · 마우스 둘러보기 · E 상호작용. 문으로 나가 호수로 가자 — PC에서는 상점 · 날씨 · 도감 · 스킬',
-  'hint.stage.body': '바닥의 흰 고리가 낚시 자리다(E). 판매상에게 물고기를 판다 · 캠프에서 다음 시간대로 건너뛰거나 집으로 간다',
+  'hint.stage.body': '주황 깃발과 바닥의 흰 고리가 낚시 자리다(E). 판매상에게 물고기를 판다 · 캠프에서 다음 시간대로 건너뛰거나 집으로 간다',
   'hint.controls.body': '좌클릭 캐스팅 · 릴링 · 우클릭 펌핑 · A/D 조준 · Space 챔질 · Esc 일어나기',
   'hint.holdFull.body': '어창(12마리)이 찼다 — 판매상에게 팔거나 집에 가면 비워진다. 그 전에 잡으면 어창의 가장 싼 것과 바꾸거나 방생한다',
   'hint.cast.body': '좌클릭을 누르고 있으면 힘이 오르내린다 — 밝은 띠에서 놓으면 가장 멀리 간다. 1 찌 채비 · 2 바닥 채비 · ↑↓ 찌 수심',
@@ -368,6 +369,7 @@ export const STRINGS = {
   'hud.notice.autoSold': '집에 와서 {n}마리 판매 · {money}',
   'hud.notice.refilled': '라인 {m}m 감기 · {money}',
   'hud.notice.band': '{band}이 되었다',
+  'hud.notice.contextLost': '그래픽 장치가 초기화됐다 — 복구되면 「계속하기」로 돌아간다',   // W2 통합(§11.10 — app 의 webglcontextlost)
   'hint.dismiss': '6초 뒤 닫힘 · 클릭하면 바로 닫기',
 
   // ── 상호작용 · 단계 안내

@@ -32,6 +32,9 @@ export const RIVER = {
     ridge: { height: 520, dist: 900, color: '#3a4a3a', farBankZ: -260 },              // 컬럼비아 협곡 절벽 · 강폭 약 260m
     water: { shallow: '#4a7a6a', deep: '#1a3a44', opacity: 0.88, flowDir: { x: 1, z: 0 } },
     sky: { zenith: '#5a8ccc', horizon: '#d0dce4' }, fog: { color: '#bcc8cc', density: 0.004 },
-    vendor: 'dock', dam: { x: -900, z: -120, width: 700, height: 60 },
+    vendor: 'dock',
+    // P12: 계약 시드(x −900 · 폭 700)는 지형 메시(x ±650)와 원경 능선(반경 900m) 뒤라 능선에 가려 보이지 않았다 —
+    // 지형 끝 안쪽으로 당기고 폭을 강폭(해안선 z 2 → 건너편 −260)에 맞췄다(look 은 view 전용 · NOTES-P12)
+    dam: { x: -470, z: -130, width: 272, height: 58 },
   },
 };

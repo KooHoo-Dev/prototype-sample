@@ -17,7 +17,7 @@ export const LAKE = {
       pool: [{ id: 'crucian', w: 1.0 }, { id: 'bluegill', w: 1.0 }, { id: 'snakehead', w: 0.6 }, { id: 'largemouthBass', w: 0.6 },
              { id: 'catfish', w: 0.4 }, { id: 'bullhead', w: 0.5 }, { id: 'carp', w: 0.3 }, { id: 'skygager', w: 0.3 }] },
     { id: 'lake_gravel', stand: { x: 0, z: 1.6 }, facing: 0, arc: 0.6, edgeM: 1.6, depth: [[0, 0.3], [10, 2.0], [25, 4.5], [45, 7.0]],
-      minCastM: 6, maxDriftM: 60, farFromM: null, flow: { x: 0.05, z: 0 }, snag: { fromM: 31, rate: 0.12 }, abrasion: 0, bottom: 'gravel',
+      minCastM: 6, maxDriftM: 60, farFromM: null, flow: { x: 0.05, z: 0 }, snag: { fromM: 33, rate: 0.12 }, abrasion: 0, bottom: 'gravel',
       pool: [{ id: 'crucian', w: 1.0 }, { id: 'carp', w: 0.6 }, { id: 'israeliCarp', w: 0.6 }, { id: 'steedBarbel', w: 0.8 },
              { id: 'largemouthBass', w: 0.4 }, { id: 'bluegill', w: 0.5 }, { id: 'catfish', w: 0.4 }, { id: 'bullhead', w: 0.4 },
              { id: 'skygager', w: 0.4 }, { id: 'goldenDragon', w: 1 }] },

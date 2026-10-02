@@ -13,9 +13,10 @@ export const NET_HOOP_R = 0.35;          // 테 반경
 export const LEFT_HAND_CAM = new THREE.Vector3(-0.24, -0.21, -0.36);   // 카메라 공간 왼손(화면 왼쪽 아래 · 수평 거리 ≈ 0.43m)
 const REST_PITCH = -0.3;                 // 떠 올린 자세의 손잡이 각(수평 아래)
 const MIN_PITCH = -1.15;
-const LIFT_PITCH = -0.08;                // 떠 올린 끝 — 물고기가 든 그물이 시야 안으로 올라온다
-const SCOOP_IN = 0.3;                    // 뜰채 진행 비율: 0 → 0.3 물고기 쪽으로 · 0.3 → 0.6 뜬다 · 0.6 → 1 들어 올린다
-const SCOOP_HOLD = 0.6;
+const LIFT_PITCH = 0.0;                  // 떠 올린 끝 — 물고기가 든 그물이 시야 안으로 올라온다(화면 패스: −0.08 → 0 — 그물이 「뜰채로 뜨는 중」 안내 뒤에 걸렸다)
+const SCOOP_IN = 0.25;                   // 뜰채 진행 비율: 0 → 0.25 물고기 쪽으로 · 0.25 → 0.4 뜬다 · 0.4 → 0.75 들어 올린다 · 0.75 → 1 든 채 보인다
+const SCOOP_HOLD = 0.4;                  // 화면 패스: 0.6 → 0.4 · 들어 올림을 0.75 에 끝낸다 — 시선이 수평이라 물가 아래에서 뜨는 동안은 화면 밖이고,
+const LIFT_END = 0.75;                   //   전에는 그물이 마지막 0.1초에만 보였다(결과 패널이 곧 덮는다)
 
 /** 손잡이 길이(m) = netRangeM − 0.75 @param {number} netRangeM */
 export function netHandleLength(netRangeM) {
@@ -74,7 +75,7 @@ export function netPose(camera, state, alpha, out) {
   let pitch;
   if (p < SCOOP_IN) pitch = lerp(REST_PITCH, reachPitch, smoothstep(0, SCOOP_IN, p));
   else if (p < SCOOP_HOLD) pitch = reachPitch;
-  else pitch = lerp(reachPitch, LIFT_PITCH, smoothstep(SCOOP_HOLD, 1, p));
+  else pitch = lerp(reachPitch, LIFT_PITCH, smoothstep(SCOOP_HOLD, LIFT_END, p));
   const cp = Math.cos(pitch);
   out.dir.set(fwdX(yaw) * cp, Math.sin(pitch), fwdZ(yaw) * cp);
   out.hoop.copy(out.dir).multiplyScalar(len).add(out.hand);

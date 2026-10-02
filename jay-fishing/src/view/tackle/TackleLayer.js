@@ -21,6 +21,8 @@ const ROD_YAW_FOLLOW = 0.6;               // 파이팅: 로드가 물고기 방�
 const ROD_YAW_MAX = 1.0;
 const BEND_ROLL = -0.75;                  // 휨 평면을 화면 안쪽(왼쪽)으로 돌린다 — 1인칭에서 휨이 깊이 방향으로만 숨지 않게
 const LIFT_LEAN = -0.2;                   // 로드를 세울수록 오른쪽으로 눕힌다(세운 로드의 휨이 화면에 남는다)
+const LIFT_VIEW_SLOPE = 0.6;   // 화면 패스: 파이팅의 보이는 각 = 15 + (각 − 15) × 이 값(75° → 51°) — 세운 로드의 휨이 화면 안에 남는다
+const LIFT_ROLL = 0.35;       // 화면 패스: 세울수록 로드 윗부분을 화면 가운데 쪽으로 기울인다(rad · 카메라 앞 축)
 const BEND_MAX = 1.1;                     // clamp(sqrt(tension / rodMaxLoadKg), 0, 1.1)
 const BEND_TIP_RAD = 70 * DEG;            // 휨 1 → 끝 곡률 70°
 const IDLE_BEND = 0.035;                  // 채비 무게로 살짝
@@ -152,6 +154,17 @@ export function rodAngleDeg(state) {
   }
 }
 
+/**
+ * 화면에 그리는 로드 각(°) — 판정 · 의미는 rodAngleDeg(계약 §9.7) 그대로이고, 파이팅 중 세운 로드만 화면 안으로 눕혀 그린다.
+ * 화면 패스: 75° 로 세운 로드는 손잡이(카메라 0.42m 앞)에서 화면 위로 나가 휨 · 떨림이 보이지 않았다(펌핑 = 로드 파손 위험의 순간).
+ * @param {Object} state @returns {number}
+ */
+export function presentAngleDeg(state) {
+  const a = rodAngleDeg(state);
+  if (state.rig.phase !== 'fighting' || a <= POSE.fightLow) return a;
+  return POSE.fightLow + (a - POSE.fightLow) * LIFT_VIEW_SLOPE;
+}
+
 // ── 지오메트리 도우미
 
 /** 축이 −Z 이고 [−1, 0] 을 차지하는 단위 원기둥 @param {number} r0 뒤 @param {number} r1 앞 @param {number} sides */
@@ -235,6 +248,7 @@ export class TackleLayer {
     this._rodLen = 3.6;
     this._phase = 'idle';
     this._angle = POSE.ready * DEG;
+    this._liftShown = 0;
     this._yaw = 0;
     this._bend = 0;
     this._shakeT = 99;
@@ -771,7 +785,7 @@ export class TackleLayer {
     const cam = this.rc.camera;
     const camYaw = cam.rotation.y;
     const camPitch = cam.rotation.x;
-    const targetAngle = rodAngleDeg(state) * DEG;
+    const targetAngle = presentAngleDeg(state) * DEG;
     if (phase === 'casting') this._angle = targetAngle;
     else this._angle = damp(this._angle, targetAngle, phase === 'charging' ? POSE_LAMBDA * 2.5 : POSE_LAMBDA, fdt);
     let targetYaw = 0;
@@ -837,7 +851,9 @@ export class TackleLayer {
 
     this._rigRoot.position.set(HANDLE_CAM.x, HANDLE_CAM.y - drop, HANDLE_CAM.z);
     const lift = phase === 'fighting' && fight ? clamp01(fight.rodLift) : 0;
+    this._liftShown = damp(this._liftShown, lift, POSE_LAMBDA, fdt);
     this._yawNode.rotation.y = this._yaw + LIFT_LEAN * lift;
+    this._yawNode.rotation.z = LIFT_ROLL * this._liftShown;
     this._pitchNode.rotation.x = this._angle - camPitch + jx;
     this._pitchNode.rotation.z = -0.08 + jz;
     const totalBend = this._bend * BEND_TIP_RAD;

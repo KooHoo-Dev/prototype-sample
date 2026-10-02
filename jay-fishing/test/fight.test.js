@@ -438,6 +438,63 @@ test('장애물 띠 — dist ≥ snag.fromM 이면 inSnag · SNAG · 쓸림이 s
   assert.equal(env.ctx.events.filter(e => e.name === EV.SNAG).at(-1).payload.on, false);
 });
 
+test('밸런스 게이트: 쓸림이 maxAbrasion 에 닿은 라인을 물고기가 끌고 나가면 끊긴다(cause abrasion) · 감아 들이는 중이면 버틴다', () => {
+  const spot = getSpot('lake_gravel');
+  // 띠 안 · 드랙 아주 낮게(조절 봇이 유효 강도에 맞춰 내린 모양) → 물고기가 계속 끌고 나간다 → 몇 분짜리 헛판이 아니라 끊김
+  const env = setup({ speciesId: 'carp', kg: 6, notch: 1, dist: spot.snag.fromM + 2 });
+  force(env, 'hold');
+  let o = null;
+  let t = 0;
+  for (; t < 60 * 60 && !o; t++) o = tick(env);
+  assert.ok(o, '끝난다');
+  assert.equal(o.type, 'lineBreak');
+  assert.equal(o.cause, 'abrasion');
+  const limitS = FIGHT.maxAbrasion / spot.snag.rate + 1;
+  assert.ok(t * DT <= limitS, `띠에 들어간 뒤 ${(t * DT).toFixed(1)}초(≤ ${limitS.toFixed(1)}) 안에 끝난다`);
+  assert.equal(env.ctx.events.filter(e => e.name === EV.FIGHT_END).at(-1).payload.cause, 'abrasion');
+  // 쓸림이 끝까지 찼어도 미끄러지지 않으면(작은 물고기를 감아 들이는 중) 끊기지 않는다
+  const small = setup({ speciesId: 'crucian', kg: 0.3, notch: 10, dist: spot.snag.fromM + 2 });
+  force(small, 'rest');
+  small.f.abrasion = FIGHT.maxAbrasion;
+  let o2 = null;
+  for (let i = 0; i < 30 && !o2; i++) o2 = tick(small, { primary: true });
+  assert.equal(o2, null, '감아 들이는 동안 버틴다');
+  assert.equal(small.f.slipping, false);
+  // 텐션으로 끊겨도 쓸림이 frayCauseAt 이상이면 원인 abrasion · 그 아래면 null
+  const brk = setup({ speciesId: 'carp', kg: 6, notch: 20, dist: 20 });
+  force(brk, 'hold');
+  brk.f.abrasion = FIGHT.frayCauseAt;
+  let o3 = null;
+  for (let i = 0; i < 600 && !o3; i++) o3 = tick(brk);
+  assert.equal(o3 && o3.type, 'lineBreak');
+  assert.equal(o3.cause, 'abrasion');
+});
+
+test('밸런스 게이트: 쉬는 물고기를 감아 들이는 동안은 슬랙이 아니다(3단계 라인) · 손을 놓으면 슬랙', () => {
+  // 3단계 라인 18kg → 슬랙 문턱 = min(0.06 × 18, 0.2 × Fmax). 지친 돌돔(2.4kg)을 감는 텐션은 문턱 아래다
+  const mk = () => {
+    const env = setup({ speciesId: 'barredKnifejaw', kg: 2.4, spotId: 'coast_cape', notch: 6, dist: 20, rs: { lineKg: 18, reelMaxDragKg: 16, dragNotchKg: 0.8, reelSpeedMS: 2.0 } });
+    force(env, 'rest');
+    env.f.stamina = 0;                                     // 지친 물고기(흔적: 체력 0 · 쉬는 중 · 감는 텐션 0.67 < 문턱 0.78)
+    return env;
+  };
+  const reel = mk();
+  const slackKg = Math.min(HOOK.slackFracLine * 18, HOOK.slackFracFish * reel.f.k.Fmax);
+  let below = 0;
+  for (let i = 0; i < 180; i++) {
+    tick(reel, { primary: true });
+    if (reel.f.tension < slackKg) below++;
+    assert.equal(reel.f.slack, false, `감는 중 슬랙 아님 @${i}`);
+  }
+  assert.ok(below > 60, `텐션이 문턱(${slackKg.toFixed(2)}) 아래였던 틱 ${below} — 이 경우를 시험한다`);
+  assert.ok(reel.f.dist < 20 - 3, '감겨 들어온다');
+  assert.equal(reel.f.slackTime, 0);
+  // 손을 놓으면(감지 않으면) 슬랙이 쌓인다
+  const idle = mk();
+  for (let i = 0; i < 120; i++) tick(idle);
+  assert.ok(idle.f.slackTime > 1, `손을 놓으면 슬랙 ${idle.f.slackTime.toFixed(2)}초`);
+});
+
 test('charge — 감으며 세우는 동안은 슬랙이 없고, 가만히 있으면 슬랙이 쌓인다', () => {
   const run = (hands) => {
     const env = setup({ speciesId: 'paleKing', kg: 22, notch: 20, dist: 25, rs: { hookSize: 3 } });

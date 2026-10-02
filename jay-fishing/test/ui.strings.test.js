@@ -108,7 +108,7 @@ describe('ui.strings', () => {
     for (const id of TIERS) families.push('tier.' + id);
     for (const id of STYLE_IDS) families.push('style.' + id);
     for (const id of FAIL_REASONS) families.push('fail.' + id);
-    for (const id of ['slack', 'jump', 'shake', 'active']) families.push('fail.cause.' + id);
+    for (const id of ['slack', 'jump', 'shake', 'active', 'abrasion']) families.push('fail.cause.' + id);
     const reasons = ['stub', 'busy', 'locked', 'same', 'holdFull', 'noBait', 'noLine', 'money', 'level', 'mastery', 'notOwned', 'inUse',
       'wrongSlot', 'wrongSet', 'maxRank', 'noPoints', 'notHere', 'invalid', 'full', 'holdFullCast'];
     for (const id of reasons) families.push('reason.' + id);

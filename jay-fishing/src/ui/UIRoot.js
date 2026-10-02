@@ -427,7 +427,8 @@ export class UIRoot {
       if (loss.lineLostM > 0) parts.push(t('fail.part.line', { line: fmt(loss.lineLostM) }));
       if (parts.length) node.append(el('div', 'notice-line', parts.join(t('fail.part.sep'))));
       if (loss.cause) node.append(el('div', 'notice-line notice-cause', t('fail.cause.' + loss.cause)));
-      if (loss.hookSmall) node.append(el('div', 'notice-line notice-cause', t('fail.hookSmall')));
+      // 「바늘이 작다」는 바늘 빠짐의 원인일 때만(§5.6 — 라인 끊김 알림에 붙으면 원인을 잘못 읽힌다 · 밸런스 게이트)
+      if (loss.hookSmall && r === 'hookOff') node.append(el('div', 'notice-line notice-cause', t('fail.hookSmall')));
       if (loss.rodLost) node.append(el('div', 'notice-line', t('fail.part.rodLost', { name: t('gear.' + loss.rodLost) })));
       if (loss.spareSpool) node.append(el('div', 'notice-line', t('fail.spareSpool')));
       if (loss.dragKgAfter !== null && loss.dragKgAfter !== undefined) node.append(el('div', 'notice-line', t('fail.dragLowered', { kg: fmt(loss.dragKgAfter, 2) })));

@@ -473,3 +473,24 @@ test('프로필: createNewProfile = START · makeDevProfile(레벨 · 누적 포
   assert.deepEqual(out.stats, { landed: 5, lost: 0, released: 0, sold: 0, earned: 0, casts: 0 });
   for (const id of SKILL_IDS) assert.ok(id in out.skills);
 });
+
+test('밸런스 게이트: makeDevProfile({gear}) — 두 세트의 로드 · 릴 · 라인(가득) · 찌/봉돌이 그 단계 · 보유 수 · GameSim 이 그대로 받는다', () => {
+  for (const t of [2, 3]) {
+    const p = makeDevProfile({ level: 12, money: 0, gear: t });
+    for (const set of ['float', 'bottom']) {
+      const c = p.sets[set];
+      assert.equal(GEAR_BY_ID[c.rod].tier, t, `${set} rod`);
+      assert.equal(GEAR_BY_ID[c.reel].tier, t, `${set} reel`);
+      assert.equal(GEAR_BY_ID[c.lineId].tier, t, `${set} line`);
+      assert.equal(c.lineM, GEAR_BY_ID[c.reel].capacityM);
+      const bob = c.float ?? c.sinker;
+      assert.equal(GEAR_BY_ID[bob].tier, t, `${set} float/sinker`);
+      assert.ok((p.owned[c.rod] ?? 0) >= 1);
+    }
+    assert.equal(p.owned[`reel_${t}`], 2, '릴 두 세트');
+    const back = sanitizeProfile(structuredClone(p));
+    assert.equal(back.sets.float.rod, `rod_float_${t}`, 'sanitize 뒤에도 그대로');
+    assert.equal(back.sets.bottom.reel, `reel_${t}`);
+  }
+  assert.deepEqual(makeDevProfile({ level: 3, gear: 1 }).sets, makeDevProfile({ level: 3 }).sets, 'gear 1 은 시작 장비');
+});

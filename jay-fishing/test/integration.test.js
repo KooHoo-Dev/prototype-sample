@@ -1,4 +1,4 @@
-// OWNER: 통합 게이트(W1) — 계약 §12.2(W1 확정). W2 의 P10 headless.test 가 더 넓게 덮으면 그쪽으로 옮겨도 된다.
+// OWNER: 통합 게이트(W1 · W2) — 계약 §12.2(W1 확정). W2 의 P10 headless.test 가 더 넓게 덮으면 그쪽으로 옮겨도 된다.
 // 패키지 테스트가 가짜로 바꿔 끼운 경계를 실제 구현끼리 맞물려 돈다: GameSim(P3) + rig(P1) + fight(P2) + progression(P4) + angler/policy(P1 · P2).
 // 러너 규칙은 §6.8 · §12.4 그대로(명령은 step 전 · result 단계는 step 하지 않는다).
 
@@ -10,6 +10,8 @@ import { NEUTRAL_INPUT } from '../src/core/inputFrame.js';
 import { SPOTS_BY_ID } from '../src/data/stages/index.js';
 import { GameSim } from '../src/sim/GameSim.js';
 import { createAngler } from '../src/bot/angler.js';
+import { createBot } from '../src/bot/bot.js';
+import { makeDevProfile } from '../src/sim/progression/profile.js';
 import { createSaveData, parseSave, serializeSave } from '../src/sim/progression/save.js';
 import { assertFiniteDeep, assertShape, randomInputs } from './helpers.js';
 
@@ -195,4 +197,53 @@ test('파이팅 퍼즈: 아홉 자리 × 그 풀의 어종 × 1 · 3단계 로�
     for (const e of log) if (e.name === EV.FIGHT_END) outcomes.add(e.payload.outcome);
   }
   for (const o of ['landed', 'lineBreak', 'hookOff', 'rodBreak']) assert.ok(outcomes.has(o), `퍼즈에서 ${o} 가 한 번도 나지 않았다`);
+});
+
+/**
+ * app(Game) 규칙의 러너(W2 통합): travel · waitNextBand · sleep 은 전환 막 뒤에 실행된다(그동안 decide · step 없음) —
+ * Game.travel 처럼 걷기 모드 · getTravel 로 먼저 거른다(거를 명령을 봇이 내면 실패). 결과 단계는 step 하지 않는다.
+ */
+function runApp(sim, bot, ticks, onTick, curtain = 40) {
+  let steps = 0;
+  for (let d = 0; steps < ticks && d < ticks * 4; d++) {
+    const a = bot.decide(sim.state, sim);
+    const c = a.command;
+    if (c) {
+      assert.ok(BOT_COMMANDS.has(c.name), c.name);
+      if (['travel', 'waitNextBand', 'sleep'].includes(c.name)) {
+        assert.equal(sim.state.player.mode, 'walk', `${c.name}: 걷기 모드가 아니다`);
+        if (c.name === 'travel') {
+          const t = sim.getTravel().find(e => e.id === c.args[0]);
+          assert.ok(t && t.ok, `travel(${c.args[0]}): app 이 거절한다`);
+        }
+        d += curtain;                    // 막 — 그동안 sim 은 멈춘다
+        const r = sim[c.name](...c.args);
+        assert.ok(r && r.ok, `${c.name} 실패: ${r && r.reason}`);
+        continue;
+      }
+      sim[c.name](...c.args);
+    }
+    if (sim.state.rig.phase === 'result') continue;
+    sim.step(a.input);
+    steps++;
+    if (onTick) onTick(steps);
+  }
+  return steps;
+}
+
+test('W2: ?scene=<스테이지>&bot=1 의 계획 — 그 씬 spawn 에서 시작한 갯바위 · 강 하루 계획이 app 규칙(막 뒤 명령)으로 낚시 · 판매 · 집 · 수면 · 복귀', () => {
+  for (const [scene, plan, level] of [['coast', 'coastDay', 6], ['river', 'riverDay', 12]]) {
+    const profile = makeDevProfile({ level, money: 20000 });
+    const { sim, log } = makeSim({ profile, session: { ignoreGates: true, devSession: true }, start: { scene, hour: 9 } });
+    const bot = createBot({ strategy: 'controlled', seed: 7, plan });
+    runApp(sim, bot, TICKS_PER_HOUR * 24, (n) => { if (n % 3000 === 0) checkState(sim, `${scene}@${n}`); });
+    checkState(sim, `${scene} end`);
+    const scenes = log.filter(e => e.name === EV.SCENE_CHANGED).map(e => e.payload.to);
+    const landed = log.filter(e => e.name === EV.FIGHT_END && e.payload.outcome === 'landed').length;
+    assert.ok(landed >= 5, `${scene}: 랜딩 ${landed}`);
+    assert.ok(count(log, EV.SOLD) >= 1, `${scene}: 판매 0`);
+    assert.ok(count(log, EV.XP_GAINED) >= landed, `${scene}: 랜딩 뒤 경험치`);
+    assert.deepEqual(scenes.slice(0, 3), [scene, 'home', scene], `${scene}: ${scenes.join(' → ')}`);
+    assert.equal(count(log, EV.CLOCK_DAY), 1, `${scene}: 날이 한 번 바뀌어야 한다`);
+  }
 });

@@ -56,7 +56,7 @@ function report(style) {
   const roll = medianRoll(sp);
   const rng = makeRng(seedRng(2024));
   const startNotch = Math.round(BOT.basic.dragRatio * rs.lineKg / rs.dragNotchKg);
-  const acc = { n: 0, landed: 0, maxT: 0, ticks: 0, sum: 0, sum2: 0, cvSum: 0, runs: 0, jumps: 0, slack: 0, slip: 0, cover: 0, lat: 0, depth: 0, sec: 0 };
+  const acc = { n: 0, landed: 0, maxT: 0, ticks: 0, sum: 0, sum2: 0, cvSum: 0, jerk: 0, runs: 0, jumps: 0, slack: 0, slip: 0, cover: 0, lat: 0, depth: 0, sec: 0 };
   for (let i = 0; i < FIGHTS; i++) {
     const profile = makeTestProfile();
     profile.sets = { ...profile.sets, bottom: { ...profile.sets.bottom, lineM: rs.lineM } };
@@ -78,6 +78,7 @@ function report(style) {
     let depth = 0;
     for (let k = 0; k < 60 * 600 && !o; k++) {
       const b0 = f.bearing;
+      const t0 = f.tension;
       const h = pol.decide(state, rs);
       if (h.dragSteps) {
         state.rig.dragNotch = clamp(state.rig.dragNotch + h.dragSteps, 0, rs.dragNotches);
@@ -88,6 +89,7 @@ function report(style) {
       input.hook = h.hook;
       o = updateFight(ctx, input);
       cover += f.inCover;
+      if (k > 0) acc.jerk += Math.abs(f.tension - t0);
       lat += Math.abs(angleDiff(b0, f.bearing)) * f.dist;
       depth += f.depth;
       state.events.length = 0;
@@ -120,6 +122,7 @@ function report(style) {
     meanTension: mean,                             // 틱 평균(kg)
     variance: acc.sum2 / acc.ticks - mean * mean,  // 틱 분산(kg²)
     cv: acc.cvSum / acc.n,                         // 판 안의 변동계수 평균
+    jerk: acc.jerk / acc.sec / mean,               // 밸런스 게이트: 텐션 급변 — 초당 |Δ텐션| ÷ 평균 텐션(느린 추세는 거의 들어가지 않는다)
     runsPerMin: acc.runs / min,
     jumpsPerMin: acc.jumps / min,
     slackRatio: acc.slack / acc.ticks,
@@ -144,7 +147,7 @@ function differs(metric, a, b) {
 test('성격 6종 × 대표 어종 중앙값 × 기본 봇 300판 — 표 · 쌍마다 지표 2개 이상 · 「붕어는 단순히 무겁다」', (t) => {
   const rows = Object.keys(REP).map(report);
   const fmt = (v) => (typeof v === 'number' ? (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(3)) : String(v));
-  const cols = ['style', 'id', 'spot', 'tier', 'kg', 'land', 'maxTension', 'meanTension', 'variance', 'cv', 'runsPerMin', 'jumpsPerMin', 'slackRatio', 'slipRatio', 'coverMean', 'lateralMS', 'depthMean', 'lengthSec'];
+  const cols = ['style', 'id', 'spot', 'tier', 'kg', 'land', 'maxTension', 'meanTension', 'variance', 'cv', 'jerk', 'runsPerMin', 'jumpsPerMin', 'slackRatio', 'slipRatio', 'coverMean', 'lateralMS', 'depthMean', 'lengthSec'];
   t.diagnostic(cols.join(' | '));
   for (const r of rows) t.diagnostic(cols.map(c => fmt(r[c])).join(' | '));
 
@@ -159,14 +162,18 @@ test('성격 6종 × 대표 어종 중앙값 × 기본 봇 300판 — 표 · 쌍
     }
   }
   assert.deepEqual(weak, [], '구분이 약한 쌍');
-  // 「붕어는 단순히 무겁다」: 분당 질주가 돌진형의 0.4배 이하 · 변동계수가 돌진형보다 작다
+  // 「붕어는 단순히 무겁다」(밸런스 게이트 확정 — 계약 §12.2): 분당 질주가 돌진형의 0.4배 이하 · 드랙이 미끄러지는(클리커) 시간이
+  // 돌진형의 0.5배 이하 · 변동계수가 돌진형보다 작다. 판 전체 변동계수 0.5배는 🔒 상태 힘과 체력 추세 때문에 닿지 않아(0.69) 보고만 한다.
   const rpmRatio = by.heavy.runsPerMin / by.runner.runsPerMin;
+  const slipRatio = by.heavy.slipRatio / by.runner.slipRatio;
   const cvRatio = by.heavy.cv / by.runner.cv;
-  t.diagnostic(`무게형/돌진형 — 분당 질주 ${rpmRatio.toFixed(3)}(≤ 0.4) · 변동계수 ${cvRatio.toFixed(3)}(계약 목표 ≤ 0.5 — NOTES-P2: 🔒 상태 힘으로는 닿지 않는다)`);
+  t.diagnostic(`무게형/돌진형 — 분당 질주 ${rpmRatio.toFixed(3)}(≤ 0.4) · 미끄러짐 ${slipRatio.toFixed(3)}(≤ 0.5) · 변동계수 ${cvRatio.toFixed(3)}(< 1 · 보고)`);
   assert.ok(rpmRatio <= 0.4, `분당 질주 비 ${rpmRatio}`);
+  assert.ok(slipRatio <= 0.5, `미끄러짐 비 ${slipRatio}`);
   assert.ok(cvRatio < 1, `변동계수 비 ${cvRatio}`);
-  // 요동형(쏘가리)의 변동계수가 가장 크다 · 점프형만 점프한다
+  // 요동형(쏘가리)의 변동계수 · 급변(jerk)이 가장 크다 · 점프형만 점프한다
   assert.equal(rows.reduce((a, b) => (b.cv > a.cv ? b : a)).style, 'thrasher');
+  assert.equal(rows.reduce((a, b) => (b.jerk > a.jerk ? b : a)).style, 'thrasher');
   for (const r of rows) {
     if (r.style === 'jumper') assert.ok(r.jumpsPerMin > 1);
     else assert.equal(r.jumpsPerMin, 0);

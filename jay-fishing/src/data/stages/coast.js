@@ -30,7 +30,7 @@ export const COAST = {
   ambience: 'waves', waves: { amp: 0.18, period: 6.0 },
   weatherWeights: { clear: 0.45, cloudy: 0.3, rain: 0.25 },
   look: {
-    terrain: { ground: '#3a3634', shore: '#2c2a28', seabed: '#3a4a48', hillAmp: 9, hillScale: 35, noiseSeed: 23, rocky: true },
+    terrain: { ground: '#5c554e', shore: '#433e39', seabed: '#3a4a48', hillAmp: 9, hillScale: 35, noiseSeed: 23, rocky: true },   // 화면 패스: ground '#3a3634' · shore '#2c2a28' → 밝게(비 · 흐림에서 걷는 땅이 고른 검은 평지로 읽혔다 — 용암 바위 소품은 그대로 어둡다)
     ridge: { height: 300, dist: 1100, color: '#3e4e3a', farBankZ: null },             // 이즈의 녹색 구릉 · 바다는 수평선까지
     water: { shallow: '#2f8a8a', deep: '#0d3550', opacity: 0.9, foam: true },
     sky: { zenith: '#4f8ad8', horizon: '#d2e2ee' }, fog: { color: '#c4d4dc', density: 0.0035 },

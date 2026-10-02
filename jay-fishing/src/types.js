@@ -28,7 +28,7 @@
 /** @typedef {'spot'|'npc'|'camp'|'pc'|'bed'|'door'} InteractKind */
 /** @typedef {'title'|'pause'|'tackle'|'result'|'sell'|'pc'|'camp'|'map'|'bed'|'confirm'} PanelId */
 /** @typedef {'start'|'stage'|'controls'|'cast'|'bite'|'fight'|'net'|'drift'|'bottomRig'|'holdFull'} HintId   §10.3 안내 문구 */
-/** @typedef {'slack'|'jump'|'shake'|'active'|null} LossCause   바늘 빠짐의 원인(그 밖의 실패는 null) — 실패 알림이 한 줄로 보인다 */
+/** @typedef {'slack'|'jump'|'shake'|'active'|'abrasion'|null} LossCause   바늘 빠짐의 원인 · 라인 끊김의 쓸림 원인('abrasion' — 밸런스 게이트)(그 밖의 실패는 null) — 실패 알림이 한 줄로 보인다 */
 
 // ── 3.2 입력 — `InputFrame`
 
@@ -325,7 +325,7 @@
  * @property {number} slipSpeed        m/s 풀려 나가는 속도(클리커 소리)
  * @property {boolean} reeling         이번 틱 릴링 입력
  * @property {number} gainSpeed        m/s 실제로 감기는 속도
- * @property {boolean} slack           tension < 슬랙 문턱
+ * @property {boolean} slack           tension < 슬랙 문턱 && 라인을 거두는 중이 아님(밸런스 게이트 — §5.3.2 10e)
  * @property {number} slackTime        s 누적(긴장되면 줄어든다)
  * @property {number} spoolLeftM       lineM − dist
  * @property {boolean} canNet          dist ≤ netRangeM && stamina ≤ landStamina
@@ -569,6 +569,7 @@
  * @property {SpotId|null} spot
  * @property {number|null} level
  * @property {number|null} money
+ * @property {1|2|3|null} gear          장비 단계(밸런스 게이트 — 두 세트를 그 단계로)
  * @property {number|null} time
  * @property {WeatherId|null} weather
  * @property {number|null} seed

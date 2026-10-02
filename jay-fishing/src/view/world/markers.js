@@ -12,6 +12,9 @@ const RING_LIFT = 0.035;
 export const POLE_H = 1.1;
 const SNAG_DEPTH = 8;
 const FLAG_COLOR = '#ff7a2a';
+const FLAG_W = 0.62;           // m — 깃발 길이(화면 패스 0.36 → 0.62)
+const FLAG_H = 0.34;           // m — 깃발 높이(0.2 → 0.34)
+const FLAG_GLOW = 0.45;        // 깃발 발광(0.25 → 0.45 — 해 질 녘 · 비에도 주황이 읽힌다)
 
 /** 땅 모양을 따라 붙인 고리 */
 function buildRingGeometry(cx, cz, heightAt) {
@@ -78,7 +81,8 @@ export function createMarkerKit() {
   const pole = new THREE.CylinderGeometry(0.022, 0.03, POLE_H, 6);
   pole.translate(0, POLE_H / 2, 0);
   const flag = new THREE.BufferGeometry();
-  flag.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 0, -0.2, 0, 0.36, -0.1, 0]), 3));
+  // 화면 패스: 깃발 0.36 × 0.2m → FLAG_W × FLAG_H — 스폰(20m)에서 0.36m 깃발은 약 11px 라 자리를 찾기 어려웠다(고리는 낮은 시선각에 눌려 거의 안 보인다)
+  flag.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 0, -FLAG_H, 0, FLAG_W, -FLAG_H / 2, 0]), 3));
   flag.computeVertexNormals();
   flag.translate(0, POLE_H - 0.02, 0);
   const mats = {
@@ -88,7 +92,7 @@ export function createMarkerKit() {
     log: new THREE.MeshStandardMaterial({ color: '#5a4836', roughness: 1.0, flatShading: true }),
     stone: new THREE.MeshStandardMaterial({ color: '#7a7466', roughness: 0.95, flatShading: true }),
     pole: new THREE.MeshStandardMaterial({ color: '#e8e2d6', roughness: 0.6 }),
-    flag: new THREE.MeshStandardMaterial({ color: FLAG_COLOR, emissive: FLAG_COLOR, emissiveIntensity: 0.25, side: THREE.DoubleSide, roughness: 0.8 }),
+    flag: new THREE.MeshStandardMaterial({ color: FLAG_COLOR, emissive: FLAG_COLOR, emissiveIntensity: FLAG_GLOW, side: THREE.DoubleSide, roughness: 0.8 }),
   };
   return {
     geo: { weed, pad, rock, log: logFull, pole, flag },

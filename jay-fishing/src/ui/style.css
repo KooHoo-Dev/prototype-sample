@@ -92,7 +92,7 @@
 #ui-root .hud-rig {
   left: 50%; bottom: var(--edge); transform: translateX(-50%);
   display: flex; flex-wrap: wrap; justify-content: center; gap: 4px;
-  max-width: 72vw; padding: 5px 8px;
+  width: max-content; max-width: 72vw; padding: 5px 8px;   /* 화면 패스: left 50% 의 절대 배치는 남은 폭(50vw)에서 접혀 찌 채비의 「중층 n m」가 둘째 줄로 넘어갔다 */
 }
 #ui-root .chip {
   padding: 1px 8px; border-radius: 5px; background: rgba(255, 255, 255, 0.08);

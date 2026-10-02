@@ -1,5 +1,6 @@
 // OWNER: P10 — 계약 §7.10 · §12.1
 // SEED — P0 이 W0 에 계약 값 그대로 넣었다. 조정은 소유 패키지만 §7.0 규칙 안에서(🔒 값은 밸런스 게이트만).
+// BOT 은 §7.10 그대로다. PLAN 은 P10 이 더한 계획 봇의 동선 값(계약 밖 · 🔒 아님 — 측정의 손잡이가 아니라 걷기 · 장보기의 습관).
 
 export const BOT = {
   react: { mean: 0.40, sd: 0.12, min: 0.18, max: 0.9 },    // 신호를 보고 Space까지(s) — 본신 창 0.9s 안
@@ -22,4 +23,19 @@ export const BOT = {
                 buyOrder: ['rod_float_2', 'reel_2', 'line_2', 'float_2', 'rod_bottom_2', 'reel_2', 'sinker_2', 'rod_bottom_3', 'reel_3', 'line_3', 'sinker_3', 'rod_float_3', 'reel_3', 'float_3'],
                 skillOrder: ['hookset', 'dragSense', 'mastery', 'mastery', 'netting', 'baitCraft', 'lineCare', 'casting', 'pumping', 'haggling', 'knowledge', 'dragSense', 'netting', 'baitCraft', 'lineCare', 'hookset', 'casting', 'pumping', 'haggling', 'mastery'] },
   },
+};
+
+/** 계획 봇(bot.js · planner.js)의 동선 · 장보기 습관 — §12.1 의 문장을 수치로 옮긴 것 */
+export const PLAN = {
+  dayEndHour: 4.5,          // 야외: 이 시각(새벽)부터 기상 전까지는 캠프 → 집(§12.1 「다음 날 04:30에 캠프」)
+  homeSleepFrom: 3.0,       // 집: 이 시각부터 기상 전까지 집에 있으면 문 대신 침대
+  baitLow: 5,               // 계획 미끼가 이 아래면 판매상에 간다(§12.1)
+  baitRestock: 15,          // 판매상 · PC 에 간 김에 이 아래인 계획 미끼는 채운다
+  baitTarget: 30,           // 미끼 팩을 이만큼까지 산다
+  moneyReserve: 8000,       // 업그레이드를 살 때 남겨 둘 돈(미끼 여유 — §12.1 「돈 + 미끼 여유」)
+  lineRestoreFrac: 0.7,     // 라인이 용량의 이 비율 아래면 다시 감는다(§12.1)
+  retryHours: 1,            // 판매상에서 할 일을 못 끝냈으면(돈 부족) 이만큼 지나야 다시 간다 · 실패한 장착도 같은 간격
+  arriveM: 0.3,             // 목표 점에 닿았다고 보는 거리(§12.1)
+  slowM: 0.9,               // 이 거리 안에서는 걸음을 늦춘다(가속 16m/s² — 지나치지 않게)
+  stuckS: 1.5,              // 이만큼 걸어도 0.2m 도 줄지 않으면 옆걸음으로 비킨다
 };

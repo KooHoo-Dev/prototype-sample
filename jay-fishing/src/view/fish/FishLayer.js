@@ -40,6 +40,9 @@ const GLOW_TMP = new THREE.Color();
 const VIS_REF = 10;                       // 먼 그림자 · 물결의 읽힘 배율 = clamp(dist / 10, 1, 3.5) — 위치(중심)는 판정 그대로
 const VIS_MAX = 3.5;
 const SURFACE_DEPTH = 0.35;               // 이보다 얕으면 등이 수면을 가른다(점프 예고 · 지친 물고기)
+const FORE_ELEV = 0.42;                   // 화면 패스: 그림자 단축 보정 — 수면 데칼을 sin(약 25°) 높이에서 내려다본 만큼 시선 방향으로 늘린다
+const FORE_MAX = 4;                       //   상한(35m 에서 4배). 16m 에서 약 2.8배 — 전에는 16m 그림자가 세로 2px 짜리 선이었다. 중심은 판정 그대로
+const WAKE_FORE_MAX = 1.6;                //   V자 물결은 덜 늘린다(넓게 벌어져 4배면 수면을 덮는 흰 갈매기 모양이 된다)
 const MUD_COLOR = '#4a3a22';
 
 /** 그림자 불투명도(§9.8) @param {number} depth @param {boolean} tele */
@@ -132,6 +135,8 @@ export class FishLayer {
     // 그림자 묶음: shadow(위치 · 방향) → body · tailPivot → tail
     const shadow = new THREE.Group();
     shadow.name = 'fishShadow';
+    // 화면 패스: 행렬은 _shadowMatrix 가 만든다(위치 · 방향 + 시선 방향 단축 보정) — position · rotation.y 는 그대로 읽힌다
+    shadow.matrixAutoUpdate = false;
     const body = new THREE.Mesh(plane, this._shadowMat);
     body.renderOrder = 2;
     shadow.add(body);
@@ -143,11 +148,15 @@ export class FishLayer {
     const mud = new THREE.Mesh(plane, this._mudMat);
     mud.renderOrder = 1;
     shadow.add(mud);
+    // V자 물결은 그림자의 단축 보정(늘림)을 따르지 않게 형제로 둔다(_wakeMatrix)
     const wake = new THREE.Mesh(this._wakeGeo, this._wakeMat);
+    wake.name = 'fishWake';
     wake.renderOrder = 3;
-    shadow.add(wake);
+    wake.matrixAutoUpdate = false;
+    wake.visible = false;
     shadow.visible = false;
     this.root.add(shadow);
+    this.root.add(wake);
     this._shadow = shadow;
     this._body = body;
     this._tailPivot = tailPivot;
@@ -173,6 +182,12 @@ export class FishLayer {
     this._havePrev = false;
     this._pose = { hand: new THREE.Vector3(), dir: new THREE.Vector3(), hoop: new THREE.Vector3(), target: new THREE.Vector3(), handleLen: 1, reach: 1, p: 0 };
     this._exitOpacity = 0;
+    this._mtx = { a: new THREE.Matrix4(), b: new THREE.Matrix4() };
+    this._viewYaw = 0;
+    this._wakeL = 0;
+    this._wakeLen = 1;
+    /** 마지막 단축 보정 배율(테스트 · 디버그) */
+    this.foreshorten = 1;
 
     const on = (name, fn) => (bus && typeof bus.on === 'function' ? bus.on(name, fn) : () => {});
     this._offs = [
@@ -186,6 +201,7 @@ export class FishLayer {
   _clear() {
     this._mode = 'none';
     this._shadow.visible = false;
+    this._wake.visible = false;
     if (this._model) this._model.visible = false;
     this._havePrev = false;
   }
@@ -221,6 +237,52 @@ export class FishLayer {
     return this._model;
   }
 
+  /**
+   * 그림자 행렬 = T(위치) · R(시선 yaw) · S(1, 1, k) · R(방향 − 시선 yaw).
+   * 화면 패스: 낮은 시선각에서 납작해지는 수면 데칼을 시선 방향으로만 늘린다(k = clamp(FORE_ELEV / sin(내려다보는 각), 1, FORE_MAX)) —
+   * 중심 · 방향은 그대로라 판정 위치와 같고(§9.10), 위에서 내려다본 듯한 모양이 된다. 가까우면 k = 1(그대로).
+   */
+  _shadowMatrix() {
+    const sh = this._shadow;
+    const cam = this.rc.camera.position;
+    const dx = sh.position.x - cam.x;
+    const dz = sh.position.z - cam.z;
+    const horiz = Math.max(0.5, Math.hypot(dx, dz));
+    const sinDep = Math.max(1e-3, Math.sin(Math.atan2(Math.max(0.1, cam.y - sh.position.y), horiz)));
+    const k = clamp(FORE_ELEV / sinDep, 1, FORE_MAX);
+    const viewYaw = yawOf(dx, dz);
+    const m = this._mtx;
+    m.a.makeRotationY(viewYaw);
+    m.b.makeScale(1, 1, k);
+    m.a.multiply(m.b);
+    m.b.makeRotationY(sh.rotation.y - viewYaw);
+    m.a.multiply(m.b);
+    m.a.setPosition(sh.position);
+    sh.matrix.copy(m.a);
+    sh.matrixWorldNeedsUpdate = true;
+    this.foreshorten = k;
+    this._viewYaw = viewYaw;
+  }
+
+  /** V자 물결 행렬 — 머리 앞쪽(0.45 L)에서 뒤로 벌어진다 · 시선 방향 늘림은 WAKE_FORE_MAX 까지 */
+  _wakeMatrix() {
+    const sh = this._shadow;
+    const w = this._wake;
+    const h = sh.rotation.y;
+    const m = this._mtx;
+    const kw = clamp(this.foreshorten, 1, WAKE_FORE_MAX);
+    m.a.makeRotationY(this._viewYaw);
+    m.b.makeScale(1, 1, kw);
+    m.a.multiply(m.b);
+    m.b.makeRotationY(h - this._viewYaw);
+    m.a.multiply(m.b);
+    m.b.makeScale(this._wakeLen, 1, this._wakeLen);
+    m.a.multiply(m.b);
+    m.a.setPosition(sh.position.x - Math.sin(h) * 0.45 * this._wakeL, sh.position.y + 0.004, sh.position.z - Math.cos(h) * 0.45 * this._wakeL);
+    w.matrix.copy(m.a);
+    w.matrixWorldNeedsUpdate = true;
+  }
+
   /** @param {Object} state @param {number} alpha @param {number} dt */
   update(state, alpha, dt) {
     if (!state || !state.rig) return;
@@ -254,6 +316,8 @@ export class FishLayer {
       const k = clamp01(this._exitT / FADE_OUT);
       this._shadow.position.x += -Math.sin(this._heading) * ESCAPE_SPEED * fdt;
       this._shadow.position.z += -Math.cos(this._heading) * ESCAPE_SPEED * fdt;
+      this._shadowMatrix();
+      this._wakeMatrix();
       this._shadowMat.opacity = this._exitOpacity * (1 - k);
       this._tailMat.opacity = this._shadowMat.opacity;
       this._tailPivot.rotation.y = 0.6 * Math.sin(this.time * Math.PI * 2 * 6);
@@ -274,6 +338,7 @@ export class FishLayer {
     if (this._mode === 'landing') {
       // 뜰채 속 모델(그림자 대신)
       this._shadow.visible = false;
+      this._wake.visible = false;
       const model = this._useModel(fight.speciesId, lenM);
       if (!model) return;
       this.rc.camera.updateMatrixWorld(true);
@@ -368,6 +433,7 @@ export class FishLayer {
     const fz = -Math.cos(heading);
     this._shadow.position.set(P.x + jx + fx * surge, SHADOW_Y, P.z + jz + fz * surge);
     this._shadow.rotation.y = heading;
+    this._shadowMatrix();
     const dist = Math.hypot(P.x - rig.origin.x, P.z - rig.origin.z);
     const vis = clamp(dist / VIS_REF, 1, VIS_MAX);
     const L = lenM * grow * vis;
@@ -415,8 +481,9 @@ export class FishLayer {
     this._wake.visible = (running || telling) && air < 0.05;
     if (this._wake.visible) {
       const wl = (running ? 1.8 * lenM + 0.6 : 0.8 * lenM + 0.2) * vis;
-      this._wake.position.set(0, 0.004, -0.45 * L);
-      this._wake.scale.set(wl, 1, wl);
+      this._wakeL = L;
+      this._wakeLen = wl;
+      this._wakeMatrix();
       this._wakeMat.opacity = running ? WAKE_OPACITY * this._fade : WAKE_OPACITY * (0.5 + 0.5 * Math.sin(this.time * 12)) * this._fade;
     }
     this._shadow.visible = true;

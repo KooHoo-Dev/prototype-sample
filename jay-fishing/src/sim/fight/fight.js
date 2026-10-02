@@ -242,6 +242,7 @@ export function updateFight(ctx, input) {
   let slipping = false;
   let slipSpeed = 0;
   let gainSpeed = 0;
+  let takingUp = false;                                  // 라인을 거두는 중(감기 · 펌핑이 실제로 거리를 줄이거나 다가오는 물고기를 따라잡는다)
   if (s.rig.bailOpen) {
     // (a) 베일 열림 — 라인이 그냥 풀려 나간다(드랙도 텐션도 없다)
     target = 0;
@@ -263,6 +264,7 @@ export function updateFight(ctx, input) {
       const pumpDist = pumpGain * clamp01(1 - Fal / rodMax);
       f.dist -= gain * DT + pumpDist;
       gainSpeed = gain + pumpDist / DT;
+      takingUp = gainSpeed > 0;
     }
   } else {
     // (c) charge — 이쪽으로 온다. 감으며 세우면 여유 줄을 거둔다
@@ -272,6 +274,7 @@ export function updateFight(ctx, input) {
     const takeUp = (primary ? rs.reelSpeedMS : 0) + pumpGain / DT;
     target = takeUp >= approach ? (reelBase + flowLoad) * pumpMul : flowLoad * FIGHT.slackFlowFrac;
     gainSpeed = Math.min(takeUp, approach);
+    takingUp = takeUp > 0 && takeUp >= approach;
   }
   if (f.dist < f.minDist) f.dist = f.minDist;
   f.tension += (target - f.tension) * (1 - Math.exp(-FIGHT.tensionLambda * DT));
@@ -348,12 +351,20 @@ export function updateFight(ctx, input) {
   // 10. 실패 판정 — 처음 걸린 하나만(스풀 > 로드 > 라인 > 바늘)
   f.spoolLeftM = lineM - f.dist;
   f.rodOverT = (f.rodUp && f.tension > rodMax) ? f.rodOverT + DT : 0;
-  f.slack = f.tension < slackKg;
+  // 슬랙 — 밸런스 게이트: 라인을 거두는 중이면 슬랙이 아니다(쉬는 물고기를 감아 들이는데 「줄이 느슨했다」로 빠지던 것 —
+  // 3단계 라인(슬랙 문턱 0.06 × 18kg)에서 감는 텐션이 문턱 아래였다). 손을 놓거나 다가오는 물고기를 못 따라잡으면 그대로 슬랙
+  f.slack = f.tension < slackKg && !takingUp;
   if (f.slack) f.slackTime += DT;
   else f.slackTime = Math.max(0, f.slackTime - HOOK.slackDecay * DT);
   if (f.dist >= lineM) return finish(ctx, f, 'spoolEmpty', lineM, null, hookSmall);
   if (f.rodOverT >= FIGHT.rodBreakHold) return finish(ctx, f, 'rodBreak', 0, null, hookSmall);
-  if (f.tension > f.lineEffKg) return finish(ctx, f, 'lineBreak', Math.round(f.dist), null, hookSmall);
+  // 라인 — 텐션이 유효 강도를 넘거나, 쓸림이 FIGHT.maxAbrasion 에 닿은 라인을 물고기가 끌고 나가면(미끄러짐 — 바위에 닳아
+  // 끊어진다 · 밸런스 게이트: 이길 수 없는 몇 분짜리 헛판 대신 짧은 실패. 감아 들이는 중이면 버틴다).
+  // 쓸림이 FIGHT.frayCauseAt 이상에서 끊기면 원인 'abrasion'(실패 알림 한 줄)
+  const frayed = f.abrasion >= FIGHT.maxAbrasion && slipping;
+  if (frayed || f.tension > f.lineEffKg) {
+    return finish(ctx, f, 'lineBreak', Math.round(f.dist), frayed || f.abrasion >= FIGHT.frayCauseAt ? 'abrasion' : null, hookSmall);
+  }
   if (hookRoll) return finish(ctx, f, 'hookOff', 0, hookRoll, hookSmall);
   if (f.slackTime > 0) {
     const h = HOOK.slackRate * Math.min(f.slackTime, HOOK.slackCap) * rs.slackRateMul * hookOffMul;

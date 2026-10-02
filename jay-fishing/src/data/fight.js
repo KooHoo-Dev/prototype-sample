@@ -16,6 +16,7 @@ export const FIGHT = {
   jumpSpike: 1.1, lowRodAbsorb: 0.55,
   shakePulse: 0.3, shakePulseOn: 0.1, shakeAmp: 0.6,
   coverRate: 0.35, coverEscape: 0.5, coverDecay: 0.3, coverAbrasion: 0.03, maxAbrasion: 0.9,
+  frayCauseAt: 0.5,                                                  // 밸런스 게이트: 쓸림이 maxAbrasion 에 닿으면 라인이 끊긴다(헛판 없음) · 이 값 이상에서 끊기면 원인 'abrasion'
   netReachM: 1.4, landStamina: 0.15, netRunReset: 3.0, netBufferS: 0.3,   // 🔒 netReachM · landStamina — 뜰채 범위 = spot.edgeM + netReachM(+ 스킬)
   rodStressAt: 0.85, lineDangerAt: 0.85, rodBreakHold: 0.3,          // 🔒 rodBreakHold — 세운 로드가 상한을 0.3초 넘겨야 부러진다
   tiredStamina: 0.3, tiredDepth: 0.4, midDepthFrac: 0.5, depthSpeed: 1.5,

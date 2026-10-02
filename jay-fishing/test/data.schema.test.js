@@ -485,7 +485,7 @@ test('strings.ko.js: 모든 데이터 ID 의 이름 키 · 부록 B 키', () => 
   for (const id of TIERS) need.push(`tier.${id}`);
   for (const id of STYLE_IDS) need.push(`style.${id}`);
   for (const id of FAIL_REASONS) need.push(`fail.${id}`);
-  for (const id of ['slack', 'jump', 'shake', 'active']) need.push(`fail.cause.${id}`);
+  for (const id of ['slack', 'jump', 'shake', 'active', 'abrasion']) need.push(`fail.cause.${id}`);
   need.push('fail.loss', 'fail.spareSpool', 'fail.dragLowered', 'fail.hookSmall');
   for (const id of REASON_KEYS) need.push(`reason.${id}`);
   for (const id of HINT_IDS) need.push(`hint.${id}.title`, `hint.${id}.body`);

@@ -367,7 +367,10 @@ export class Hud {
     const byRod = f.limitBy === 'rod';
     setIcon(this.limitIco, byRod ? 'rod' : 'line');
     setClass(this.limitIco, 'is-rod', byRod);
-    numText(this.limitText, f.limitKg, 1, byRod ? 'hud.limitRod' : 'hud.limitLine', { t: fmt(f.tension, 1) });
+    // 화면 패스: 서명에 텐션도 넣는다 — numText 는 한계 kg 만 보고 캐시해 「텐션 n kg」이 첫 값에 멈춰 있었다(게이지 24% · 문면 0.2kg)
+    const limKey = byRod ? 'hud.limitRod' : 'hud.limitLine';
+    once(this.limitText, limKey + '|' + Math.round(f.limitKg * 10) + '|' + Math.round(f.tension * 10),
+      () => t(limKey, { v: fmt(f.limitKg, 1), t: fmt(f.tension, 1) }));
 
     const rig = s.rig;
     const maxDrag = rs && rs.reelMaxDragKg > 0 ? rs.reelMaxDragKg : Math.max(1e-6, rig.dragNotches * (rs ? rs.dragNotchKg : 0.25));
