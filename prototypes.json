@@ -13,6 +13,17 @@
       "created": "2026-10-02",
       "controls": "키보드 · 마우스",
       "notes": "갤러리에 올리지 않는다(Jay · 2026-10-02 — public 을 바꾸지 않는다). 이 리포의 규칙이 생기기 전에 만든 첫 프로토타입이다 — 디버그 API 는 window.__ashen, 선택 명령인 단일 HTML 은 release/AshenCycle.html 이고 check:standalone 이 없다."
+    },
+    {
+      "slug": "jay-fishing",
+      "dir": "jay-fishing",
+      "title": "Jay Fishing v0.1",
+      "summary": "1인칭 3D 낚시 RPG. 집(PC로 정비)과 실제 장소를 본뜬 스테이지 3곳을 오가며 찌낚시 · 바닥낚시로 잡고, 드랙 · 텐션 손맛으로 랜딩해 팔고 레벨과 장비로 더 큰 물고기를 노린다.",
+      "port": 5300,
+      "status": "making",
+      "public": false,
+      "created": "2026-10-02",
+      "controls": "키보드 · 마우스"
     }
   ]
 }
