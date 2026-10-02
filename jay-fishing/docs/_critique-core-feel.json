@@ -1,0 +1,161 @@
+{
+  "verdict": "파이팅 모델의 뼈대(드랙 이하 버팀 · 넘으면 미끄러짐 · 정지 마찰 과부하 · 성격 상태 기계 + 특성 데이터)는 러시안피싱류의 손맛을 1차원으로 옮기기에 충분하고, 수치 대부분이 측정 산수에 묶여 있어 병렬 구현이 맞물리는 데는 문제가 없다. 다만 바늘 빠짐 규칙 세 갈래(활동 · 점프 · 머리 흔들기)가 모두 「물고기 최대 힘 대비 느슨함」(loose)을 쓰는데, 계약 식대로 계산하면 브리프가 처방한 대응(질주에 드랙 풀기 · 점프에 로드 숙이기)이 오히려 빠짐 확률을 올리거나 거의 낮추지 못한다. 실제로 드랙 1.25kg에서 중형 잉어는 활동 20초에 28%, 드랙 3.6kg으로 잠그면 7%이고, 점프 때 로드를 숙여도 배스는 점프 1회마다 14%를 잃는다. 이 문제는 설계 측정(호수 자갈 · 바닥 · 무게형 위주)이 跳 · 暴 · 潛 성격을 재지 않아 드러나지 않았다. 그 결과 「드랙을 높게 잠그고 계속 감기」라는 단순 반복 전략이 조절 플레이와 비슷하거나 더 낫다. 같은 결로 우클릭 연타 미세 펌핑(로드를 세우지 않고 +0.75m/s), 시작 상태와 질주의 0.3~0.4초 예고에 걸린 대응 불가 과부하, 순간 판정인 로드 파손, 잠수형의 탈출 조건(tension ≥ F)이 「읽고 대응하는」 손맛을 깎는다. 흘림 · 비거리는 보상 없이 위험만 있어 죽은 선택지이고, 흘린 찌의 방위가 파이팅 방위 제한과 충돌해 물고기가 순간이동한다. 뜰채 범위 · 최소 거리와 보이는 치수의 불일치, 밤 25m 너머의 찌, 라인 2·3단계 스풀이 빈 채 돈이 없을 때의 막힘도 고쳐야 한다. 아래 수정안은 대부분 데이터 값과 식 한 줄의 변경이고, 🔒 값을 건드리는 것은 §7.12 재측정을 함께 적었다.",
+  "issues": [
+    {
+      "severity": "major",
+      "section": "§5.3.2 틱마다 4 · 10f (활동 중 바늘 빠짐) · §7.8 HOOK",
+      "problem": "loose = 1 − tension / (tightRef × Fmax × fat)은 텐션을 물고기 최대 힘과 비교한다. 드랙이 미끄러지는 동안 텐션은 드랙 값에 묶이므로, 드랙을 물고기 힘보다 낮게 둘수록 loose가 커지고 활동 중 빠짐 위험률이 올라간다. 계약 식으로 계산하면 중형 잉어(3.06kg)의 활동 20초 빠짐은 드랙 1.25kg(기본 봇)에서 27.8%, 드랙 3.6kg으로 잠그면 6.8%다. 치누크(6.27kg) 질주 중 드랙을 라인의 45%로 풀면(조절 봇 · 브리프의 走 대응) 24.6%, 70%로 조이면 6.8%다. 브리프가 처방한 「질주 때 드랙을 풀어 라인을 내준다」가 화면에 보이지 않는 벌을 받고, 드랙을 높게 잠그는 쪽이 이긴다.",
+      "fix": "§5.3.2 4를 `loose = fight.slipping(직전 틱) ? 0 : clamp01(1 − tension / (HOOK.tightRef × Fmax × fat))`로 바꾼다. 스풀이 하중을 받으며 풀리는 동안은 라인이 팽팽하다고 보고, 진짜 슬랙은 10e(slackKg)가 맡는다. 10f에는 「드랙 미끄러짐 중에는 loose = 0이므로 h = HOOK.activeRate × HOOK.looseBase」라는 주석을 단다. HOOK이 🔒이므로 밸런스 게이트에서 M4 · M5를 다시 재고 §7.12에 적는다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.2 5 jump · §7.8 HOOK.jumpLooseP",
+      "problem": "점프 빠짐 굴림 p = (rodUp ? jumpPumpP : jumpLowP) + jumpLooseP × loose에서 loose는 직전 틱, 즉 예고 중 텐션으로 잰다. 예고 중에는 teleF 0.4 × teleAlong 0.5 = 0.2 Fmax라서 loose가 0.44~0.51이다. 그래서 정답 대응(로드 숙임)을 해도 점프 1회 빠짐이 배스 중앙값 14.4% · 스틸헤드 15.8%이고, 세우면 41~43%다. multiJump 스틸헤드가 한 판에 점프를 4~5번 하면 정답 플레이로도 절반 가까이 놓친다. 「점프 예고에 로드를 숙인다」는 대응의 가치가 사라진다.",
+      "fix": "굴림을 `p = (rodUp ? HOOK.jumpPumpP × rigStats.jumpPumpMul + HOOK.jumpLooseP × loose : HOOK.jumpLowP) × hookOffMul`로 바꾼다. 느슨함 벌은 세운 채 맞을 때에만 둔다. loose는 예고 시작 직전 틱 값을 `brain.preTeleLoose`에 저장해 쓴다. 기대값: 숙이면 3% · 세우면 30% + α. 「점프 = 로드 숙이기」가 분명한 정답이 된다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.2 5 shake · §7.8 HOOK.shakeP · FIGHT.shakePulse",
+      "problem": "머리 흔들기는 펄스(0.3초)마다 p = 0.12 × loose로 굴린다. shake 상태 하나(0.8~1.6초)에 펄스가 3~5번이라 메기 중앙값은 한 번 흔들 때 14%, 왈아이는 11%를 잃는다. shake 상태의 Fal은 0.3 Fmax라 플레이어가 릴링 · 펌핑을 해도 loose를 0 근처로 내릴 수 없다. 대응할 수단이 없는 연속 굴림이다. 메기 · 왈아이 · 버봇 · 곰치(shake · twist)는 「한 판에 여러 번 흔드는 어종」인데 랜딩률이 측정 밖에서 무너진다.",
+      "fix": "굴림을 펄스마다가 아니라 shake 상태에 들어갈 때 한 번 한다: `p = HOOK.shakeP × loose × hookOffMul`, HOOK.shakeP 0.12 → 0.08. 펄스는 FIGHT_SHAKE 연출과 Fal 가산만 한다. loose는 1번 이슈의 정의(미끄러짐 중 0)를 따른다. 그러면 드랙을 버티게 두고 감으면 흔들기에도 빠지지 않는다는 대응이 생긴다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.12 · §12.5 측정 목표(M1 · M4 · M5 · M7)",
+      "problem": "모든 측정이 「호수 자갈 · 바닥 채비 · 떡밥」(붕어 · 잉어 · 향어 · 누치 = 重 · 走 · 小)에서 이뤄진다. 跳(배스 · 스틸헤드 · 핑크 상어) · 暴(쏘가리 · 가물치 · 독가시치) · 潛(벵에돔 · 돌돔 · 감성돔) 성격의 랜딩률 · 빠짐률은 어디서도 재지 않는다. 위의 점프 · 흔들기 · 잠수 규칙이 무너져도 게이트가 통과한다. 브리프 §7 「성격이 다르다」는 텐션 통계만 보고 공정성은 보지 않는다.",
+      "fix": "§12.5에 M14를 더한다. 「성격별 랜딩률: 성격 6종 × 대표 어종 중앙값(crucian · redSeabream · mandarinFish · largemouthBass · barredKnifejaw · bluegill) × 그 어종이 사는 자리 · 진행 봇이 그 스테이지에서 가질 단계 장비(호수 1 · 갯바위 2 · 강 2)로 파이팅 각 300. 통과: 조절 봇 ≥ 65% · 기본 봇 ≥ 45% · 어느 성격도 바늘 빠짐 > 25% 아님.」 §7.12 표에도 같은 행을 넣고, 조정 손잡이는 `HOOK.*` · `STYLES.*.states`로 적는다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.10 BOT · §12.5 M5 (드랙이 의미 있다)",
+      "problem": "비교 대상이 「드랙 최대 + 항상 릴링(무지성)」뿐이다. 드랙을 라인의 0.9배(3.6kg)로 잠그고 계속 감기만 하는 단순 반복 전략을 계약 식으로 따져 보면, 정지 마찰 과부하를 넣어도 무게형 4kg까지 끊기지 않는다(4kg: 과부하 목표 3.83 < 4). 게다가 loose가 0이라 빠짐까지 최저다. 중형(1~5kg) 구간에서 이 전략이 조절 봇과 같거나 더 낫다면 「드랙이 의미 있다」는 측정을 통과해도 실제로는 성립하지 않는다(QUALITY §2 「한 가지 행동의 반복으로 이기는 루프」).",
+      "fix": "BOT에 `locked: { dragRatio: 0.85 }`(드랙 고정 · 항상 릴링 · 펌핑 없음 · 점프 무시)를 더하고 M5 통과 조건에 「조절 − locked ≥ 10%p(중형 이상) · locked의 대형(≥5kg) 랜딩 ≤ 50%」를 넣는다. 못 맞추면 FIGHT.stick 0.5 → 0.7, stickTime 0.25 → 0.35로 질주 시작 과부하를 키운다(🔒 — 밸런스 게이트에서 조정)."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.2 6(b) 펌핑 거리 · §7.8 FIGHT.pumpStroke",
+      "problem": "`dLift > 0 이면 dist −= pumpStroke × dLift`는 로드 각도와 상관없이 세우는 중이기만 하면 거리를 준다. 우클릭을 10Hz로 연타하면 rodLift가 0~0.06 사이에 머물면서 0.75m/s를 더 감는다(계약 식으로 계산). rodUp이 되지 않으니 로드 파손 · pumpDrain 배율 · 점프 펌핑 벌은 하나도 받지 않고 pumpMul도 거의 1이다. 위험 없이 회수 속도를 50% 올리는 반복 입력이고, 「세우고 → 숙이며 감는」 펌핑 리듬을 무의미하게 만든다.",
+      "fix": "펌핑 거리를 로드가 선 구간에서만 준다: `dLift > 0 && rodLift ≥ FIGHT.pumpGainFrom(0.5) 이면 dist −= FIGHT.pumpStroke × dLift × clamp01(1 − Fal / rodMaxLoadKg)`. 한 번의 완전한 스트로크가 버는 1.2m를 유지하도록 FIGHT.pumpStroke를 1.2 → 2.4로 바꾼다(유효 구간이 0.5 → 1이라 2.4 × 0.5 = 1.2). 펌핑 이득은 언제나 rodUp(파손 위험 · 체력 소모 배율)과 함께 온다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.2 8 쓸림 · inCover",
+      "problem": "`inCover += (tension ≥ F ? −coverEscape : coverRate)`에서 F는 물고기 전체 힘이고, 실제 라인 방향 당김은 Fal = F × along(dive 0.7)이다. 드랙이 버텨 미끄러지지 않을 때 텐션은 raw = (Fal + reelBase) × pumpMul이므로, 감으면서 끝까지 세워야 겨우 F에 닿는다. 브리프 潛의 대응 「초반에 세게 띄운다」(드랙 조이기)만으로는 물고기가 계속 박히고, 쓸림이 쌓여 끊긴다. 대응 수단이 판정과 맞지 않는다.",
+      "fix": "`inCover += (fight.slipping ? FIGHT.coverRate : −FIGHT.coverEscape) × DT`로 바꾼다. 「드랙이 버티면(미끄러지지 않으면) 바닥에 박히지 못한다」는 규칙이 되고, 클리커 소리 · 슬립 표시로 읽힌다. 박힌 정도는 HUD 장애물 경고와 같은 자리에 「박힘」 표시(inCover ≥ 0.5)로 보인다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.1 createFight 「행동 = brain.start (예고 없이)」 · §5.3.2 6(b) stick",
+      "problem": "runner(start run · f 1.0) · diver(start dive) · firstRun 특성(f 1.3)은 챔질한 그 틱부터 예고 없이 최대 힘으로 시작하고, 첫 0.25초에 정지 마찰 과부하(drag + (raw − drag) × 0.5)를 받는다. 갯바위 2단계 라인(8kg)에서 잿방어 레전드(Fmax 15.9)는 HOOK_SET 뒤 0.25초 안에 과부하 목표 9.2 > 8로 끊긴다. 플레이어는 아무것도 보지 못했고 대응할 시간도 없었다 — 결정 이전에 결과가 정해진 손해다.",
+      "fix": "createFight는 start 상태에 예고를 거쳐 들어간다: `telegraph = {kind: tele종류(start.kind), remaining: FIGHT.startTele, total: FIGHT.startTele}` · FIGHT.startTele 0.6. 첫 FIGHT.hookGrace(0.6초) 동안은 stick을 적용하지 않는다(target = drag). 챔질 직후 「첫 질주 예고」 아이콘 · 소리가 뜨고, 드랙을 풀 시간이 생긴다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.8 STYLES 예고(tele) 길이 · §7.10 BOT.controlled.teleReact",
+      "problem": "질주 · 잠수 예고가 0.3~0.4초다(heavy.run 0.4 · runner.run 0.4 · jumper.run 0.3 · diver.dive 0.3). 사람은 반응에 약 0.25초가 걸리고, 브리프가 처방한 대응은 그 뒤에야 할 수 있다: 드랙을 70% → 45%로 풀려면 reel_1에서 4눈금(휠 4클릭 또는 KeyC 4번)이 필요하고, 펌핑을 멈추려면 rodLift 1 → 0.5에 0.2초가 든다. 예고가 행동 가능 시점보다 짧다. 봇은 teleReact 0.25에 한 틱에 여러 눈금(dragSteps 임의 정수)을 넣으므로 사람이 못 내는 성적을 측정값으로 만든다.",
+      "fix": "STYLES 예고를 heavy.run 0.6 · runner.run 0.7 · jumper.run 0.5 · jumper.jump 0.7 · diver.dive 0.5로 바꾼다. thrasher.burst 0.25 · small.burst 0.2는 「요동 = 읽기 어려운 폭발 → 중간 텐션 유지」라는 성격 차이로 남긴다. BOT에 `dragRate: 1`(2틱마다 최대 1눈금 = 초당 30눈금)과 `teleReact: 0.30`을 넣고, §12.1에 「봇의 드랙 변경은 dragRate를 넘지 않는다」를 적는다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.2 10b 로드 파손 · §7.8 FIGHT.rodStressAt",
+      "problem": "로드 파손은 `rodUp && tension > rodMaxLoadKg`인 그 틱에 일어난다. 텐션 평활이 λ = 18이라 목표가 상한의 120%로 튀면 85% 경고(rodStress)에서 100%까지 약 0.03초밖에 걸리지 않는다. 브리프는 「예고가 있다 — 85%부터 떨림 · 삐걱」이라고 했지만, 펌핑 중 질주 · 점프 같은 스파이크에서는 경고가 대응 수단(로드 숙임 0.2초)보다 짧다.",
+      "fix": "10b를 `rodUp && tension > rodMaxLoadKg 가 FIGHT.rodBreakHold(0.3초) 이상 이어지면 → rodBreak`로 바꾼다. FightState에 `rodOverT`(s)를 더하고, 조건이 끊기면 0으로 돌린다. 그동안 rodStress 경고(떨림 · 삐걱 · 게이지)가 계속 나온다. 라인 끊김은 지금처럼 즉시다(드랙이 지켜 주는 쪽이므로)."
+    },
+    {
+      "severity": "major",
+      "section": "§10.3 HUD 텐션 게이지 · §3.4 FightState",
+      "problem": "텐션 게이지는 라인 유효 강도 대비 %만 보인다. 1단계 찌 로드의 상한은 2.6kg이고 라인은 4kg이라, 펌핑 중 로드가 부러지는 순간 게이지는 65%(황색)다. 플레이어가 가장 크게 보는 위협 지표가 실제로 묶여 있는 한계(로드)를 가리키지 않는다. 별도 로드 경고만으로는 「게이지가 노란데 왜 부러졌나」가 남는다.",
+      "fix": "FightState에 `limitKg`(= rodUp ? min(lineEffKg, rodMaxLoadKg) : lineEffKg)와 `limitBy: 'line'|'rod'`를 더한다. 게이지 % = tension / limitKg(색 문턱 60 · 85 그대로)로 하고, limitBy가 'rod'면 게이지 머리에 로드 아이콘을 붙인다. 드랙 눈금에는 라인 유효 강도(빨강)와 로드 상한(주황) 눈금을 둘 다 그린다. 판정은 바꾸지 않는다."
+    },
+    {
+      "severity": "major",
+      "section": "§9.10 뜰채 범위 · §9.7 landing · §7.8 FIGHT.minDist · netRangeM",
+      "problem": "판정 범위는 netRangeM 3.0m에 스킬 +1.5m로 최대 4.5m까지 늘지만, 보이는 뜰채는 손잡이 2.2m + 테 0.35m ≈ 2.6m로 고정이다. 차이가 0.4~1.9m라 QUALITY §2의 허용 차(0.35m)를 넘는다. 또 FIGHT.minDist 1.5m는 설 자리에서 물가까지의 거리(호수 1.6m · 갯바위 곶 약 2.1m)보다 짧아, 물고기 그림자와 모델이 땅 위에 그려진다.",
+      "fix": "SpotDef에 `edgeM`(stand에서 facing 방향 물가까지 m — 데이터 테스트가 shore로 검산)을 더한다. 값은 호수 1.6 · 갯바위 2.0/2.2/2.1 · 강 1.6이다. 거리 규칙은 `FIGHT.minDist → spot.edgeM + 0.5`이고, `netRangeM = spot.edgeM + FIGHT.netReachM(1.4) + mods.netRangeAdd`(RigStats는 자리를 알 때 계산)이다. 뜰채 손잡이의 보이는 길이는 `netRangeM − 0.75`(팔 0.4 + 테 0.35)로 해 스킬이 뜰채 길이를 늘리는 모양으로 보인다. 🔒 netRangeM이 바뀌므로 M1 · M4를 다시 잰다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.2 6(c) charge · §7.8 TRAITS.vanish",
+      "problem": "vanish(페일 킹)는 along −1.2라 다가오는 속도가 vmax 2.66 × 1.2 = 3.2m/s다. 3단계 릴도 회수가 2.0m/s라 (c) 식에서 target = flowLoad × 0.5가 되고, 슬랙 위험이 어떤 입력으로도 막히지 않는다(한 번에 약 10%). 브리프의 「사라짐(텐션 급감 → 슬랙 위험)」은 대응할 수 있는 위험이어야 하는데, 지금은 굴림일 뿐이다. 장르의 대응(빨리 감으며 로드를 세워 여유 줄을 거둔다)이 모델에 없다.",
+      "fix": "(c)를 `takeUp = (input.primary ? reelSpeedMS : 0) + (dLift > 0 ? FIGHT.pumpStroke × dLift / DT : 0)` · `dist −= approach × DT` · `target = takeUp ≥ approach ? (reelBase + flowLoad) × pumpMul : flowLoad × FIGHT.slackFlowFrac`로 바꾼다. TRAITS.vanish.along은 −1.2 → −0.8로 한다(다가오는 속도 약 2.1m/s < 릴 2.0 + 세우기 1.5). 감으면서 로드를 세우면 슬랙을 막는다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.2 waiting 흘림 · §5.4.2 · §3.3 SpotDef.pool",
+      "problem": "어종 풀이 거리와 무관해서 흘림의 보상은 입질 ×1.2와 수심 변화뿐이다. 위험은 크다: 흘림 상한이 lineM − 10m라 먼 데서 건 물고기는 질주 한 번이면 스풀이 바닥나 라인 전체를 잃고, 장애물 띠(fromM 26~65)를 지나 쓸린다. 브리프의 「조류에 흘려보내 먼 거리까지」는 쓰지 않는 게 나은 죽은 선택지가 되고, 같은 이유로 캐스팅 숙련 · 로드 비거리 업그레이드도 가치가 거의 없다.",
+      "fix": "pool 항목에 선택 필드 `farMul`을 더한다(`{id, w, farMul?}` · 기본 1). SpotDef에 `farFromM`을 두고 `dist ≥ farFromM`이면 w × farMul이다. 값은 coast_channel farFromM 40 · river_tailrace 50 · lake_cape 30 · 그 밖 자리는 maxDriftM + 1(없음)이고, farMul 2.0은 amberjack · redSeabream · chinookSalmon · steelhead · paleKing · skygager · mandarinFish에 준다. 흘림 상한은 `min(spot.maxDriftM, lineM − CAST.driftReserveM)` · CAST.driftReserveM 40으로 하고, BITE.driftMul은 1.2 → 1.4로 올린다. HUD 채비 요약의 라인 잔량이 driftReserveM 아래면 주황."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.4 bearing 허용 반각 · §5.2 waiting 흘림",
+      "problem": "흐름이 +X라 흘린 찌는 해안과 나란히 움직인다. 꼬리물 자리에서 100m 지점의 방위는 facing에서 약 1.2rad 벗어나는데, 파이팅의 허용 반각은 arc + bearingSlack = 0.9~0.95rad다. 거기서 챔질하면 첫 틱에 방위가 「잘라 붙여져」 물고기 · 라인 · 그림자가 한 프레임에 수십 m 순간이동한다(QUALITY §4).",
+      "fix": "파이팅 허용 반각을 `halfArc = min(FIGHT.maxArc(1.4), max(spot.arc + FIGHT.bearingSlack, |angleDiff(facing, rig.bearing)| + FIGHT.bearingSlack))`로 정하고 createFight에서 한 번 계산해 `fight.halfArc`에 둔다(가까운 거리의 nearArc 보간은 그대로). 흘림은 `|angleDiff(facing, bearing)| ≥ spot.driftArc`(새 필드 · 기본 1.3)이면 멈춘다(drifting = false)."
+    },
+    {
+      "severity": "major",
+      "section": "§7.8 STYLES.heavy (重 — 붕어 · 잉어 · 메기 · 철갑상어)",
+      "problem": "브리프는 「포악한 개체는 요동, 붕어 같은 개체는 단순하게 무겁다 — 느리고 꾸준한 당김」이라고 대비를 콕 집었다. 그런데 heavy 상태 표를 마르코프로 풀면 시간의 36%가 run(f 0.95 · 예고 0.4 · 정지 마찰 과부하)이다. runner의 61%와 비율만 다른 「느린 질주형」이라, 붕어 · 잉어 손맛이 질주 대응 게임이 된다. Jay가 처음 잡는 물고기가 대부분 이 성격이다.",
+      "fix": "heavy를 `hold: { f 0.65, dur [3,5], next { hold 0.4, rest 0.45, run 0.15 } }` · `run: { f 0.8, sp 0.5, dur [2,4], tele 0.6, next { hold 0.7, rest 0.3 } }` · `rest: { next { hold 0.8, run 0.2 } }`로 바꾼다(run 비율 약 12%). 짧은 돌진 · 장기전 개성은 특성(dash · stamina)이 맡는다. styles.report.test에 「heavy의 텐션 변동계수 ≤ runner의 0.5배 · 질주 수/분 ≤ runner의 0.4배」를 더한다. STYLES 🔒이므로 M1 대형 길이를 다시 잰다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.6 막히지 않는다 · §7.6 라인",
+      "problem": "무료로 다시 감는 것은 line_1인 세트뿐이다. 두 세트 모두 line_2 · line_3인데 스풀이 바닥나고(spoolEmpty는 lineM = 0) 돈이 감기 값(line_2 200m × 25 = 5,000원)보다 적으면, 두 세트 다 noLine으로 캐스팅할 수 없다. 무료 미끼는 나오지만 라인은 나오지 않아 수입원이 끊긴다 — 브리프의 「막히지 않는다」 위반이다.",
+      "fix": "§5.6에 한 줄을 더한다. 「`travel('home')` 도착 때 lineM < CAST.minLineM인 세트가 있고 돈이 그 라인의 감기 값보다 적으면, 그 세트를 line_1으로 바꿔 가득 감는다(무료 · LINE_REFILLED{cost:0} · 안내 `reason.freeLine`).」 판매상의 감기 패널에는 언제나 line_1(5원/m)을 고를 수 있게 한다. economy.test에 「돈 0 · 두 세트 line_2 · lineM 0 → 집 도착 → 캐스팅 가능」을 넣는다."
+    },
+    {
+      "severity": "major",
+      "section": "§9.7 찌의 보이는 크기 · §9.3 헤드랜턴 · 브리프 §3.2",
+      "problem": "헤드랜턴 사거리는 25m인데 찌 로드의 비거리는 24m(1단계) ~ 50m(3단계 + 스킬)이고, 흘림은 60~120m까지 간다. 밤에는 찌 신호를 볼 수 없다. 낮에도 예신 침하 = strength × 0.6 × 몸통 0.10m × scale이라 25m에서 약 4px(1080p) · 2.7px(720p), 100m 이상에서는 1px 안팎으로 읽히지 않는다.",
+      "fix": "§9.7에 「env.headlamp이면 찌 안테나 위 1/3이 발광(emissive 1.0 · 연두) — 장비가 아닌 상시 연출(케미라이트 장비는 v0.2)」을 넣는다. 예신 침하는 `−strength × 0.5 × 안테나 길이(0.30m) × scale`로 바꾸고(안테나 절반까지 잠긴다), scale = clamp(dist / 8, 1, 8)로 한다. 판정 표 §9.10에는 「찌 예신 침하 ≥ 6px @ 1280×720 · dist ≤ maxDriftM」 행을 더한다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.3.2 0 뜰채 · QUALITY §1 선입력",
+      "problem": "뜰채 Space는 canNet이 참인 틱에만 받는다. 물고기가 3m 근처로 들어오는 순간(그림자가 보이는 순간) 한발 먼저 누른 Space는 그냥 버려지고 다시 눌러야 한다. 이것도 지금 못 하는 행동의 입력이 씹히는 경우다.",
+      "fix": "FightState에 `netBuffer`(s)를 더한다. fighting 중 `input.hook && !canNet`이면 `netBuffer = FIGHT.netBufferS`(0.3), 아니면 `netBuffer = max(0, netBuffer − DT)`다. 0단계 조건은 `(input.hook || netBuffer > 0) && fight.canNet(직전 틱)`이다. rig.test에 「canNet 0.2초 전 Space → 뜰채 성공」을 더한다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.9 START.sets.float.hook · §3.5 LossReport · §5.3.1 hookOffMul",
+      "problem": "시작 찌 세트의 바늘이 hook_s(1)인데, 호수 찌낚시의 주 어종(배스 · 가물치 입 3, 강준치 2)에는 빠짐이 ×2.2 · ×1.5다. 위의 점프 빠짐(정답 대응 14%)에 곱하면 배스는 점프 1회에 32%를 잃는다. 실패 알림에는 원인이 보이지 않아(「바늘 빠짐」뿐) 바늘을 바꿔야 한다는 것을 배울 길이 없다.",
+      "fix": "START.sets.float.hook을 'hook_m'으로 바꾼다. LossReport에 `cause: 'slack'|'jump'|'shake'|'active'|null`과 `hookSmall: boolean`(hookOffMul > 1)을 더하고, FAIL 알림 한 줄에 「바늘이 작다(입이 큰 어종)」 또는 「줄이 느슨했다」 · 「점프 때 로드를 세웠다」를 붙인다. 채비 패널의 바늘 항목에는 「입 크기 소/중/대에 적합」을 보인다."
+    },
+    {
+      "severity": "minor",
+      "section": "§7.7 dragNotches · §6 장착(equip) · §5.6 rodBreak 복구",
+      "problem": "dragKg = notch / notches × reelMaxDragKg라 릴을 바꾸면 같은 눈금에서 kg이 튄다(reel_1 → reel_3, 눈금 5: 1.25 → 4.0kg = line_1 강도의 100%). 로드가 부러져 1단계(상한 2.6)로 바뀌어도 드랙은 2단계 로드에 맞춘 값 그대로라, 다음 펌핑에서 또 부러질 수 있다. 연속 손해가 조용히 준비된다.",
+      "fix": "릴 · 라인을 장착할 때는 kg을 보존한다: `dragNotch = clamp(round(oldDragKg / newDragNotchKg), 0, dragNotches)`. RIG_RESTORED{rodReplaced:true}일 때는 `dragKg ≤ 0.9 × 새 rodMaxLoadKg`가 되게 눈금을 내리고 알림 「예비 로드 — 드랙을 n kg으로 낮췄다」를 띄운다. economy · rig 테스트에 각각 한 줄씩."
+    },
+    {
+      "severity": "minor",
+      "section": "§5.2 1 설정 입력(selectSet · depthSteps)",
+      "problem": "Digit1/2는 ready에서만, 수심 ↑↓는 ready · charging에서만 받는다. waiting · retrieving · bite에서 누르면 아무 반응 없이 버려진다(조용한 실패). 찌를 띄운 채 수심을 바꾸려는 것은 이 장르에서 자연스러운 시도다.",
+      "fix": "waiting · retrieving에서 selectSet이 오면 즉시 회수(미끼 환불 · RETRIEVE_DONE)한 뒤 세트를 바꾼다. depthSteps는 `rig.pendingDepthSteps`에 쌓아 두었다가 다음 ready 첫 틱에 적용하고, 그 사이 HUD 수심 옆에 「다음 캐스팅 n m」을 보인다. bite · fighting에서는 둘 다 버리되 알림 `reason.busy`를 1회 띄운다."
+    },
+    {
+      "severity": "minor",
+      "section": "§9.7 로드 휨 · §9.12 라인 텐션 톤",
+      "problem": "휨 = tension / rodMaxLoadKg가 선형이다. 블루길 · 동자개(텐션 약 0.1~0.15kg)는 휨 4~5% · 게이지 4%로 파이팅 내내 아무것도 움직이지 않는다. 초반에 가장 자주 잡는 소형 어종에서 「텐션이 읽힌다」를 배울 수 없다.",
+      "fix": "보이는 값만 바꾼다(판정은 그대로). 휨은 `clamp(sqrt(tension / rodMaxLoadKg), 0, 1.1)` → 끝 곡률 최대 70°로 하고, 라인 톤의 음높이도 sqrt 비율로 한다. 소형(Fmax < 0.5kg)은 FIGHT_SHAKE와 같은 잔떨림(0.004rad · 12Hz)을 상시로 준다. 텐션 게이지는 선형을 유지한다(판정 값과 같은 수)."
+    },
+    {
+      "severity": "minor",
+      "section": "§5.4.4 찌 본신 'lift' · §7.5 SIGNAL.float",
+      "problem": "붕어(호수의 기본 대상)의 본신은 찌올림(+0.12m 솟았다 눕기)이라 잠김보다 덜 두드러지는데, 챔질 창은 똑같이 0.9초다. 예신(톡톡 잠김)과 방향이 반대인 신호를 처음 보는 플레이어는 늦기 쉽고, 「늦음」 실패가 붕어에 몰린다.",
+      "fix": "SIGNAL.float에 `liftWindowAdd: 0.3`을 더하고 `hookWindowS = takeWindow + (takeStyle === 'lift' ? liftWindowAdd : 0) + mods.hookWindowAdd`로 한다. 찌올림은 0.15초에 걸쳐 솟고 창이 끝날 때까지 누운 상태를 유지한다(§9.7)."
+    },
+    {
+      "severity": "minor",
+      "section": "§9.8 물고기 그림자 · 예고",
+      "problem": "그림자 불투명도는 clamp(0.55 × (1 − depth/6), 0.1, 0.55)이고 파이팅 중 수심은 midDepthFrac 0.5 × 그 자리 수심이다. 그래서 곶 · 깊은 홈(수심 10~20m)에서는 늘 0.1(거의 안 보임)이고, 브리프가 예고 수단으로 든 「그림자 상승 · 꼬리 침」이 깊은 자리에서는 보이지 않는다.",
+      "fix": "§5.3.4 depth 목표에 「telegraph 중이면 min(현재 목표, FIGHT.teleDepth 1.5)」를 더한다. §9.8 불투명도는 `clamp(0.55 × (1 − depth / 8), telegraph ? 0.35 : 0.15, 0.55)`로 하고, 예고 중에는 그림자 위에 수면 V자 물결을 그린다."
+    },
+    {
+      "severity": "minor",
+      "section": "§7.12 · §12.5 M5 · M7 (봇의 사람다움)",
+      "problem": "controlled 봇은 질주 예고를 본 0.25초 뒤 한 틱에 목표 눈금으로 점프하고, 텐션이 80%를 넘으면 틱마다 2눈금(초당 120눈금)씩 푼다. 사람의 휠 · KeyC로는 낼 수 없는 속도다. 이 봇으로 잰 「조절 − 기본 ≥ 10%p」 · 파손 ≤ 2%는 실제 플레이의 상한을 과대평가한다.",
+      "fix": "BOT.controlled에 `dragRate: 1`(2틱마다 최대 1눈금)을 두고, panic 규칙을 「틱마다 2눈금」에서 「dragRate 한도 안에서 푼다」로 바꾼다. §12.1에 「봇의 dragSteps는 |dragSteps| ≤ 1이고, 연속 두 틱에 0이 아닌 값을 내지 않는다」를 적는다. bot.test가 이를 검사한다."
+    }
+  ]
+}

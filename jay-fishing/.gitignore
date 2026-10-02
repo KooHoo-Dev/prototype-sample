@@ -1,0 +1,7 @@
+# OWNER: P0 — 계약 §1.3
+node_modules/
+dist/
+release/
+docs/_scratch/
+*.log
+.vite/

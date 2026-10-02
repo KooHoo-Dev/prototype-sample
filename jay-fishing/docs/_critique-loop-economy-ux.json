@@ -1,0 +1,155 @@
+{
+  "verdict": "계약 수치로 직접 산수했다(어종 36행의 로그정규 분포를 적분하고, 봇 계획대로 하루를 몬테카를로로 돌렸다. 랜딩률은 계약의 0.8을 가정하고 크기별 감쇠로 민감도를 봤다). 결론부터 적는다. 실패를 반복해 버는 경로는 없다. 실패는 돈 0 · 경험치 0이고, 1단계 로드 · 라인 · 미끼는 무료로 복구되지만 남는 것이 없다. 반대로 진행 쪽 산수에 구멍이 셋 있다. (1) §7.12의 경험치 산수가 첫 포획 보너스(20 + 2 × xp)를 빠뜨렸다. 호수 첫날 경험치는 480이 아니라 약 770이다(정상 475 + 첫 포획 약 295). 그래서 레벨 5는 0.64일, 레벨 10은 3.7일에 와서 M11이 설계대로 실패한다. (2) 하루 수입은 계약 표기 12.8만~14.2만이 아니다. 기대값이 15만~18만이고, 그 50%가 잡은 수의 10%인 트로피 · 레전드에서 나온다. 하루 p10~p90이 11만~27만이라 「시드 5 평균」 M10은 상한 쪽에서 흔들린다. (3) 3단계 가격 구조가 후반 루프를 깨뜨린다. 3단계 로드 한 번 파손이 강 하루 수입의 55~68%이고, 3단계 완비(약 315만)가 8일 무렵에 끝나 레벨 20(20~24일)까지 돈을 쓸 곳이 없다. 강 진입(레벨 10 · 2단계)과 3단계 문턱(레벨 12)의 틈도 측정하지 않는다. 첫 귀가(어창 한 번)에는 레벨 문턱 때문에 미끼 말고 살 것이 없다. UX 쪽에는 막히는 경로가 하나 있다. 포커스를 잃어 일시정지가 결과 · 타이틀 패널을 「교체」하면 rig가 result에 갇힌다. 그 밖에 어창이 차면 레전드도 방생해야 하고, 실패 손실 · 안내 · 미끼 변경은 저장되지 않아 탭을 닫으면 되돌아간다(로드 파손 세이브스컴도 된다). 빈 회수는 1.5m/s라 다시 던지려면 19~67초를 눌러야 하고, 스풀이 바닥나면 「2초 재도전」이 깨진다. 조작 안내는 첫 낚시에야 나온다(집에서 걷는 법이 먼저 필요하다). Esc로 패널을 닫으면 포인터 락이 다시 잡히지 않는다. 아래 수정안은 데이터 값 · 규칙 한 줄 · 측정 행 추가가 대부분이다. 🔒 값은 밸런스 게이트에서 §7.12와 함께 고친다.",
+  "issues": [
+    {
+      "severity": "blocker",
+      "section": "§10.4 입력 포커스 규칙 · §6.11 UIRoot.openPanel · §11.2 일시정지",
+      "problem": "openPanel은 「이미 열려 있으면 교체」이고 §10.4가 정한 예외는 둘뿐이다(pause가 열려 있으면 다른 패널 무시 · title은 모두 닫고 연다). 그래서 포커스 잃음 · 탭 숨김 · 포인터 락 상실로 app이 openPanel('pause')를 부르면, 열려 있던 result · title · confirm · sell · pc 패널이 사라진다. pause를 닫으면 패널이 없는데 rig.phase는 'result'다. result 패널은 CATCH_RESULT 이벤트로만 열리고(§10.1 「이벤트는 패널 열기에 쓴다」), updateRig의 result 단계는 아무것도 하지 않는다. Esc를 눌러도 result는 exitFishing 목록에 없어 pause만 다시 뜬다. 다시 읽기 전까지 진행할 수 없고, 다시 읽으면 그 물고기(SAVE_REQUEST 전)를 잃는다. 타이틀에서 포커스를 잃어도 같은 일이 생긴다. title 패널이 사라지면 screen은 'title'인데 isBlocking()이 false라 sim이 돈다. 새 게임 · 이어하기를 고르지 않은 채 집에서 걸어 다니게 된다. 알트탭 한 번으로 생기는 흔한 경로다.",
+      "fix": "§10.4에 추가: 「pause는 교체하지 않고 **위에 겹친다**(패널 스택 깊이 ≤ 2: 바탕 패널 + pause). closePanel()이 pause를 닫으면 바탕 패널이 같은 args로 다시 보인다(다시 열 때 PANEL_INPUT_GRACE를 다시 적용). isBlocking()은 스택이 비어 있지 않으면 true다.」 §10.1에 자가 복구 규칙을 넣는다: 「UIRoot.update(state): 스택이 비어 있고 state.rig.phase === 'result' && state.pendingCatch면 openPanel('result')」. §11.2에 넣는다: 「포커스 잃음 · 숨김 · 락 상실로 여는 일시정지는 screen === 'play'일 때만. title · 전이 중에는 input.releaseAll() · audio.setPaused만 한다」. 회귀 테스트(P8 · P9): result가 열린 상태에서 blur → pause → Esc를 하면 result가 다시 보이고 Space로 keepCatch가 된다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.12 「레벨 5 · 10」 「레벨 20」 행 · §7.9 XP · §12.2 progression.test(누적 511 · 3,332 · 20,141)",
+      "problem": "§7.12는 「호수 1단계 기본 480xp/일 → 누적 511 → 1.06일」로 셈했다. 그런데 §7.9의 첫 포획 보너스(20 + 2 × 어종 xp)를 넣지 않았다. 호수 자갈 · 바닥 · 떡밥(밤 지렁이) 계획으로 하루를 돌리면 정상 경험치는 약 475다. 여기에 첫날 첫 포획 9종이 약 +295(p10~p90 695~847)를 더해 첫날은 약 770이 된다. 그래서 레벨 5가 0.64일(조절 봇 0.57일)로 브리프의 1~2일 밖이다. 갯바위 첫날의 첫 포획(10종, 약 +425)까지 넣으면 레벨 10은 3.7일(조절 3.15일)로 4~7일 밖이다. M11이 계약 수치 그대로 실패하도록 설계되어 있다.",
+      "fix": "§7.9를 `XP = { base: 45, exp: 1.4, levelCap: 20, tierMul: {normal:1, trophy:2, legend:5}, releaseMul: 0.7, firstBase: 8, firstPerXp: 1, recordMul: 0.5, pointsPerLevel: 1 }`로 바꾼다. 다음 레벨까지 45 · 119 · 209 · 313 · 428 · 553 · 686 · 827 · 975 · 1,130 …이고, 누적은 레벨 5 686 · 레벨 10 4,155 · 레벨 20 23,381이다. 같은 일일 모델(호수 475 · 갯바위 764 · 강 822/일 + 첫날 보너스)로 레벨 5는 1.14일, 레벨 10은 5.7일이다. 레벨 20은 조절 봇(×1.2) 23.8일로 브리프 목표 셋이 모두 범위 안이다. §7.12의 레벨 행은 「일일 xp = 정상 + 첫 포획(Σ(firstBase + firstPerXp × xp))」로 다시 적는다. progression.test의 누적값도 686 · 4,155 · 23,381로 바꾼다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.6 GEAR_GATES · 구매 문턱 · §7.12 「첫 장비 업그레이드」 · 브리프 §2 「한 번 다녀오면 반드시 뭔가 산다」",
+      "problem": "2단계 전부(로드 · 릴 · 찌 · 봉돌 · 라인)가 level ≥ 5 한 문턱에 묶여 있다. 이동은 시각 점프라 실제 시간이 거의 들지 않는다(전환 막 0.9초). 그래서 사람은 하루를 다 채우기 전에 어창이 차면(12마리 · 실제 약 14분 · 약 4만 원 · 레벨 3~4) 집에 들른다. 그때 PC 상점은 미끼 말고 전부 「레벨 5 필요」다. 2번 이슈대로 레벨 5를 1~2일로 맞추면, 하루를 다 채운 첫 귀가(1.0일)에서도 2단계를 못 산다. 「첫 업그레이드 0.5~1.5일」과 「레벨 5 = 1~2일」이 같은 문턱을 공유해 서로를 깎는다.",
+      "fix": "부위별 문턱을 둔다: `GEAR_GATES = { tier2Level: 5, tier2LevelBySlot: { float: 3, sinker: 3 }, tier3Level: 12, tier3Mastery: 2 }`. 구매 · 장착 검사는 `level ≥ (tier2LevelBySlot[slot] ?? tier2Level)`. 레벨 3은 누적 164xp(2번 이슈의 곡선)로 약 0.25일, 곧 어창 한 번이다. float_2(12,000) · sinker_2(10,000)는 그때 모은 약 3.7만 원으로 산다. §7.12에 행을 더한다: 「첫 귀가(어창 1회 ≈ 12마리)에 살 수 있는 장비 ≥ 1」. §12.1 progress 계획에 「buyOrder의 다음 항목을 살 수 있게 되면 그 시간대 끝에 캠프 → 집 → PC에 들른다」를 적어 M11의 「첫 업그레이드」가 귀가 시점에 묶이지 않게 한다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.12 「하루 수입」 행 · §12.5 M10",
+      "problem": "§7.12는 매출을 「약 128,000~142,000원(트로피 · 레전드 운에 따라)」으로 적었다. 분포를 적분하면 어종 한 마리의 기대 판매가는 중앙가의 약 2배다(붕어 1,968 / 1,011 · 잉어 7,245 / 3,370 · 향어 6,685 / 3,576). 매출의 약 50%가 잡은 수의 10%인 트로피 · 레전드에서 나온다(레전드만 15~20%). 계획대로 하루를 3,000번 돌리면, 랜딩 0.8 고정일 때 평균 18.0만 · p10 11.8만 · p50 16.3만 · p90 26.9만이다. 5kg 이상 랜딩을 0.6, 10kg 이상을 0.1로 깎아도 평균 15.2만 · p10 11.1만 · p90 19.8만이다. M10의 창은 97.7k~192.7k(미끼 20개 2,700 + reel_2의 50~100%)다. 「시드 5 평균」은 표준오차가 평균의 약 13%라, 기대값 18만 근처에서 상한(19.3만)을 넘는 판이 약 30%다. 게이트가 같은 계약으로 통과와 실패를 오간다. 실제 미끼 소모도 20개가 아니라 하루 약 57개(약 7천 원)다.",
+      "fix": "§7.12 하루 수입 행을 「기대 매출 15만~18만(트로피 · 레전드 몫 ≈ 50%) · 하루 p10~p90 11만~27만 · 순수입 = 매출 − 미끼 · 라인 · 채비 지출(하루 미끼 ≈ 57개 ≈ 7천 원)」로 고친다. §12.5 M10을 「시드 20 · 순수입 **중앙값**이 97.7k~192.7k, 그리고 `measure`가 어종별 기대가(분포 적분 × 랜딩 수)로 낸 기대 매출을 같이 보고한다」로 바꾼다. 밸런스 게이트 손잡이도 적는다: 중앙값이 reel_2의 85%를 넘으면 reel_2 가격을 190,000 → 220,000으로 올린다(라인 끊김 손실 · 로드 파손 목표에는 영향 없음)."
+    },
+    {
+      "severity": "major",
+      "section": "§7.6 rod_float_3 · rod_bottom_3 가격 · §7.12 「실패 한 번으로 잃는 것」",
+      "problem": "파손 비용 목표는 2단계 로드 대 호수 하루 수입(20~40%)에만 걸려 있다. 강 계획(riverDay)을 같은 방식으로 돌리면 하루 매출은 중앙값 50만~64만이다. 그러면 3단계 로드 한 번 파손이 rod_float_3 300,000 = 47~60% · rod_bottom_3 340,000 = 53~68%다. 모든 단계에서 로드 상한이 라인보다 약하고(2.6/3.2 < 4 · 6/8 < 8 · 12/16 < 18), 파손은 펌핑 중 순간 판정이다. 그래서 사람이 하루 40판 중 한두 번만 무리해도 하루 수입의 절반 이상이 사라진다. 후반에는 「펌핑하지 않는다」가 정답이 되어 손맛의 한 축이 죽는다.",
+      "fix": "§7.6에서 `rod_float_3` 300,000 → 160,000 · `rod_bottom_3` 340,000 → 180,000(강 하루 매출 중앙값의 약 30%)으로 내린다. §7.12에 행을 더한다: 「3단계 로드 파손 = 강 깊은 홈 · 3단계 · 조절 봇 하루 수입의 20~40%」. §12.5에 M9b(시드 5 · 같은 산수 + 실측)를 둔다. 줄어든 가격은 6번 이슈의 릴 가격으로 옮긴다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.6 3단계 가격 · §7.10 buyOrder · §7.12 (측정 없음) — 돈 루프의 정체",
+      "problem": "2단계를 다 갖추는 데 약 49.7만(rod_bottom_2 4.5만 + reel_2 19만 × 2 + line_2 감기 약 1만 + sinker_2 1만 + rod_float_2 4만 + float_2 1.2만)이 든다. 3단계는 약 315만(rod 34만 + 30만 + reel_3 120만 × 2 + line_3 감기 3.6만 + sinker_3 3.5만 + float_3 4만)이다. 하루 매출(호수 약 15만 · 갯바위 약 33만 · 강 약 50만~64만)로 progress 봇의 지갑을 따라가면 3단계 완비가 약 8일째다. 레벨 20은 20~24일이다. 그 사이 12~16일(실제 12~16시간) 동안 돈을 쓸 곳이 없다. 지출은 미끼(매출의 4~5%) · 라인 · 채비 손실뿐이라 돈이 단조 증가한다. 「판매 → 장비 → 더 큰 물고기」 루프가 레벨 루프의 40% 지점에서 끝난다.",
+      "fix": "§7.6에서 `reel_3` 1,200,000 → 2,400,000 · `float_3` 40,000 → 80,000 · `sinker_3` 35,000 → 70,000으로 올린다(로드는 5번 이슈대로 내린다). 3단계 합계는 약 533만이다. §7.12 · §12.5에 M14를 더한다: 「3단계 완비 시점(조절 봇 · progress · 시드 1): 12~20일 · 그 시점 레벨 ≥ 16」. 조정 손잡이는 reel_3 가격이다. 레벨 캡 뒤의 돈 소비처(내구도 · 수리)는 로드맵 v0.3이라고 측정의 한계에 적는다."
+    },
+    {
+      "severity": "major",
+      "section": "§7.12 · §12.5 (강 진입 측정 없음) · §7.6 GEAR_GATES tier3Level 12 vs 강 unlockLevel 10",
+      "problem": "강은 레벨 10에 열리지만 3단계 장비는 레벨 12 + 숙련 2 + 약 154만(rod_bottom_3 + reel_3 1개)이 있어야 산다. 진입 직후에는 2단계(line_2 8kg · reel_2 드랙 9kg · 200m)로 낚는다. 강의 돈줄이 이 장비를 넘는다. 치누크 중앙값은 Fmax = 1.7 × 1.15 × 6.27^0.75 = 7.7kg으로 라인 8kg과 같고, 트로피(11.1kg)는 11.9kg이다. 흰철갑상어 중앙값은 1.3 × 16.3^0.75 = 10.5kg이다. 이 셋의 기대가(5.5만 · 4.8만 · 3.1만)가 강 매출의 대부분인데, 측정은 M6(1단계 vs 3단계 철갑상어)뿐이다. 2단계 강의 랜딩률 · 수입이 갯바위보다 낮으면 레벨 10 해금이 보상이 아니라 함정이 된다. 그 경우 progress 봇과 사람은 3단계까지 갯바위에 머문다.",
+      "fix": "§12.5에 M15를 더한다: 「강 진입: 레벨 10 · 2단계 전부 · 조절 봇 riverDay · 시드 5 → 하루 순수입 ≥ 같은 조건 갯바위(coastDay)의 1.2배 · 입질 대비 랜딩률 ≥ 55%」. 실패하면 첫 손잡이로 `GEAR_GATES.tier3Level` 12 → 10을 쓴다(강 해금과 3단계 구매를 같은 레벨로 · 숙련 2는 유지). 다음은 `chinookSalmon.fight.force` 1.15 → 1.0. §7.12에도 같은 행을 둔다."
+    },
+    {
+      "severity": "major",
+      "section": "§3.6 HOLD(12) · §10.2 result 패널 · §6.3 keepCatch · §5.2 ready",
+      "problem": "어창이 차면 결과 패널에서 「방생」만 된다. 호수 하루 랜딩 약 45마리 · 갯바위 약 54마리면 어창은 하루 4~5번, 실제 12~14분마다 찬다. 사람은 HUD의 「12/12 주황」을 놓치기 쉽다. 그러면 다음 판에 트로피 · 레전드(잉어 레전드 중앙가 130,563원 = 호수 하루 매출의 약 80%)가 올라와도 어창의 1,000원짜리 붕어 때문에 방생해야 한다. 이 손해는 막을 수단이 화면에 없고 되돌릴 수도 없다(QUALITY §2 「대응할 수 없는 손해」의 진행판).",
+      "fix": "§6.3 · §6.5 시그니처를 `keepCatch(opts = {})`로 바꾸고 `opts.swapUid?: number`를 받는다. swapUid가 있으면 그 어창 물고기를 빼고(경험치 · 도감 변화 없음 · `CATCH_RELEASED{catch: 뺀 것}`으로 방생 연출) 새 물고기를 넣는다. 어창이 차 있고 swapUid가 없으면 지금처럼 `{reason:'holdFull'}`이다. §10.2 result: 어창이 차 있으면 「Space = 어창에서 가장 싼 것(이름 · 가격)과 바꾸기」, 새 물고기가 그것보다 싸면 Space는 비활성 · 「KeyX 방생」만. §5.2 ready에 넣는다: 어창이 찬 채 캐스팅하면 그 낚시 진입에서 한 번 `toast('reason.holdFullCast')`(「어창이 가득 — 잡으면 바꾸거나 방생해야 한다」)."
+    },
+    {
+      "severity": "major",
+      "section": "§4.2 SAVE_REQUEST · §11.5 저장 시점 · §6.7 createSaveData",
+      "problem": "저장 시점에서 빠진 상태 변화가 있다. ① 실패의 손실(applyLoss: 돈 · 미끼 · 라인 · 로드 소실) ② 캐스팅마다의 미끼 소모 ③ setBait · setDepth · 드랙 눈금 ④ markHintSeen(안내 문구가 다시 뜬다) ⑤ 시계 진행(손실이 이어지는 동안 랜딩이 없으면 저장되지 않는다). hidden · beforeunload 저장도 「플래그가 서 있으면」뿐이다. 그래서 3단계 로드(30만 대)가 부러진 직후 탭을 닫거나 다시 읽으면 로드 · 돈 · 미끼가 돌아온다. 실패를 무를 수 있는 세이브스컴 경로다(QUALITY §3 「실패보다 더 버는 경로」). 결과 패널 중에 탭이 닫히면 pendingCatch는 세이브 모양에 없어 그 물고기(레전드일 수도 있다)가 사라진다.",
+      "fix": "§4.2 SAVE_REQUEST reason에 'loss'(P1 — `FAIL`을 낸 직후 · 모든 실패) · 'hint'(P3 markHintSeen) · 'tackle'(P4 setBait · P1 setFloatDepth/드랙 — 프레임 끝 한 번 규칙으로 묶인다)를 더한다. §11.5 표에 넣는다: 「`visibilitychange → hidden` · `pagehide` · `beforeunload`: screen === 'play'이고 devSession이 아니면 **플래그와 무관하게** 즉시 한 번 저장」. §6.7 createSaveData에 넣는다: 「state.rig.phase === 'result'면 pendingCatch를 반영한 프로필 사본을 저장한다 — 어창에 자리가 있으면 keep(xpKeep · 어창 · 도감), 없으면 release(xpRelease · 도감)」(sim 상태는 바꾸지 않는다). save.test에 넣는다: 로드 파손 → 숨김 저장 → parseSave → owned에 그 로드가 없다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.2 retrieving · §7.5 CAST · §5.2 설정 입력(depthSteps는 ready · charging만)",
+      "problem": "아무것도 물지 않은 찌/봉돌을 거두는 속도가 릴 회수 속도(reel_1 1.5m/s) 그대로다. 28m 캐스팅을 거두려면 좌클릭을 18.7초 누르고 있어야 한다. 흘림(maxDriftM 60~120m)이면 40~80초다. 찌 수심은 ready · charging에서만 바뀐다. 그래서 브리프의 핵심 손잡이인 「수심을 지정해 층을 맞춘다」를 한 번 시도하려면 회수 19초 + 재캐스팅이 든다. 한편 exitFishing은 waiting에서 「즉시 회수 · 미끼 환불」이다. Esc → E → 캐스팅이 회수보다 빨라 조작이 거꾸로 보상받는다.",
+      "fix": "§7.5 CAST에 `emptyRetrieveMul: 3`을 더한다. §5.2 retrieving을 `dist −= reelSpeedMS × CAST.emptyRetrieveMul × DT`(물고기가 없을 때 — 28m 6.2초 · 100m 22초)로 바꾼다. §5.2 설정 입력의 depthSteps 허용 단계에 waiting(찌 세트)을 더한다: 「floatDepth를 바로 바꾸고 baitDepth · layer를 다시 계산 · `phaseTime = 0`으로 BITE.minWait를 다시 센다(공짜 재추첨 방지) · DEPTH_CHANGED」. §6.3 setDepth의 허용 단계도 같이 넓힌다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.6 spoolEmpty · lineBreak · §5.2 ready canCast · §7.12 「실패 → 재도전 2초」 · §12.5 M8",
+      "problem": "스풀 바닥(spoolEmpty)은 lineM = 0이다. 라인 끊김이 겹쳐 lineM < CAST.minLineM(15m)이 되어도 같다. 그러면 ready에서 CAST_BLOCKED{noLine}이고, 다시 던지려면 Esc → 판매상까지 걷기 → 감기 → 돌아오기, 또는 캠프 → 집이 필요하다. 수십 초 · 입력 6~10번이다. 로드 파손은 「예비 로드」로 바로 복구하면서 라인은 그렇지 않아, 브리프 §2 「채비 자동 복구 → 바로 다음 캐스팅」과 QUALITY §3 「2번 · 2초」가 이 사유에서만 깨진다. M8도 실패 50건에서 spoolEmpty를 빼지 않으면 실패한다(1단계 장비 · 120m 스풀 · 드랙 1.25kg이면 대형 질주에서 실제로 생긴다).",
+      "fix": "§5.6에 「예비 스풀」 규칙을 둔다: applyLoss 끝에서 그 세트의 `lineM < CAST.minLineM + CAST.lineReserveM`(25m)이면 `lineId = 'line_1'` · `lineM = 그 릴 capacityM`(무료 — 1단계 라인은 무한이다)로 바꾼다. 남아 있던 2·3단계 라인은 버린다. `LossReport`에 `spareSpool:boolean`을, `RIG_RESTORED` payload에 `spoolReplaced:boolean`을 더한다. 알림은 「라인을 다 잃었다 — 예비 스풀(나일론 4kg)로 바꾼다」(`fail.spareSpool`). M8은 모든 FailReason을 포함한다."
+    },
+    {
+      "severity": "major",
+      "section": "§10.3 안내 문구 · §0 HINT_IDS · 부록 B hint.* · QUALITY §1 「조작 안내는 게임 안에」",
+      "problem": "조작 안내 `controls`(「WASD 이동 · 마우스 둘러보기 · E 낚시 자리에 서기」)가 「첫 낚시」(FISHING_ENTER)에 나온다. 그런데 새 게임은 집 06:00에서 시작한다. 걷고 문을 찾아 E로 지도를 열고 호수에 가서 자리 표식까지 걸어가야 하는 이 첫 동선에 안내가 없다. 처음 보는 사람은 이동 키도 모른다. 그 밖에도 게임 안에 설명이 없는 규칙이 있다: 캠프의 시간 건너뛰기(브리프 §2 「기다림이 지루하면 캠프에서」) · 판매상 · 어창 가득 · 집 도착 자동 판매 · 레벨 게이트.",
+      "fix": "§0 HINT_IDS를 `['start', 'stage', 'controls', 'cast', 'bite', 'fight', 'net', 'drift', 'bottomRig', 'holdFull']`로 바꾼다. 트리거: `start` = 새 게임 첫 play 프레임(집: 「WASD 이동 · 마우스 둘러보기 · E 상호작용 — 문으로 나가 호수로 · PC: 상점 · 날씨 · 도감 · 스킬」) · `stage` = 첫 야외 도착(「바닥의 흰 고리가 낚시 자리(E) · 판매상에게 물고기를 판다 · 캠프: 다음 시간대로 건너뛰기 · 집으로」) · `controls` = 첫 낚시 진입(낚시 조작과 일어나기 키) · `holdFull` = 어창이 처음 찼을 때. 부록 B에 `hint.start/stage/holdFull.title/body`를 더한다. P8 완료 정의의 「안내 문구 7종」을 10종으로 바꾼다."
+    },
+    {
+      "severity": "major",
+      "section": "§11.3 시선(포인터 락) · §4.3 POINTER_LOCK · §4.3 PANEL_CLOSED(「포인터 락 다시」)",
+      "problem": "PANEL_CLOSED에서 app이 락을 다시 잡는다고 적혀 있다. 그런데 requestPointerLock은 사용자 활성화가 있어야 하고, HTML 규격은 Esc keydown을 활성화 입력에서 뺀다. Chrome은 사용자가 Esc로 락을 푼 직후 약 1초 동안 재요청도 거부한다. 그래서 Tab · Esc로 패널을 닫으면 재요청이 pointerlockerror로 실패한다. 계약대로면 이 실패가 「락을 못 얻음 → 드래그 대체 · POINTER_LOCK{available:false}」로 읽혀 마우스 시점이 가운데 버튼 드래그로 영영 바뀐다. 사용자가 캔버스를 클릭해 다시 잡으려 하면, 낚시 모드에서는 그 좌클릭이 primaryPressed로 들어가 캐스팅 충전이 시작된다.",
+      "fix": "§11.3에 규칙을 넣는다. ① requestPointerLock은 pointerdown · click · Enter/Space keydown 처리기 안에서만 부른다(Esc · Tab으로 닫힌 뒤에는 부르지 않고 HUD에 `prompt.clickToLook` 「클릭해서 시점 고정」을 띄운다). ② 락이 없을 때 캔버스의 pointerdown은 락만 요청하고 **삼킨다** — InputFrame의 primary · primaryPressed · secondary로 내보내지 않고, 그 버튼을 뗄 때까지 홀드도 무시한다. ③ `POINTER_LOCK.available`은 API가 없거나 **한 번도 성공한 적 없이** 첫 요청이 실패했을 때만 false다. 성공한 적이 있으면 실패해도 available:true · locked:false이고 드래그 대체로 바꾸지 않는다. app.input.test에 ②를 넣는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§7.12 · §12.5 M1 (후반 한 판 길이 측정 없음)",
+      "problem": "한 판 길이는 호수 자갈 · 1단계에서만 잰다(M1). 진행 뒤의 한 판은 재지 않는다. 강의 흰철갑상어는 stamina 2.0이라 E = 12 × 2.0 × W^0.3이 중앙값 55초 · 트로피(40.9kg) 73초다. 트로피는 Fmax 21kg로 line_3 18kg을 넘어 미끄러지며 버틴다. 계산상 한 판이 2~5분 걸릴 수 있다. 그러면 「대형 60~150초」 목표가 후반에서 깨지고, 좌클릭을 몇 분 누르는 피로가 생긴다.",
+      "fix": "§12.5에 M1b를 더한다: 「강 깊은 홈 · 3단계 · 조절 봇: 흰철갑상어 · 치누크 중앙값 크기 60~150초 · 트로피급 ≤ 240초 / 갯바위 · 2단계 · 조절 봇: 돌돔 · 참돔 중앙값 25~60초 (각 랜딩 200)」. 조정 손잡이는 `whiteSturgeon.fight.stamina` 2.0 → 1.6과 `STYLES.heavy.endurance`다. §7.12에도 같은 행을 둔다."
+    },
+    {
+      "severity": "minor",
+      "section": "§6.7 parseSave · migrateSave · §11.5 loadSave · §6.1 SAVE_BACKUP_KEY",
+      "problem": "parseSave는 「버전」이 다르면 실패(→ 백업 · 새 게임)로 읽힌다. 그러면 v0.2에서 SAVE_VERSION을 올리는 순간 v1 세이브가 이주되지 않고 「손상」 처리된다(migrateSave를 부를 순서가 없다). 백업 키는 `save.bak` 한 칸이다. 「새 게임」 백업 뒤에 손상이 한 번 더 나면 앞의 정상 백업을 덮어쓴다. 손상된 원문을 백업한 뒤 본 키를 지운다는 규칙도 없다. 그래서 부팅할 때마다 같은 손상 원문을 백업 칸에 다시 쓴다.",
+      "fix": "§6.7 parseSave 순서를 고정한다: JSON 파싱 → `game` 일치 → `version > SAVE_VERSION`이면 `{error:'future'}`(타이틀 `title.saveFuture` 「더 새 버전의 세이브다 — 백업하고 새로 시작한다」) → `version < SAVE_VERSION`이면 `migrateSave` → 필수 필드 → `sanitizeProfile`. §11.5: 백업 키는 `jay-fishing:save.bak.<ms>`, 최신 3개만 남긴다(목록은 `jay-fishing:save.bak.index`). 손상 원문을 백업한 직후 `SAVE_KEY`를 지운다."
+    },
+    {
+      "severity": "minor",
+      "section": "§11.6 ?quality · ?mute · §11.5 「설정은 applySettings마다 writeSettings」",
+      "problem": "`?quality` · `?mute`는 「덮어쓰기(저장 안 함)」인데 같은 settings 객체를 고친다. 그 세션에서 일시정지 패널의 다른 설정(감도 등)을 하나라도 바꾸면 applySettings → writeSettings가 객체 전체를 쓴다. 그래서 개발용 덮어쓰기가 영구 설정이 된다(Jay가 ?quality=low로 한 번 본 뒤 평소 실행도 low).",
+      "fix": "§11.5에 넣는다: 「app은 `persisted`(localStorage에서 읽은 값)와 `overrides`(쿼리)를 따로 들고, 레이어에 주는 settings는 `{...persisted, ...overrides}`를 같은 객체에 다시 채워 만든다. writeSettings는 persisted만 쓴다. 쿼리로 덮인 항목은 일시정지 설정 탭에 「이번 실행만」 표시」."
+    },
+    {
+      "severity": "minor",
+      "section": "§10.5 키보드만으로 · §10.2 tackle · pause",
+      "problem": "§10.5는 ←→를 「탭 전환」과 「수심 ±0.25m」 둘 다에 쓴다. 일시정지 설정의 슬라이더(감도 · 볼륨 4종 · FOV)도 ←→ 말고는 바꿀 방법이 적혀 있지 않다. 수심이나 슬라이더에 포커스가 있을 때 ←→를 누르면 탭이 바뀌는지 값이 바뀌는지 P8의 구현마다 다르다. 수심을 줄이려다 탭이 넘어가는 오조작이 생긴다.",
+      "fix": "§10.5를 바꾼다: 「Q/E = 언제나 탭 전환. ←→ = 포커스된 항목이 값 조절형(수심 · 슬라이더 · 화질 3단계)이면 그 값(수심 ±0.25m · 슬라이더 ±5% · 단계 ±1), 아니면 탭 전환」. 값 조절형 항목에는 「◀ ▶」 표식을 둔다."
+    },
+    {
+      "severity": "minor",
+      "section": "§10.2 confirm · §11.2 title → play(새 게임)",
+      "problem": "confirm은 「Enter/Space 예 · Esc 아니오」다. 타이틀에서 Space로 「새 게임」을 고른 사람이 Space를 한 번 더 누르면(0.25초 유예 뒤) 기존 세이브를 덮는다. 백업은 되지만 이어하기 슬롯이 바뀐다. 되돌리는 UI도 없다(백업 복원 메뉴 없음).",
+      "fix": "§10.2 confirm에 args `danger:boolean`을 더한다. danger면 처음 포커스는 「아니오」이고 Enter/Space는 포커스된 항목을 실행한다. 새 게임 덮어쓰기 confirm은 `danger:true`이고 본문에 「기존 기록(레벨 n · 돈 n원)은 백업된다」를 적는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§4.2 LEVEL_UP{unlocks} · SKILL_LEARNED",
+      "problem": "unlocks 예시는 `'stage:coast'` · `'tier:2'` · `'tier:3'`뿐이다. 3단계 해금 조건은 레벨 12와 숙련 2 둘이다. 숙련 2를 레벨 12 뒤에 배우면 LEVEL_UP이 나지 않으므로 「3단계 해금」 배너가 없다. 강(레벨 10)의 'stage:river'도 예시에 없어 P4 · P8이 다르게 만들 수 있다.",
+      "fix": "§4.2에 적는다: 「unlocks는 데이터에서 계산한다 — `STAGES` 중 unlockLevel === 새 레벨이면 `'stage:<id>'`, 부위별 문턱(3번 이슈)에 닿으면 `'tier:2:<slot>'`, 레벨 ≥ tier3Level && mastery ≥ tier3Mastery가 **이번에** 참이 되면 `'tier:3'`」. SKILL_LEARNED payload에 `unlocks:string[]`(같은 규칙)을 더해 숙련으로 3단계가 열려도 배너가 뜨게 한다."
+    },
+    {
+      "severity": "minor",
+      "section": "§6.7 xpToNext · §4.2 XP_GAINED · §10.3 HUD 경험치 바",
+      "problem": "xpToNext(캡)은 Infinity다. XP_GAINED payload의 xpToNext가 Infinity면 HUD의 xp / xpToNext는 0이고, JSON 직렬화(디버그 · 테스트 로그)에서는 null이 된다. 캡 도달 뒤에도 경험치 바가 비어 보이고, 숫자 표시는 「0 / ∞」처럼 깨진다.",
+      "fix": "§4.2 XP_GAINED: 「레벨 캡이면 xp 0 · xpToNext null」. §10.3: 「xpToNext가 null이면 바를 가득 채우고 `hud.levelMax` 『MAX』」. xpToNext(level) 함수 자체는 Infinity를 유지한다(sim 내부 비교용)."
+    },
+    {
+      "severity": "minor",
+      "section": "§10.3 HUD 좌상단 · §4.2 LEVEL_UP",
+      "problem": "남은 스킬 포인트가 HUD 어디에도 보이지 않는다. 레벨 업 배너(2.5초)를 놓치면 포인트가 쌓인 채 잊힌다. 브리프 §2 성장 루프(레벨 → 스킬 포인트 → 스탯)의 한 고리가 보이지 않는다. 시작부터 skillPoints가 1인데 그것을 알려 주는 곳도 없다.",
+      "fix": "§10.3 좌상단 레벨 옆에 넣는다: 「`profile.skillPoints > 0`이면 배지 『스킬 +n (Tab)』 — 0이 되면 사라진다」. LEVEL_UP 배너 문면에 「Tab → 스킬」을 넣는다(`banner.levelUp`)."
+    },
+    {
+      "severity": "minor",
+      "section": "§6.7 buy(ctx, itemId, qty) · sellOne(ctx, uid)",
+      "problem": "qty 검증이 정해져 있지 않다. qty ≤ 0 · 실수 · NaN이면 비용이 음수나 NaN이 되어 돈이 늘거나 NaN이 된다. 사람 UI는 1만 넘기지만 봇 · 디버그 · 테스트 경로가 있다. 「돈 음수 0 · NaN 0」 불변식이 입력 검증에 기대고 있다.",
+      "fix": "§6.7에 적는다: 「buy: qty는 정수 1..99, 아니면 `{ok:false, reason:'invalid'}` · sellOne: hold에 없는 uid는 `{reason:'invalid'}`」. economy.test에 qty 0 · −1 · 1.5 · NaN → invalid · 돈 불변을 넣는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§11.2 화면 전이 · 일시정지",
+      "problem": "「전이 중에는 다른 전이 · 일시정지 요청을 무시한다」. 전이 막(약 0.9초) 동안 창이 포커스를 잃거나 탭이 숨으면 그 일시정지 요청이 사라진다. 막이 걷힌 뒤 게임은 포커스 없이 돈다(blur는 다시 오지 않는다). 숨은 탭에서 돌아오면 일시정지 없이 파이팅 중일 수도 있다.",
+      "fix": "§11.2를 바꾼다: 「전이 중 들어온 일시정지 요청은 `pendingPause = true`로 기억하고, 전이가 끝난 직후(fade(false) resolve) document.hasFocus() === false 또는 hidden이면 그때 일시정지한다」."
+    },
+    {
+      "severity": "minor",
+      "section": "§11.3 드래그 대체 · §6.11 InputFrame(낚시 모드의 moveX)",
+      "problem": "포인터 락이 없으면 시점은 가운데 버튼 드래그다(걷기 모드는 좌 · 우 드래그도 된다). 낚시 모드에서 좌 · 우 버튼은 캐스팅 · 릴링 · 펌핑이다. 그래서 가운데 버튼이 없는 터치패드 사용자는 조준(facing ± arc)도, 파이팅 중 물고기 쪽 보기도 못 한다. 낚시 모드에서 moveX · moveZ는 쓰이지 않는다.",
+      "fix": "§11.3에 넣는다: 「낚시 모드에서 KeyA/KeyD는 app의 look.yaw를 `MOUSE.keyYawRate`(1.2 rad/s) × dt로 돌린다(락 유무와 무관). sim은 지금처럼 input.yaw만 읽는다」. §7.11 MOUSE에 `keyYawRate: 1.2`를 더한다. hint.controls에 「A/D 조준」을 넣는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§6.3 travel(집 도착) · §7.9 FREE_BAIT",
+      "problem": "집 도착 처리(자동 판매 · line_1 무료 감기 · 무료 미끼)의 순서가 없다. 무료 미끼를 먼저 판정하면, 어창에 물고기가 가득해(곧 팔릴 돈이 있는데) 돈 0 · 미끼 0인 플레이어도 지렁이 10개를 받는다. 반대로 무료 미끼를 먼저 판정하고 자동 판매를 나중에 하는 구현과 결과가 갈린다(테스트 · 봇 측정 차이).",
+      "fix": "§6.3 travel에 순서를 고정한다: 「집 도착: ① sellAll({auto:true}) ② 두 세트의 line_1 무료 감기 ③ grantFreeBaitIfNeeded(판매 뒤의 돈으로 판정) ④ SAVE_REQUEST{scene}」. world.test에 이 순서를 넣는다."
+    }
+  ]
+}

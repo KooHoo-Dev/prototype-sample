@@ -1,0 +1,21 @@
+<!doctype html>
+<!-- OWNER: P0 — 계약 §1.3 · §11.8 -->
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Jay Fishing v0.1</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1222; }
+      #game-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; outline: none; }
+      noscript { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #eee; font-family: system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game-canvas" tabindex="0"></canvas>
+    <div id="ui-root"></div>
+    <noscript>JavaScript를 켜야 Jay Fishing v0.1을 할 수 있습니다.</noscript>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

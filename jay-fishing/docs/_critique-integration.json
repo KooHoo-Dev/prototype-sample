@@ -1,0 +1,179 @@
+{
+  "verdict": "계약은 단위 · 좌표 · 틱 순서 · 이벤트 카탈로그 · 파이팅 식까지 글자 단위로 고정돼 있어 sim 계층(P1 · P2 · P3 · P4)끼리의 맞물림은 대체로 단단하다. 깨지는 곳은 경계다. (1) 봇을 브라우저에서 돌리면 INTERACT · CATCH_RESULT가 연 패널이 sim과 bot.decide를 함께 멈춰 ?bot=1이 첫 문이나 첫 물고기에서 멈춘다. (2) W1의 화면 패키지(P5~P8)는 자기 레이어를 띄울 진입점(P0 최소 부트는 World · Camera · UI만 만든다)도, 파이팅 같은 상태를 만들 고정 상태(fixture)도 없어 「정지 화면으로 본다」는 완료 정의를 W1 안에서 실행할 수 없다. (3) RigState의 파생 필드(dragKg · dragNotches)와 RigStats의 재고 필드(baitCount · lineM)를 장착 · 스킬 · 미끼 소모 뒤 누가 다시 맞추는지가 P1 · P3 · P4 사이에 정해져 있지 않다. (4) 파이팅 봇 정책이 W2의 P10 소유인데 W1의 P2 미니 측정과 W2에 함께 도는 P11 · P12 스테이지 테스트가 그것을 필요로 한다. 그 밖에 흘림 · 봉돌 밀림의 경계 부재(찌가 땅으로 흘러감), 물속 미끼 종류의 추적 부재, newGame의 리셋 범위, H1의 통과 불가능한 조건, Esc와 포인터 락의 충돌, aimPreview 고리의 소유자 부재가 통합 뒤에 드러날 결함이다. 아래 수정안은 모두 계약 본문에 그대로 넣을 수 있는 문장 · 시그니처다.",
+  "issues": [
+    {
+      "severity": "blocker",
+      "section": "§11.1 매 프레임 · §6.8 bot · §10.2 패널 목록 · §11.6 ?bot",
+      "problem": "app 루프는 ui.isBlocking()이 false일 때만 sim.step과 bot.decide를 부른다. 봇 모드에서도 ui는 INTERACT{door/npc/camp}와 CATCH_RESULT에 패널을 열므로, lakeDay 봇은 집 문에서 map 패널이 열리는 순간, stay 봇은 첫 랜딩의 result 패널에서 영원히 멈춘다(봇 명령 keepCatch · travel이 나갈 틱이 없다). 봇 명령이 결과 단계를 풀어도 result 패널을 누가 닫는지, __game.closePanel()로 result 패널만 닫혀 rig.phase가 result로 남으면 어떻게 되는지도 정해져 있지 않다. 그래서 §12.7 스모크(?bot=1 step 240 이후)와 브리프 §8-4의 ?bot=1이 성립하지 않는다.",
+      "fix": "§11.1에 추가: 「봇 모드(?bot · __game.setBot)에서 app은 매 틱 bot.decide를 먼저 부르고 command가 있으면 step 전에 실행한다 — travel · waitNextBand · sleep은 actions.*(전환 막)로, 그 밖은 sim[command.name](...command.args)로. 봇 모드에서는 UIRoot.setAutoPanels(false)(새 메서드 — §6.11에 추가)로 INTERACT · CATCH_RESULT가 패널을 열지 않는다.」 §10.4에 추가: 「패널 상태 동기화 — ui.update는 result 패널이 열려 있는데 rig.phase !== 'result'면 닫고, 자동 패널이 켜져 있고 rig.phase === 'result'인데 패널이 없으면 result를 연다. sell · camp · map · bed · pc 패널은 state.scene이 바뀌거나 player.nearby가 그 대상이 아니게 되면 닫힌다.」"
+    },
+    {
+      "severity": "blocker",
+      "section": "§11.8 최소 부트 · §1.2 웨이브 · §13 P5~P8",
+      "problem": "W1 화면 패키지(P5 · P6 · P7 · P8)의 완료 정의는 「정지 화면으로 본다」인데, W1 동안 진입점 src/main.js는 P0의 최소 부트이고 소유자 P9는 W2다. 최소 부트는 WorldLayer · CameraRig · UIRoot만 만들고 TackleLayer · FishLayer · FxLayer · AudioEngine · FishPreview는 아무도 생성하지 않는다. UIRoot도 actions · fishPreview 없이 만들어질 수 있다. W1 패키지는 main.js를 고칠 수 없으므로 자기 레이어를 브라우저에서 한 번도 띄울 수 없고, W1 통합 게이트도 이 레이어들을 실행하지 않는다.",
+      "fix": "§11.8을 바꾼다: 「W0의 main.js는 §11.1의 생성 순서 그대로 모든 레이어(WorldLayer · CameraRig · TackleLayer · FishLayer · FxLayer · AudioEngine · FishPreview · UIRoot)를 계약 deps 전부로 만들고 매 프레임 §11.1 순서로 update를 부른다. actions는 sim 명령을 그대로 부르는 스텁({newGame: () => sim.newGame(1), continueGame() {}, resume() {}, quitToTitle() {}, applySettings() {}, travel: id => sim.travel(id), waitNextBand: () => sim.waitNextBand(), sleep: () => sim.sleep(), requestPointerLock() {}}). 입력은 키보드 · 마우스 최소 InputCollector(이동 · 좌우 클릭 · Space · E · 휠 · Esc · Tab)를 main.js 안에 둔다.」"
+    },
+    {
+      "severity": "major",
+      "section": "§3.4 RigState(dragNotch · dragNotches · dragKg · floatDepth) · §3.8 SimCtx.refresh · §7.7",
+      "problem": "fight는 drag = rig.dragKg를 쓰는데, rig.dragKg · dragNotches는 RigStats(P4)에서 파생된 P1 소유 필드다. equip으로 릴이 바뀌어 reelMaxDragKg가 달라지거나, learnSkill(dragSense)로 dragNotches가 20→25가 되거나(§7.7은 profile의 dragNotch만 재비율한다), ctx.refresh()(P3)가 돌아도 rig 쪽 필드를 누가 다시 맞추는지 정해져 있지 않다. P1 · P3 · P4가 각자 다르게 하면 HUD 드랙 눈금 · 텐션 판정 · DRAG_CHANGED.kg가 서로 다른 값을 쓴다.",
+      "fix": "§6.5에 추가: 「export function syncRig(ctx) — rig.dragNotches = ctx.rigStats.dragNotches · rig.dragNotch = clamp(profile.sets[rig.set].dragNotch, 0, dragNotches) · rig.dragKg = rig.dragNotch × ctx.rigStats.dragNotchKg · rig.floatDepth = profile.sets.float.depthM」. §3.8 refresh 주석을 「mods · rigStats를 다시 계산한 뒤 syncRig(ctx)를 부른다(P3)」로 바꾼다. §6.13 makeTestCtx의 refresh 기본값도 「computeModifiers · rigStats 재계산 + syncRig」로 한다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.2 ready · charging · §3.6 RigStats.baitCount · lineM · §3.8 SimCtx",
+      "problem": "ready의 canCast = baitCount > 0 && lineM ≥ minLineM이 어디서 읽는지 적혀 있지 않다. ctx.rigStats.baitCount · lineM이면, 캐스팅의 미끼 소모 · 회수 환불 · grantFreeBaitIfNeeded · refillLine 뒤에 refresh가 불리지 않으므로(§5.2는 실패 처리에서만 refresh를 부른다) 값이 낡는다. 미끼 1개로 두 번 던져 보유 수가 음수가 되거나, 무료 미끼를 받고도 CAST_BLOCKED가 난다. ctx.spot · ctx.stage가 enterSpot · travel 뒤 언제 갱신되는지도 §5.1에 없다.",
+      "fix": "§5.2에 추가: 「rig는 재고를 profile에서 직접 읽는다 — canCast · distM 상한 · 흘림 한계는 profile.baits[sets[set].bait] · profile.sets[set].lineM. RigStats.baitCount · lineM은 표시용 스냅샷이다. profile을 바꾸는 sim 함수(캐스팅 소모 · 환불 · grantFreeBaitIfNeeded · applyLoss · refillLine · setBait · equip · learnSkill)는 끝에 ctx.refresh()를 부른다.」 §5.1 1단계 뒤에 추가: 「1b. ctx.stage = getStage(scene) · ctx.spot = player.spotId ? getSpot(player.spotId) : null(enterSpot · exitSpot · travel도 바뀐 그 자리에서 같은 대입을 한다).」"
+    },
+    {
+      "severity": "major",
+      "section": "§3.4 RigState · §5.2 retrieving · §5.4.2 · §6.7 applyLoss · §6.3 setBait",
+      "problem": "setBait는 「언제나 — 물속의 미끼는 그대로」인데, 물속 미끼의 종류를 담을 필드가 상태에 없다. biteWeights({baitId}) · 회수 환불(+1) · applyLoss(ctx, set, reason)의 LossReport.baitId는 profile.sets[set].bait(새로 고른 미끼)를 읽게 된다. 대기 중 Tab으로 미끼를 바꾸면 다시 던지지 않아도 입질 가중치가 바뀌고, 생미끼로 던져 지렁이로 바꾼 뒤 회수하면 지렁이가 환불된다. P1과 P4가 서로 다른 미끼를 기준으로 계산한다.",
+      "fix": "§3.4 RigState에 「@property {BaitId|null} castBaitId — 캐스팅 순간의 미끼(charging → casting에서 정하고 ready에서 null)」를 더한다. biteWeights의 baitId · 회수 환불 · 실패 환불은 castBaitId를 쓴다. 시그니처를 applyLoss(ctx, set, reason, {lineLostM = 0, baitId} = {})로 바꾸고, LossReport.baitId = 인자 baitId로 한다."
+    },
+    {
+      "severity": "major",
+      "section": "§12.2 fight.test · styles.report.test · stage.coast/river.test · §1.2 웨이브",
+      "problem": "W1의 P2 테스트(봇 전략 셋 미니 측정 · 기본 봇 300판)와 W2의 P11 · P12 테스트(자리마다 기본/조절 봇 100판)는 봇을 요구한다. 그러나 봇은 W2의 P10 소유이고, W2에서는 P11 · P12와 병렬로 만들어진다. P2는 정책을 테스트 안에 따로 써야 하므로 §7.12와 M 측정이 서로 다른 정책 구현에서 나온다. P11 · P12는 스텁 봇(NEUTRAL_INPUT)으로 「100판」을 끝낼 수 없어 테스트가 시간 초과로 끝난다.",
+      "fix": "§1.3에 파일 하나를 더한다: 「src/bot/policy.js — P2(W1) 소유 · P10은 import만 한다. export function fightPolicy(strategy, state, rigStats, rng) → {primary, secondary, dragSteps, hook}(§12.1의 세 전략 파이팅 규칙) · export function createAngler({strategy, seed, spotId, set, baitId}) → {decide(state, sim) → BotAction}(자리에서 캐스팅 · 챔질 · 파이팅 · 뜰채 · keepCatch/releaseCatch만 — 이동 · 계획 없음).」 fight.test · styles.report · stage.*.test는 createAngler를 쓰고, P10의 createBot은 파이팅 · 자리 행동을 이것에 맡긴 뒤 이동 · 계획만 더한다."
+    },
+    {
+      "severity": "major",
+      "section": "§6.14 스텁 · §12.7 브라우저 스모크 · §13 P6 · P8",
+      "problem": "W1에서 P1 · P2 · P3이 스텁인 동안 P6(찌 신호 · 로드 휨 · 뜰채)과 P8(파이팅 HUD · 결과 · 판매 · 상점 전후 비교)이 그려야 할 상태는 만들어지지 않는다(enterSpot 스텁은 ready까지만, updateRig는 no-op, getShop은 []). 자기 화면을 확인할 수단이 없어 완료 정의의 「정지 화면으로 본다」를 통합 게이트 뒤로 미루게 되고, 화면 결함이 W2에서야 드러난다.",
+      "fix": "§1.3에 「src/debug/fixtures.js — P0 완성(순수 데이터 · 이후 고치지 않음)」을 더한다: export function makeFixtureState(name) → GameState. name ∈ 'walkLake' · 'ready' · 'charging' · 'waiting' · 'nibble' · 'take' · 'fightRun' · 'fightJump' · 'fightStress' · 'landing' · 'result' · 'failedRodBreak' · 'night' · 'rain' · 'shopL12'. 각 상태는 §3.4의 필드를 빠짐없이 채운다. 최소 부트와 P9의 Game은 ?fixture=<name>이면 sim.step 대신 그 상태를 레이어 · ui에 넘겨 그린다(sim 조회 메서드는 fixture용 고정 값을 돌려주는 얇은 대역으로)."
+    },
+    {
+      "severity": "major",
+      "section": "§12.7 브라우저 스모크 「입질 · 파이팅」 · §11.7 디버그 API",
+      "problem": "/?spot=lake_gravel&time=18 + forceBite('carp', 0.95) 뒤 step 120 / 600은 봇이 없어 NEUTRAL_INPUT으로 밀린다. 그러면 Space가 없어 챔질 창이 닫히고 'late' 실패 → ready로 돌아간다. 파이팅 화면은 한 번도 찍히지 않는다. 화면 패스가 파이팅 HUD · 로드 휨 · 그림자를 확인할 길이 없다.",
+      "fix": "§11.7과 §6.3에 「forceFight(speciesId, pct) / debugForceFight(speciesId, pct) — 낚시 모드에서 입질 · 챔질을 건너뛰고 rig.dist = 0.6 × castMaxM로 createFight → fighting」을 더한다. §12.7의 그 행은 「/?spot=lake_gravel&time=18&bot=controlled + --eval \"api.forceFight('carp', 0.95)\" · step 120(초반 질주) / 600」으로 바꾼다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.2 waiting(흘림 · 봉돌 밀림) · §5.3.4 bearing",
+      "problem": "흘림과 봉돌 밀림은 bobber를 flow 방향으로 계속 옮긴다. 멈추는 조건은 dist의 상한뿐이다. river_tailrace의 flow는 (1.3, 0.2) — +Z가 땅 쪽 — 이고 바닥 세트 sinker_1(holdMS 0.5)이면 0.4m/s로 밀린다. 그러면 찌/봉돌이 facing ± arc 밖으로, 마지막에는 해안선을 넘어 땅 위로 간다. 이어서 파이팅이 시작되면 §5.3.4가 bearing을 허용 반각으로 「잘라 붙여」 물고기가 한 틱에 순간이동한다.",
+      "fix": "§5.2 waiting에 추가: 「흘림 · 봉돌 밀림은 다음 위치가 (1) |angleDiff(facing, bearing)| ≤ arc, (2) dist ≥ spot.minCastM, (3) z < shoreZ(x) − 1(해안선 꺾은선 보간 — core/math.js의 piecewise)을 모두 만족할 때만 적용하고, 하나라도 어기는 틱에 멈춘다(drifting = false · bottomSlip = false). 그래서 createFight의 bearing은 늘 facing ± arc 안이다.」"
+    },
+    {
+      "severity": "major",
+      "section": "§6.3 newGame · §4.2 SCENE_CHANGED · §11.2 타이틀로 → 새 게임",
+      "problem": "「타이틀로」는 파이팅 중에도 갈 수 있다(Esc → pause → 타이틀로). 그런데 newGame(seed)은 「profile 내용을 갈아 끼운다 · 1일 06:00 · 집」만 정한다. rig · fight · pendingCatch · player.mode · state.seed · rng · 날씨의 리셋과 낼 이벤트가 없다. 집 씬에 fight가 살아 있는 상태가 나올 수 있고, PLAYER_PLACED가 없으면 InputCollector의 시선이 옛 값으로 남는다. SCENE_CHANGED.reason에도 'new'가 없다.",
+      "fix": "§6.3 newGame 주석을 바꾼다: 「state.seed = seed · state.rng = seedRng(seed) · profile 갈아 끼우기(같은 객체) · rig = createRigState(profile) · fight = null · pendingCatch = null · player = 걷기 · 집 spawn · clock = 1일 TIME.startHour · refreshWeather · ctx.refresh() → SCENE_CHANGED{from, to:'home', reason:'new'} · PLAYER_PLACED{reason:'spawn'} · WEATHER_CHANGED · SAVE_REQUEST{new}」. §4.2 SCENE_CHANGED의 reason 열거에 'new'를 더한다."
+    },
+    {
+      "severity": "major",
+      "section": "§11.2 일시정지 · §10.4 Esc 순서 · §11.3 시선",
+      "problem": "포인터 락 중 Esc는 브라우저가 먼저 락을 푼다. 브라우저에 따라 Escape keydown이 페이지에 오지 않는다. §11.2는 「app이 스스로 풀지 않은 락 상실 → 일시정지」라서, 낚시 자리에서 Esc를 누르면 §10.4의 exitFishing 대신 pause 패널이 뜬다. 패널을 Esc로 닫을 때도 락 상실과 keydown이 겹쳐 두 번 처리될 수 있다. 또 락을 얻으려고 캔버스를 누른 좌클릭이 primaryPressed로 나가 낚시 모드에서 바로 충전을 시작한다.",
+      "fix": "§11.2를 바꾼다: 「app이 풀지 않은 포인터 락 상실은 §10.4의 Esc 처리 한 번으로 다룬다(같은 200ms 안의 Escape keydown과 겹치면 한 번만). 무조건 일시정지는 blur · visibilitychange → hidden뿐이다.」 §11.3에 추가: 「포인터 락을 요청하는 pointerdown(락이 없을 때의 캔버스 클릭)은 primary · secondary 에지와 홀드로 내보내지 않는다.」 이 동작은 「사람이 확인할 것」에 Chrome · Edge 각각으로 적는다."
+    },
+    {
+      "severity": "major",
+      "section": "§9.7 1인칭 채비 · §9.10 판정과 보이는 것(조준)",
+      "problem": "§9.10은 조준 판정의 보이는 것으로 「aimPreview 고리(충전 중 수면)」를 요구한다(허용 차 0). 그런데 §9.3(P5) · §9.7(P6) · §9.9(P7) · §10.3(P8) 어디에도 이 고리를 그리는 소유자가 없다. 아무도 그리지 않거나 둘이 그린다.",
+      "fix": "§9.7 표의 charging 행 「그 밖」 칸에 「aimPreview 고리 — tackleRoot의 수면(y 0.02) 링 · 반경 0.6m · 착수점 rig.aimPreview(x, z) · 완벽 띠 안이면 밝게(P6)」를 넣는다. §9.10 조준 행의 「보이는 것」에 「(P6 TackleLayer)」를 붙인다."
+    },
+    {
+      "severity": "major",
+      "section": "§12.4 H1 통과 조건",
+      "problem": "H1은 lakeDay 하루(집 → 호수 → … → 집 → 침대)에서 SCENE_CHANGED 4회 이상을 요구한다. 그런데 이 계획이 내는 것은 start(1) · travel lake(2) · travel home(3)뿐이다. lakeDay에는 낮에 집에 다녀오는 단계가 없다. 계약대로 구현하면 H1은 통과할 수 없다.",
+      "fix": "§12.4 H1의 통과 조건을 「SCENE_CHANGED ≥ 3(start · lake · home) · CLOCK_DAY = 1」로 바꾼다."
+    },
+    {
+      "severity": "major",
+      "section": "§5.6 막히지 않는다 · §6.3 travel(집 도착)",
+      "problem": "집에서 무료로 다시 감는 것은 「1단계 라인(line_1)」뿐이다. line_2 · line_3을 감은 세트가 끊김 · 스풀 바닥으로 lineM < minLineM이 되고 돈이 감기 비용보다 적으면, 집에서도 판매상에서도 캐스팅할 수 없다(로드 · 미끼는 무료로 복구되지만 라인은 안 된다). P3(집 도착 처리) · P4(refillLine) · P8(안내)이 이 경우를 각자 다르게 다룬다. 브리프 §3.4의 「막히지 않는다」와 QUALITY §3을 어긴다.",
+      "fix": "§5.6 「막히지 않는다」에 추가: 「집 도착 처리(P3 → P4): 세트마다 lineId === 'line_1'이면 refillLine(…, {free:true}). line_2 · 3이고 lineM < CAST.minLineM + CAST.lineReserveM이며 돈이 그 라인 감기 비용보다 적으면 그 세트를 line_1 가득으로 바꾼다 — refillLine(ctx, set, 'line_1', {free:true}) · LINE_REFILLED{cost:0}.」"
+    },
+    {
+      "severity": "major",
+      "section": "§12.2 purity.test.js(한국어 문자열 리터럴)",
+      "problem": "「한국어 문자열 리터럴은 strings.ko.js에만」 검사의 범위가 모호하다. 계약이 P0에게 그대로 옮기라고 한 시드(home.js의 「// 책상 + PC — 북쪽(−Z) 벽」 · types.js의 한국어 JSDoc 등)와 모든 패키지의 한국어 주석에 한글이 있다. P0이 소스 전체에서 한글을 찾는 식으로 구현하면 W1의 모든 패키지가 자기 파일 원인으로 purity.test에 실패한다.",
+      "fix": "§12.2 purity.test.js 행을 고친다: 「한국어 검사는 문자열 리터럴(작은따옴표 · 큰따옴표 · 백틱) 안의 한글만 본다. // · /* */ 주석과 JSDoc 블록은 먼저 지운 뒤 검사한다. 대상은 src/**/*.js에서 src/data/strings.ko.js를 뺀 것.」"
+    },
+    {
+      "severity": "minor",
+      "section": "§5.2 charging(distM) · §7.5 CAST",
+      "problem": "distM = clamp(castMaxM × factor, spot.minCastM, min(castMaxM, lineM − lineReserveM))에서 lineM이 minLineM(15)과 같으면 상한이 5m로 하한 6m보다 작다. clamp의 결과가 구현마다 달라진다(6이면 라인 예비분을 침범하고, 5면 minCastM을 어긴다). rig.test와 P1 구현이 어긋날 수 있다.",
+      "fix": "§7.5를 CAST.minLineM: 20으로 바꾸고(≥ minCastM + lineReserveM + 4), §5.2 식을 「hi = min(castMaxM, lineM − CAST.lineReserveM) · lo = min(spot.minCastM, hi) · distM = clamp(castMaxM × factor, lo, hi)」로 적는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§2.2 순환 금지 · §6.4 world.js · §6.5 rig.js",
+      "problem": "updateWalk(world.js · P3)는 자리 진입에서 enterSpot(rig.js · P1)을 부른다. enterSpot · exitSpot은 PLAYER_PLACED 배치에 placePlayer(world.js)를 써야 한다. 그래서 world.js ↔ rig.js 순환 import가 생기고, §2.2의 「GameSim → world · rig 단방향」과 어긋난다. 누가 PLAYER_PLACED{spot}를 내는지도 둘로 갈린다(§4.2 발행 「P3 · P1」).",
+      "fix": "§6.4를 바꾼다: 「updateWalk(ctx, input) → {enterSpotId: SpotId|null} — 자리 진입은 직접 하지 않고 돌려준다. GameSim.step이 enterSpot(ctx, id)를 부른다.」 §2.2에 「rig.js → world.js(placePlayer) 단방향 · world.js는 fishing/*을 import하지 않는다」를 더한다. PLAYER_PLACED{spot · exitSpot}의 발행자는 P1(placePlayer 경유)로 적는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§6.3 GameSim 명령 머리말",
+      "problem": "「월드 · 시간 — 걷기 모드에서만(낚시 중이면 {ok:false, reason:'busy'})」 묶음 안에 exitFishing()이 들어 있다. 머리말을 따르면 exitFishing은 낚시 중에 늘 busy를 돌려줘 쓸모가 없어진다. §5.2(ready · charging · waiting · retrieving · failed에서 허용)와 모순이다.",
+      "fix": "§6.3에서 exitFishing()을 그 묶음 밖으로 옮겨 「// 낚시 모드 전용 — exitFishing() §5.2(걷기 모드면 {ok:false, reason:'notHere'})」로 적는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§4.2 FIGHT_END · §5.3.2 0단계 · §9.7 · §9.8",
+      "problem": "FIGHT_END{outcome:'landed'}는 뜰채 「시작」 틱에 나가고, 그 뒤 landing 0.8초 동안 state.fight가 남는다. §4.2는 구독자에게 「tackle 로드 원위치 · fish 그림자 퇴장」을 시키는데, §9.7 · §9.8은 landing 동안 로드 60° · 뜰채 · 그물 속 모델을 요구한다. 같은 이벤트에 서로 다른 반응이 적혀 있다. FightOutcome.type 'net'과 payload 'landed'의 이름도 다르다.",
+      "fix": "§4.2 FIGHT_END 행의 구독 칸을 고친다: 「outcome 'landed'는 뜰채 시작이다 — tackle · fish는 landing 연출로 넘어가고, 로드 원위치 · 그림자 퇴장은 CATCH_RESULT(성공) 또는 FAIL(실패)에서 한다.」 표 아래에 「FightOutcome.type 'net' ↔ FIGHT_END.outcome 'landed'」 대응 한 줄을 넣는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§5.9 루프 · §11.1 매 프레임",
+      "problem": "isBlocking()은 프레임마다 한 번만 확인한다. 한 프레임의 누산 루프(최대 8틱) 중간에 INTERACT로 패널이 열리면 남은 틱이 계속 돈다. 그동안 홀드 입력으로 플레이어가 걷고 시계가 간다. 패널이 열린 동안 sim은 멈춘다는 §5.8의 규칙이 프레임 안에서 깨진다.",
+      "fix": "§5.9의 루프 조건을 「while (acc ≥ DT && steps < MAX_STEPS_PER_FRAME && !ui.isBlocking() && state.rig.phase !== 'result')」로 바꾸고, 「조건이 거짓이 되어 나오면 acc = 0」을 더한다."
+    },
+    {
+      "severity": "minor",
+      "section": "§3.6 ShopItem · §10.2 sell/pc 패널",
+      "problem": "라인 감기 비용은 세트마다 다르다(같은 라인이면 모자란 m × 단가). 그런데 ShopItem에는 set이 없다. 공용 부위(릴 · 바늘 · 라인)의 before/after RigStats도 어느 세트 기준인지 알 수 없다. P4의 shopList와 P8의 패널이 다른 세트를 가정하게 된다.",
+      "fix": "ShopItem에 「set: SetId|null」을 더한다. 라인 감기는 (세트 × 라인) 조합마다 한 항목(id 'refill_<set>_<lineId>' · kind 'line' · price = 그 세트 기준 비용)으로 낸다. 장비 항목의 before/after는 「previews: {float: {before, after}|null, bottom: {before, after}|null}」로 바꾼다(세트 전용 로드는 한쪽만)."
+    },
+    {
+      "severity": "minor",
+      "section": "§0.5 Result · 부록 B reason.*",
+      "problem": "reason.locked · reason.level 문면에 {n}이 있는데, Result {ok:false, reason}에는 숫자를 실을 자리가 없다. ui는 사유마다 n을 따로 계산해야 하고(스테이지 해금 레벨 · 장비 단계 문턱), 맞지 않으면 「레벨 {n}」이 그대로 보인다.",
+      "fix": "§0.5를 「{ok:false, reason:string, params?:Record<string, number|string>}」로 바꾼다. locked · level은 params.n(필요 레벨), mastery는 params.n = 2를 싣는다. ShopItem · getTravel 항목에도 reasonParams를 더한다."
+    },
+    {
+      "severity": "minor",
+      "section": "§10.3 알림 · 배너 · 안내 문구 · §5.8",
+      "problem": "실패 알림(1초) · 배너(2.5초) · 안내 카드(6초)가 실제 시간인지 sim 시간인지 정해져 있지 않다. 실제 시간이면 __game.pause → step으로 정지 화면을 찍을 때 알림이 사라진다. 패널이나 일시정지 동안에도 수명이 흘러 sim의 failed(1.0초 sim 시간)와 어긋난다.",
+      "fix": "§10.3에 추가: 「알림 · 배너 · 안내 카드의 수명은 ui.update(state, dt)의 dt로 깎고, PAUSED{true}이거나 isBlocking()인 동안 멈춘다. FAIL 알림은 rig.phase === 'failed'인 동안 보이고 그 뒤 0.3초 페이드.」"
+    },
+    {
+      "severity": "minor",
+      "section": "§5.3.2 0단계(뜰채) · QUALITY §1",
+      "problem": "뜰채는 직전 틱의 canNet일 때의 Space 에지만 받는다. 프롬프트가 뜨기 직전에 누른 Space는 그대로 사라진다. QUALITY §1 「입력이 씹히지 않는다」를 어기고, 봇의 netReact 측정과 사람의 감각이 어긋난다.",
+      "fix": "§5.3.2 0단계를 「input.hook이면 fight.netBufferT = FIGHT.netBufferS(0.2 — data/fight.js에 추가) · 매 틱 netBufferT −= DT. (input.hook || netBufferT > 0) && 직전 틱 canNet → NET_START · FIGHT_END{landed}」로 바꾸고 FightState에 netBufferT를 더한다."
+    },
+    {
+      "severity": "minor",
+      "section": "§6.3 travel · §6.3 getTravel · 브리프 §3.1",
+      "problem": "브리프는 「스테이지끼리는 집을 거친다」고 하는데, 계약의 travel(sceneId)은 야외 → 다른 야외 이동을 막는 규칙이 없다. P3(world.test 「이동 게이트」) · P8(camp 패널) · P10(봇 계획)이 서로 다른 허용 범위를 가정한다.",
+      "fix": "§6.3 travel 주석에 「야외 씬에서는 'home'만 허용 — 그 밖 {ok:false, reason:'notHere'}」를 더한다. getTravel은 「집에서는 세 스테이지, 야외에서는 [home] 하나」를 돌려준다고 적는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§6.5 skipToResult · §11.7 skipToResult · §11.6 ?panel=result",
+      "problem": "debugSkipToResult는 「어디서든 result로」라서 걷기 모드나 집에서 부르면 ctx.spot이 null이다. 그러면 CatchRecord.stageId · spotId(타입상 non-null)가 비고, keepCatch 뒤 걷기 모드인데 rig.phase === 'ready'인 모순 상태가 된다. P1 · P4 · P8이 null을 다르게 다룬다.",
+      "fix": "§6.5 skipToResult 주석을 「낚시 모드가 아니면 먼저 그 씬의 첫 자리(집이면 debugGotoSpot('lake_gravel'))로 enterSpot 한 뒤 result로」로 바꾼다."
+    },
+    {
+      "severity": "minor",
+      "section": "§6.9 FishPreview · §10.2 도감 카드",
+      "problem": "도감은 카드 12장마다 「실루엣 모델 / 컬러 모델」을 요구한다. 그런데 FishPreview는 캔버스 하나(하나를 재사용)뿐이고, 카드용 정지 이미지를 얻는 API가 없다. P8은 포커스 카드 하나만 모델을 보이거나 FishPreview를 여러 개 만들어 WebGL 컨텍스트를 늘리게 된다.",
+      "fix": "§6.9 FishPreview에 「snapshot(speciesId, lengthCm, {silhouette = false, size = 160} = {}) → string(dataURL, (speciesId · silhouette)별 캐시)」을 더하고, §10.2 도감 카드는 「카드는 snapshot 이미지, 포커스된 카드만 회전 캔버스」로 적는다."
+    },
+    {
+      "severity": "minor",
+      "section": "§12.4 헤드리스 러너 · §5.8",
+      "problem": "브라우저에서는 result 패널 · 상호작용 패널이 열린 동안 시계가 멈춘다. 헤드리스에는 패널이 없어 결과 단계에서도 step이 돌고 시계가 간다. 그래서 헤드리스로 잰 하루 수입 · 레벨 도달 일수(M10~M12)가 실제 플레이의 시간 모델과 다르고, 러너마다 결과가 달라진다.",
+      "fix": "§12.4 머리에 「헤드리스 러너 규칙: 봇의 command를 step 전에 실행한다. rig.phase === 'result'인 동안에는 step을 부르지 않고 봇 명령으로 결과가 풀릴 때까지 decide만 반복한다(브라우저의 패널 정지와 같은 시간 모델).」을 더한다."
+    },
+    {
+      "severity": "minor",
+      "section": "§11.9 check:dist · §6.3 생성(세이브 없음 → home)",
+      "problem": "§11.9는 「타이틀 화면(뒤에 호수가 렌더된 상태)」을 전제로 하지만, 세이브가 없으면 GameSim은 1일 06:00 home에서 시작한다. 그러면 타이틀 뒤는 집 실내다. P9의 화면 확인 기준과 P3의 생성 규칙이 어긋난다.",
+      "fix": "§11.9의 문구를 「타이틀 화면(뒤에 현재 씬 — 새 프로필이면 집 실내 — 이 렌더된 상태)」으로 바꾼다. 또는 §11.1에 「타이틀 동안 WorldLayer는 'lake'를 보이고 play로 넘어갈 때 state.scene으로 돌린다(P5 · P9)」를 명시한다 — 둘 중 하나로 정한다."
+    }
+  ]
+}
