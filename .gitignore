@@ -1,0 +1,20 @@
+# 의존성과 빌드 산출물 (프로토타입마다)
+node_modules/
+dist/
+release/
+.vite/
+*.log
+
+# 갤러리 빌드 (tools/build-site.mjs)
+_site/
+
+# 임시 파일과 전달용 압축 파일
+**/docs/_scratch/
+*.zip
+
+# Claude Code 로컬
+.claude/logs/
+.claude/settings.local.json
+
+# Git Bash 가 죽으며 남기는 덤프
+*.stackdump

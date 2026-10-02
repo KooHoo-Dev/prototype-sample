@@ -1,0 +1,18 @@
+{
+  "title": "프로토타입 모음",
+  "description": "웹 게임 프로토타입 — 각각 독립이고 브라우저에서 바로 돈다.",
+  "prototypes": [
+    {
+      "slug": "ashen-cycle",
+      "dir": "ashen-cycle",
+      "title": "ASHEN CYCLE — 잿빛 순환",
+      "summary": "3인칭 소울라이크 보스 러시. 마을에서 정비하고 보스에게 도전한다 — 죽어도 준 피해만큼 성장한다.",
+      "port": 5183,
+      "status": "playable",
+      "public": false,
+      "created": "2026-10-02",
+      "controls": "키보드 · 마우스",
+      "notes": "갤러리에 올리지 않는다(Jay · 2026-10-02 — public 을 바꾸지 않는다). 이 리포의 규칙이 생기기 전에 만든 첫 프로토타입이다 — 디버그 API 는 window.__ashen, 선택 명령인 단일 HTML 은 release/AshenCycle.html 이고 check:standalone 이 없다."
+    }
+  ]
+}

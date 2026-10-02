@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASHEN CYCLE — 잿빛 순환</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0b0e; }
+      #game-canvas { display: block; width: 100vw; height: 100vh; }
+      #ui-root     { position: fixed; inset: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+    <div id="ui-root"></div>
+    <noscript>
+      <p style="position: fixed; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; padding: 2em; color: #e9e2d4; font: 16px/1.6 system-ui, sans-serif; text-align: center;">
+        ASHEN CYCLE은 JavaScript가 켜져 있어야 실행된다. 브라우저 설정에서 JavaScript를 켜고 새로고침해 달라.
+      </p>
+    </noscript>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

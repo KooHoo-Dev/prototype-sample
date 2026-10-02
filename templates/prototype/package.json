@@ -1,0 +1,19 @@
+{
+  "name": "__SLUG__",
+  "version": "0.1.0",
+  "private": true,
+  "description": "__TITLE__",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check:dist": "node scripts/check-dist.mjs",
+    "build:standalone": "vite build && node scripts/make-standalone.mjs",
+    "check:standalone": "node scripts/check-standalone.mjs",
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "IN=\"$(cat)\"; case \"$IN\" in *'\"agent_type\"'*|*'\"agent_id\"'*|*taskkill*|*[Ss]top-[Pp]rocess*|*pkill*|*killall*|*wmic*) printf '%s' \"$IN\" | node \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/guard.mjs\" ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
