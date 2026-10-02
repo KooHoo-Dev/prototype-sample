@@ -42,7 +42,7 @@
 - **입력**: 키는 `event.code`로 읽는다(한글 IME) · `Ctrl` · `Alt` · `Meta` 조합은 건드리지 않는다 · 포인터 락을 못 얻어도 돌아간다.
 - **저장**: localStorage, 키 접두사는 slug. 깨진 세이브에서 throw하지 않는다.
 
-## 환경 (이 PC — 실측)
+## 환경 (Jay의 PC — 실측)
 
 - Jay의 터미널은 PowerShell이고 실행 정책이 `npm`을 막는다 → Jay에게 주는 명령은 `npm.cmd --prefix <dir> run …`(리포 루트에서). 에이전트의 Bash 도구(Git Bash)에서는 `npm`이 그대로 된다.
 - Bash heredoc은 백슬래시와 따옴표를 깬다 → 스크립트 · 긴 문서는 Write 도구로 파일을 만들고 실행만 한다.
@@ -52,6 +52,15 @@
 - 내장 브라우저는 `file://`을 열지 못한다 → 단일 HTML(선택 명령)은 `npm run check:standalone`(헤드리스 Chrome)으로 확인한다.
 - Chrome · Edge는 `scripts/`의 검사 스크립트로만 띄운다 — `chrome.exe --version` 같은 직접 실행은 Jay의 프로필로 창을 연다. 헤드리스의 `--virtual-time-budget`은 `requestAnimationFrame`을 1~3번만 돌린다(검사 스크립트는 실제 시간으로 기다린다).
 - 파일 이름과 import 경로의 대소문자를 디스크와 똑같이 쓴다 — Windows는 틀려도 돌지만 갤러리를 빌드 · 서빙하는 리눅스에서는 깨진다.
+
+## 환경 (클라우드 세션 — 실측 2026-10-02)
+
+claude.ai/code의 원격 세션(`CLAUDE_CODE_REMOTE=true`)이면 위의 Windows 항목 대신 이것을 따른다.
+- 리눅스 컨테이너 · root · 세션마다 새로 클론한다. SessionStart 훅(`.claude/hooks/cloud-setup.sh`)이 프로토타입마다 `npm ci`를 하고 `CHROME_PATH`를 잡는다.
+- **내장 브라우저가 없다** → 화면은 `npm run probe:screen -- "<주소?쿼리>" --step <n> --out docs/_scratch/<이름>.png`(헤드리스 · `pause` → `step` → 스크린샷 · `errors()`)로 찍어 Read로 본다. 미리 깔린 Chromium(`/opt/pw-browsers/chromium`)은 `scripts/boot-probe.mjs`가 찾고, root면 `--no-sandbox`를 붙인다.
+- 프로세스: `taskkill` · `netstat` · `ss`가 없다 → `ps -eo pid,args`에서 자기 `vite --port <port>`의 PID → `kill <pid>`. `npx`의 PID만 끄면 자식 vite가 남는다.
+- **Jay는 컨테이너의 dev 서버를 열 수 없다** → 화면은 스크린샷 파일로 보내고(SendUserFile), 한 판은 Jay가 로컬에서 그 브랜치를 받아 `npm.cmd --prefix <dir> run dev`로 한다.
+- git: 세션에 지정된 브랜치에서만 일한다. push는 Claude GitHub App이 이 리포에 연결돼 있어야 된다(안 되면 403 — https://claude.ai/connect-github).
 
 ## 서브에이전트
 

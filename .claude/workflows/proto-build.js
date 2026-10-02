@@ -42,11 +42,12 @@ const COMMON = `
 
 const BROWSER = port => `
 ## 브라우저 확인
-- 서버: Bash(run_in_background)로 \`cd ${ROOT} && npx vite --port ${port} --strictPort\`. 끝나면 **네가 띄운 프로세스만** 끈다(netstat -ano 로 포트 ${port} 의 PID → taskkill //F //PID <pid>).
+- 서버: Bash(run_in_background)로 \`cd ${ROOT} && npx vite --port ${port} --strictPort\`. 끝나면 **네가 띄운 프로세스만** 끈다 — Windows: netstat -ano 로 포트 ${port} 의 PID → taskkill //F //PID <pid> · 리눅스(클라우드 세션): ps -eo pid,args 에서 \`vite --port ${port}\` 의 PID → kill <pid>(npx 의 PID 만 끄면 자식 vite 가 남는다).
 - 브라우저 도구: ToolSearch 로 "select:mcp__Claude_Browser__tabs_create,mcp__Claude_Browser__navigate,mcp__Claude_Browser__computer,mcp__Claude_Browser__read_console_messages,mcp__Claude_Browser__javascript_tool,mcp__Claude_Browser__tabs_close" 를 로드 → tabs_create 로 **네 탭**을 만들고 이후 모든 호출에 그 tabId 를 넘긴다. 끝나면 네 탭만 닫는다.
+- 브라우저 도구가 로드되지 않으면(클라우드 세션에는 내장 브라우저가 없다) 헤드리스로 찍는다: \`cd ${ROOT} && npm run probe:screen -- "http://127.0.0.1:${port}/?<쿼리>" --step <n> [--eval "<식 — api 는 window.__game>"] --out docs/_scratch/<이름>.png\` → 스크린샷을 Read 로 직접 본다. 출력의 errors() · 예외가 콘솔 확인을 대신한다. 정지 화면만 보이므로 실시간으로만 드러나는 것은 「사람이 확인할 것」으로 남긴다.
 - 창이 숨겨져 있으면 화면이 저절로 돌지 않는다 — window.__game.pause(true) 뒤 step(n) 으로 밀어 정지 화면을 본다. 계약의 개발용 URL 쿼리로 장면과 패널을 바로 띄운다. javascript_tool 로 상태를 조작해 여러 순간을 본다. 스크린샷을 실제로 보고 판단한다.
 - 콘솔 오류는 새로 읽은 뒤의 window.__game.errors() 로 본다(다른 작업자가 파일을 고치는 동안 옛 오류가 남는다).
-- 브라우저 도구가 안 되면 두 번까지만 시도하고 포기한다 — unverified 에 "화면 미확인"을 적고 Node 로 가능한 검증(생성 · update 반복 · NaN 검사)을 한다.
+- 브라우저 도구와 probe:screen 이 둘 다 안 되면 두 번까지만 시도하고 포기한다 — unverified 에 "화면 미확인"을 적고 Node 로 가능한 검증(생성 · update 반복 · NaN 검사)을 한다.
 `
 
 const IMPL_SCHEMA = {

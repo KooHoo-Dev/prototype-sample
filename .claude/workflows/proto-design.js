@@ -215,7 +215,7 @@ ${COMMON}
 ${ROOT}/docs/CONTRACT.md 를 끝까지 읽고(길면 나눠서 전부) ${ROOT}/docs/_packages.json 의 P0 항목을 본다.
 
 ## 만들 것
-1. **프로젝트 설정** — ${REPO}/templates/prototype/ 의 파일을 ${ROOT}/ 로 복사하고 자리 표시(__SLUG__ · __TITLE__ · __PORT__)를 채운다: package.json(name 은 "${SLUG}" · 스크립트는 그대로) · vite.config.js(port ${PORT}) · .gitignore · scripts/ 의 네 파일(check-dist.mjs 는 게이트 · boot-probe.mjs 는 그 엔진 · make-standalone.mjs 와 check-standalone.mjs 는 선택 명령 — 고치지 않고 그대로 둔다). index.html(캔버스 + UI 루트 + 진입점)과 README.md(실행법 · 조작 · 구조 · 디버그 API — 임시본)를 쓴다. 의존성은 \`npm install -D vite\` 와 (3D 면) \`npm install three\` 만 — 그 밖은 추가하지 않는다(테스트는 node:test · node:assert).
+1. **프로젝트 설정** — ${REPO}/templates/prototype/ 의 파일을 ${ROOT}/ 로 복사하고 자리 표시(__SLUG__ · __TITLE__ · __PORT__)를 채운다: package.json(name 은 "${SLUG}" · 스크립트는 그대로) · vite.config.js(port ${PORT}) · .gitignore · scripts/ 의 다섯 파일(check-dist.mjs 는 게이트 · boot-probe.mjs 는 그 엔진 · screen-probe.mjs 는 내장 브라우저가 없을 때의 화면 확인 · make-standalone.mjs 와 check-standalone.mjs 는 선택 명령 — 고치지 않고 그대로 둔다). index.html(캔버스 + UI 루트 + 진입점 · head 에 \`<link rel="icon" href="data:,">\` — 없으면 favicon.ico 404 가 콘솔 오류로 남는다)과 README.md(실행법 · 조작 · 구조 · 디버그 API — 임시본)를 쓴다. 의존성은 \`npm install -D vite\` 와 (3D 면) \`npm install three\` 만 — 그 밖은 추가하지 않는다(테스트는 node:test · node:assert).
 2. **완성해서 내는 것**(P0 소유): src/core 전부 · src/types.js(계약의 타입 카탈로그 전부를 JSDoc @typedef 로) · 테스트 공용 헬퍼 · core 단위 테스트 · 순수 계층 검사 테스트(순수 계층의 금지 import 와 금지 토큰 — three · window · document · AudioContext · localStorage · performance. · Date.now · Math.random — 을 소스에서 찾는다. 같은 테스트가 src 전체의 상대 import 경로가 디스크의 파일 이름과 **대소문자까지** 같은지도 본다 — Windows 는 틀려도 돌지만 갤러리를 빌드하는 리눅스에서는 깨진다. 일부러 위반 파일을 넣어 실제로 잡는지 확인한 뒤 지운다).
 3. **스텁으로 내는 것**(다른 패키지 소유 파일 전부): 계약의 공개 API 그대로 export 하고 JSDoc 시그니처를 붙인다. 본문은 계약이 정한 중립 값을 돌려주거나 no-op — **import 할 때도 호출할 때도 던지지 않는다**(스텁 위에서 최소 부트가 돌아야 한다). 파일 머리에 \`// OWNER: P<n> — 계약 §<절>\` 과 \`// STUB\` 을 한 줄씩. src/data 의 수치 표는 계약의 값을 **실제 값으로** 채운다.
 4. **최소 부트**(진입점은 app 패키지 소유지만 지금은 P0 가 쓴다): 스텁 상태에서도 \`npm run dev\` 로 화면이 뜬다 — 자리 표시 도형이라도 sim 상태를 읽어 그린다. window.__game 에 getState · pause · step(n — 틱을 민 뒤 렌더까지) · errors 를 둔다(다음 웨이브의 화면 작업자가 숨은 탭에서 이것으로 화면을 민다). 계약의 개발용 URL 쿼리(장면 · 패널 바로 띄우기)가 동작한다. 첫 화면이 그려지면 document.documentElement.dataset.gameReady = '1', 부팅이 실패하면(예외 · WebGL 없음) dataset.gameError 에 사유 — check:dist 가 이 표식을 읽는다(사용자 입력 없이 실제 시간 20초 안에 붙어야 한다 · 잡히지 않은 예외가 하나라도 나면 떨어진다).
@@ -225,7 +225,7 @@ ${ROOT}/docs/CONTRACT.md 를 끝까지 읽고(길면 나눠서 전부) ${ROOT}/d
 - \`npm run build\` 오류 0 · \`npm test\` 실패 0.
 - _packages.json 의 모든 파일이 존재하고 각 파일 머리의 OWNER 가 표와 같은지 스크립트로 대조한다.
 - \`npm run build\` → \`npm run check:dist\` 통과(프로덕션 빌드가 갤러리와 같은 하위 경로 http 에서 부팅 표식을 낸다 — 절대 경로 참조와 동적 import 로 갈린 청크가 여기서 걸린다). release/boot.png 를 직접 열어 화면이 그려졌는지 본다.
-- 브라우저 스모크(가능하면): Bash(run_in_background)로 \`npx vite --port ${PORT + 1} --strictPort\` → 자기 탭에서 최소 부트와 쿼리 한두 개를 열어 콘솔 오류 0 과 화면을 본다 → 자기 탭을 닫고 자기 서버(포트 ${PORT + 1} 의 PID)만 끈다.
+- 브라우저 스모크(가능하면): Bash(run_in_background)로 \`npx vite --port ${PORT + 1} --strictPort\` → 자기 탭에서 최소 부트와 쿼리 한두 개를 열어 콘솔 오류 0 과 화면을 본다(내장 브라우저가 없으면 \`npm run probe:screen -- "http://127.0.0.1:${PORT + 1}/?<쿼리>" --out docs/_scratch/<이름>.png\` 로 찍어 Read 로 본다) → 자기 탭을 닫고 자기 서버(포트 ${PORT + 1} 의 PID — 리눅스는 ps 로 찾아 kill)만 끈다.
 
 스캐폴드하다가 계약의 모순 · 누락(스텁의 시그니처를 정할 수 없음 등)을 발견하면 **CONTRACT.md 를 최소한으로 고쳐 확정**하고 contractDeviations 에 적는다. 추측으로 넘어가지 않는다.`,
   { label: 'scaffold:P0', phase: 'Scaffold', schema: SCAFFOLD_SCHEMA, effort: 'high' })

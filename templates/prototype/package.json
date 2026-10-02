@@ -14,6 +14,7 @@
     "check:dist": "node scripts/check-dist.mjs",
     "build:standalone": "vite build && node scripts/make-standalone.mjs",
     "check:standalone": "node scripts/check-standalone.mjs",
+    "probe:screen": "node scripts/screen-probe.mjs",
     "test": "node --test \"test/**/*.test.js\""
   }
 }

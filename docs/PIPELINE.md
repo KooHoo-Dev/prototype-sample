@@ -64,7 +64,7 @@ Workflow({ name: 'proto-review', args: { slug, root, port } })
 3. `prototypes.json`: `status: "playable"` · `summary` 갱신(`public`은 건드리지 않는다).
 4. 정리: 서버 · 탭 · `docs/_scratch/`.
 5. `docs/RETRO.md`에 이번 제작에서 배운 것을 한 줄씩(규칙이 됐으면 하는 것 · 새로 실측한 환경 사실).
-6. `STATUS.md` 마지막 줄 → 종료 보고(만든 것 · 확인한 것 · 확인하지 못한 것 · Jay가 정할 것) + 바로 해 볼 명령(`npm.cmd --prefix <dir> run dev`와 주소) + 스크린샷 2~4장.
+6. `STATUS.md` 마지막 줄 → 종료 보고(만든 것 · 확인한 것 · 확인하지 못한 것 · Jay가 정할 것) + 바로 해 볼 명령(`npm.cmd --prefix <dir> run dev`와 주소) + 스크린샷 2~4장. 클라우드 세션이면 주소 대신 받을 브랜치 이름을 적고 스크린샷은 파일로 보낸다(`CLAUDE.md` 「환경 (클라우드 세션)」).
 
 ## 6. 재개 (`/proto-resume`)
 

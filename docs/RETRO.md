@@ -35,3 +35,12 @@
 - 결과 화면의 키 연타가 다음 화면의 행동(플라스크 · 레벨업)으로 샜다 → 「전환 직후의 에지 입력은 버린다」 → 반영
 - PowerShell 실행 정책이 `npm`을 막아 Jay가 빌드를 돌리지 못했다 → `npm.cmd --prefix` 안내 → 반영
 - `dist/index.html`을 더블클릭하면 빈 화면이다 → 단일 HTML 빌드와 `file://` 확인을 게이트로 → 반영
+
+## 클라우드 세션 실측 · 2026-10-02 (claude.ai/code — 리눅스 컨테이너 · root)
+
+- 게이트(ci · build · test 676 · 가드 45/45 · 워크플로 24/24)는 그대로 돌았지만 `check:dist`가 브라우저를 못 찾았고(Windows 경로뿐), 찾아도 root라 `--no-sandbox` 없이 뜨지 않았다 → `boot-probe.mjs`가 `/opt/pw-browsers/chromium`을 찾고 root면 `--no-sandbox` → 반영
+- 내장 브라우저가 없어 화면 확인 절차가 통째로 비었다 → 의존성 0인 `scripts/screen-probe.mjs`(`npm run probe:screen`)와 워크플로의 폴백 → 반영
+- `npx vite`의 PID를 끄면 자식 vite가 살아남아 포트를 계속 잡았다 · `taskkill` · `netstat` · `ss`가 없다 → `ps`로 vite의 PID → `kill` → 반영
+- 훅은 클라우드에서도 그대로 막았다(메인 G2 · 서브에이전트 G1 · G3 · G2) · `Workflow({name})`는 저장 워크플로를 찾고 인수 검사에서 에이전트 0개로 멈췄다
+- Jay가 컨테이너의 dev 서버를 열 수 없다 · push가 403이었다(GitHub App 미연결) → 스크린샷 파일 전달 · 브랜치로 받기 · 세션 시작 훅(`cloud-setup.sh`) → 반영. 클라우드에서 `/proto-new` 한 바퀴(에이전트 30개)는 아직 돌려 보지 않았다(미정)
+- `favicon.ico` 404가 콘솔 오류 1건으로 남았다 → `index.html`에 `<link rel="icon" href="data:,">` → 반영

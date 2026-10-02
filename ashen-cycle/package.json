@@ -12,6 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "check:dist": "node scripts/check-dist.mjs",
+    "probe:screen": "node scripts/screen-probe.mjs",
     "build:standalone": "vite build && node scripts/make-standalone.mjs",
     "test": "node --test \"test/**/*.test.js\""
   },

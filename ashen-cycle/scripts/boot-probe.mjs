@@ -1,4 +1,4 @@
-// 헤드리스 Chrome/Edge 로 URL 을 열어 부팅 표식을 **실제 시간으로** 기다린다 — check-dist.mjs · check-standalone.mjs 가 같이 쓴다.
+// 헤드리스 Chrome/Edge 로 URL 을 열어 부팅 표식을 **실제 시간으로** 기다린다 — check-dist.mjs · check-standalone.mjs · screen-probe.mjs 가 같이 쓴다.
 // 가상 시간(--virtual-time-budget)을 쓰지 않는다: requestAnimationFrame 이 1~3번만 돌고 실제 시간이 드는 await 를 기다리지 않아
 // 멀쩡한 부트를 떨어뜨린다(2026-10-02 실측). 대신 디버깅 포트(CDP)로 붙어 표식을 폴링하고, 잡히지 않은 예외와 스크린샷을 받는다.
 // 의존성 0 — Node 22 의 내장 fetch · WebSocket 만 쓴다.
@@ -9,10 +9,12 @@ import { join } from 'node:path';
 
 const sleep = ms => new Promise(done => setTimeout(done, ms));
 
-/** @returns {string | undefined} 설치된 Chrome/Edge 의 실행 파일 경로(환경 변수 CHROME_PATH 가 먼저) */
+/** @returns {string | undefined} 설치된 Chrome/Edge 의 실행 파일 경로(환경 변수 CHROME_PATH 가 먼저 · 클라우드 세션은 미리 깔린 Playwright Chromium) */
 export function findBrowser() {
   return [
     process.env.CHROME_PATH,
+    process.env.PLAYWRIGHT_BROWSERS_PATH && join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium'),
+    '/opt/pw-browsers/chromium',
     'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
     'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
@@ -27,11 +29,12 @@ export function findBrowser() {
 /**
  * @param {string} browser 실행 파일 경로
  * @param {string} url 열 주소(http:// 또는 file://)
- * @param {{ shot?: string, timeoutMs?: number, settleMs?: number }} [opts] shot: 스크린샷 경로 · timeoutMs: 표식을 기다리는 실제 시간 · settleMs: 표식 뒤 더 지켜보는 시간
- * @returns {Promise<{ ready: boolean, error: string | null, exceptions: string[], waitedMs: number, launchError: string | null }>}
+ * @param {{ shot?: string, timeoutMs?: number, settleMs?: number, afterReady?: string }} [opts] shot: 스크린샷 경로 · timeoutMs: 표식을 기다리는 실제 시간 · settleMs: 표식 뒤 더 지켜보는 시간
+ *   · afterReady: 표식을 본 뒤 페이지에서 평가할 JS 식(Promise 면 기다린다) — 값은 JSON 으로 직렬화해 value 에 담는다
+ * @returns {Promise<{ ready: boolean, error: string | null, exceptions: string[], waitedMs: number, launchError: string | null, value?: unknown }>}
  *   ready: <html data-game-ready="1"> 을 봤다 · error: data-game-error 의 사유 · exceptions: 잡히지 않은 예외와 처리되지 않은 Promise 거부
  */
-export async function probeBoot(browser, url, { shot, timeoutMs = 20000, settleMs = 1000 } = {}) {
+export async function probeBoot(browser, url, { shot, timeoutMs = 20000, settleMs = 1000, afterReady } = {}) {
   const result = { ready: false, error: null, exceptions: [], waitedMs: 0, launchError: null };
   const profile = mkdtempSync(join(tmpdir(), 'proto-boot-'));
   let spawnError = null;
@@ -44,6 +47,8 @@ export async function probeBoot(browser, url, { shot, timeoutMs = 20000, settleM
     '--disable-gpu-sandbox',
     '--enable-unsafe-swiftshader',
     '--window-size=1280,720',
+    // root 로 도는 리눅스(클라우드 세션 컨테이너)에서는 샌드박스 없이만 뜬다
+    ...(process.getuid?.() === 0 ? ['--no-sandbox'] : []),
     'about:blank',
   ], { stdio: 'ignore' });
   const exited = new Promise(done => {
@@ -116,6 +121,13 @@ export async function probeBoot(browser, url, { shot, timeoutMs = 20000, settleM
       await sleep(100);
     }
     result.waitedMs = Date.now() - began;
+    if (afterReady && result.ready) {
+      const r = await send('Runtime.evaluate', { expression: `(async () => JSON.stringify(await (${afterReady})))()`, awaitPromise: true, returnByValue: true });
+      const thrown = r.result && r.result.exceptionDetails;
+      if (thrown) result.exceptions.push(`afterReady: ${String((thrown.exception && thrown.exception.description) || thrown.text).split('\n')[0]}`);
+      const value = r.result && r.result.result && r.result.result.value;
+      if (typeof value === 'string') result.value = JSON.parse(value);
+    }
     // 표식 직후의 프레임에서 나는 예외와, 막이 걷힌 뒤의 화면을 잡는다
     await sleep(settleMs);
     if (result.error === null) result.error = (await read())[1];
