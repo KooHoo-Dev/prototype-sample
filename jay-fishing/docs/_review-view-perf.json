@@ -1,0 +1,65 @@
+{
+  "summary": "관점: 뷰 · 이펙트 · 오디오의 누수와 성능, 상태와 화면의 불일치(src/view · src/audio). 측정 1: Node에서 실제 sim + 봇 위에 레이어 넷과 AudioEngine(가짜 AudioContext)을 가짜 렌더 컨텍스트로 돌렸다. 호수 하루 계획 2게임일(432,000틱 · 124판)에서 장면 객체 734→783(어종 lod1 모델 풀 8종 = 7×7, 상한 있음), 버스 리스너 57 고정, 오디오 노드 21,442개 생성 / 21,398개 해제(남은 것 = 고정 그래프 44), 카메라 비스냅 프레임 튐(>0.3m) 0, 그림자 튐(>0.6m) 0, 끝난 대상(결과 뒤 그림자 · 모델, 걷기 중 라인) 0. 9자리 × 기본 · 조절 봇도 같다. 측정 2: 헤드리스 Chromium(SwiftShader)에서 봇이 63판(1.6게임일, high)을 도는 동안 geometries 190→214 · textures 22→24 · programs 77→81(어종 모델, 상한 있음), DOM 187–201, 리스너 88 고정, errors 0. 측정 3: 프레임당 레이어 CPU는 25–35µs, 할당은 1000프레임에 minor GC 1–3회(1MB semi-space). 장면 · 화질별 draw call은 low 29–86, medium 93–157, high 119–180이다. 판 반복에서 생기는 누수는 찾지 못했다. 찾은 것은 여섯이다. major 하나: 장애물 띠 판정은 각도를 보지 않는데 띠는 facing ± arc에만 그려진다. 그래서 부채꼴 바깥쪽을 겨냥하면 띠가 없는 수면에서 「장애물」 경고가 뜨고 라인이 쓸리다 끊긴다(띠에서 최대 22m 밖). minor 다섯: 미리보기 셰이더를 물고기마다 지우고 다시 컴파일한다 · 그림자 패스가 보이지 않는 그림자를 그린다(집은 빛이 0인데 draw call 89개) · 화질을 낮춰도 반사 RT와 그림자 맵이 남는다 · DPR만 바뀌면 해상도가 그대로다 · 실패 뒤 V자 물결이 줄지 않다가 한 번에 사라진다. 소리 자체(겹침 · unlock 전 · 일시정지 suspend)는 코드와 가짜 컨텍스트로는 결함을 찾지 못했다. 실제 GPU의 멈칫 길이와 소리는 이 환경에서 확인하지 못했다.",
+  "findings": [
+    {
+      "severity": "major",
+      "area": "sim",
+      "file": "src/sim/fight/fight.js",
+      "line": 297,
+      "title": "장애물 판정에 각도가 없어 띠가 그려지지 않은 옆 수면에서 「장애물」이 뜨고 라인이 쓸려 끊긴다",
+      "evidence": "판정: fight.js:94 · :297 `inSnag = dist >= spot.snag.fromM`(각도 없음). 파이팅 방위는 halfArc = min(1.3, max(arc + 0.35, |처음 방위 − facing| + 0.35))까지 간다(fight.js:77 · :329–335). 화면: markers.js snagPoints(151행)가 띠를 facing ± spot.arc(0.55–0.6)에만 놓는다(view.world.test도 이것을 단언). 측정(Node · 실제 sim · 기본 봇 · 반나절): 조준만 부채꼴 가장자리(facing − arc)로 바꿨다. 장애물 틱 중 띠 밖 비율과 띠 가장자리에서 옆으로 떨어진 거리(dist·sin(|off|−arc))는 다음과 같다. coast_channel 1436틱 중 100%(중앙 7.6m · 최대 14.7m) · 장애물 중 라인 끊김 2판 모두 띠 밖. river_tailrace 3071/5055(중앙 13.0m · 최대 20.3m) · 끊김 9판 중 5판 띠 밖. river_trench 2124/2578(최대 21.8m). lake_shallows 561/994(최대 2.9m). 조준 ±0.45rad에서도 river_tailrace 1583틱(최대 13m) · river_trench 662틱(10.3m) · coast_channel 605틱(5.1m)이다. 조준 −0.3에서도 river_tailrace 534틱이다. 정면을 겨누는 봇은 9자리 × 2전략 모두 띠 밖 0틱이다(밸런스 측정이 이 경우를 보지 못했다). 화면: 헤드리스로 ?spot=lake_shallows&level=12에서 forceFight 뒤 방위를 −0.47로 두었다(facing 0.25 · 띠 −0.35..0.85 · 32m). 스크린샷에서 수초 띠는 화면 가운데 왼쪽에서 끝나고, 라인은 그보다 오른쪽 빈 수면으로 들어간다. HUD에는 「장애물 — 라인이 쓸린다」가 떠 있고, 20틱 사이 abrasion이 0.027 올랐다.",
+      "playerImpact": "부채꼴의 바깥쪽 절반을 겨냥하거나, 물고기가 옆으로 달리거나, 강에서 찌가 흘러가면 문제가 생긴다. 물고기 그림자와 라인은 띠가 없는 열린 물에 있는데 「장애물 — 라인이 쓸린다」가 뜨고, 라인 손상이 차서 「바위에 쓸려 줄이 닳았다」로 끊긴다. 강 · 갯바위에서는 띠에서 10–20m 떨어진 자리다. 보이는 정보로는 피할 수 없는 손실이다(계약 §9.10 허용 차 1m).",
+      "suggestedFix": "판정 쪽(밸런스 중립): fight.js:94 · :297을 `inSnag = dist >= fromM && Math.abs(angleDiff(spot.facing, f.bearing)) <= spot.arc + 작은 여유(약 0.05rad)`로 한다. 라인이 띠를 지나지 않는 방위에서는 쓸리지 않는다. 정면 봇은 띠 밖 0틱이라 측정값이 바뀌지 않는다. 계약 §9.10 표 · §5.3.2 inSnag 식도 같이 고친다. 판정 대신 화면을 고친다면 markers.js snagPoints의 각도 폭을 FIGHT.maxArc(1.3)까지 넓히고 view.world.test의 부채꼴 단언을 바꾼다."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/fish/FishPreview.js",
+      "line": 92,
+      "title": "결과 패널 · 도감에서 물고기를 바꿀 때마다 미리보기 셰이더를 지우고 다시 컴파일한다",
+      "evidence": "_setModel이 바꿀 때마다 disposeFishModel로 재질을 dispose한다. 그러면 three가 usedTimes 0인 프로그램을 지우고, 새 모델(같은 종류의 재질)이 그 프로그램을 다시 링크한다. snapshot()은 카드마다 모델을 바꾸고 원래 모델로 되돌린다. 헤드리스에서 WebGL linkProgram · deleteProgram · compileShader를 캔버스별로 셌다. 결과 패널(skipToResult 6번 · 붕어/잉어 번갈아)은 열 때마다 fish-preview 링크 4 · 삭제 4다(같은 두 어종을 오가도 계속). 도감(PC → 도감 탭)은 처음 열 때 셰이더 26개 컴파일 · 프로그램 12개 삭제, 스테이지를 바꿀 때마다 26개 더(3스테이지 뒤 80), 카드 포커스 한 칸마다 2개 컴파일 · 1개 삭제다. 메인 캔버스는 판 중 새 링크가 1번뿐이었다(첫 랜딩 · 어종 모델 풀).",
+      "playerImpact": "물고기를 낚을 때마다 결과 패널이 뜨는 순간, 그리고 도감에서 화살표로 카드를 넘길 때마다 셰이더 링크가 일어난다. 처음 도감을 열 때는 프로그램 13개를 연달아 만든다. 실제 GPU(Windows ANGLE)에서 멈칫이 몇 ms인지는 여기서 재지 못했다 — 사람이 확인할 것: 결과 패널이 뜰 때와 도감 첫 열기 · 카드 넘기기의 끊김.",
+      "suggestedFix": "FishPreview에 `${speciesId}|${silhouette}` → 모델 Map 캐시(최대 36 × 2)를 둔다. 바꿀 때는 pivot에서 떼고 붙이기만 하고(FishLayer._pool과 같은 방식) dispose()에서 한 번에 정리한다. snapshot의 「원래 모델로 되돌리기」도 캐시에서 꺼내면 다시 만들지 않는다."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/WorldLayer.js",
+      "line": 390,
+      "title": "그림자 패스가 보이지 않는 그림자를 그린다 — 집은 빛 세기 0인데 draw call 89개, 야외는 그림자 상자(±34m) 밖 인스턴스까지",
+      "evidence": "집: update가 실내에서 sun.intensity = 0으로 두지만(388–390행) sun.castShadow는 그대로 true다(medium · high). 헤드리스 ?scene=home에서 renderer.info로 잰 한 프레임은 157 call이고, shadowMap.autoUpdate를 끄면 68 call이다. 그림자 패스 89 call(프레임의 57%)이 세기 0인 빛을 위해 그려진다. 야외: 스테이지 전체에 퍼진 InstancedMesh(경계 반경 87–312m)가 castShadow라 그림자 카메라와 늘 겹친다. 그래서 인스턴스 전부가 그림자 패스에 들어간다. 그림자 패스 삼각형 ≈ 캐스터 삼각형 전부다: lake medium 105k/107k(프레임의 31%), coast medium 147k/148k(33%), coast high 202k(18%). Node에서 자리 · 스폰 둘레 ±34m(+2×반경) 안에 드는 캐스터 삼각형은 호수 26–43%, 갯바위 17–20%, 강 5–10%뿐이다. 나머지는 그림자 맵에 닿지 않는다.",
+      "playerImpact": "그림이 바뀌지 않는데 프레임 비용이 든다. 집 프레임은 draw call이 2.3배다. 야외 medium은 삼각형의 약 1/3을 그림자에 쓰고 그중 57–95%는 헛일이다. 계약 목표(중급 GPU · medium · 1080p 60fps)에서 여유를 깎는다. 실제 fps 차이는 여기서 재지 못했다.",
+      "suggestedFix": "WorldLayer.update에서 `this.sun.shadow.autoUpdate = outdoor`로 한다. 야외로 돌아올 때는 needsUpdate = true. castShadow를 토글하지 않으므로 빛 개수 · 프로그램이 그대로다. 스테이지 전체 인스턴스 소품(lakeProps · coastProps의 lavaRocks/pines · riverProps의 firs/boulders)은 낚시 자리 · 스폰 둘레의 것만 castShadow인 별도 InstancedMesh로 나누거나, 먼 것은 castShadow = false로 둔다."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/WorldLayer.js",
+      "line": 271,
+      "title": "화질을 낮춰도 평면 반사 렌더 타깃과 그림자 맵이 해제되지 않는다",
+      "evidence": "_applyQuality는 반사를 enabled = false로만 끄고 reflection.rt를 dispose하지 않는다. 그림자를 끌 때(low)도 sun.shadow.map을 남긴다(265–268행은 켤 때만 크기를 바꾼다). 헤드리스 ?spot=lake_gravel에서 일시정지 설정 탭의 「화질」을 실제 키(→ ←)로 바꾸며 renderer.info.memory를 쟀다. 부팅(보통) textures 21 → 높음 22 → 보통 22 → 낮음 22 → 보통 22 → 높음 22 → 보통 22 → 낮음 22. 낮음에서 sun.shadow.map은 1024×1024 그대로이고 castShadow는 false였다.",
+      "playerImpact": "그래픽이 버거워 화질을 낮춘 사람의 GPU 메모리가 줄지 않는다. 1920×1080 · DPR 2 · 높음에서 내리면 반 해상도 HalfFloat 반사 버퍼(1920×1080 × 8B ≈ 16.6MB + 깊이 버퍼)와 그림자 맵이 끝까지 남는다. 화질을 다시 올리지 않는 한 쓰이지 않는다.",
+      "suggestedFix": "_applyQuality에서 반사가 꺼지면 `this.reflection.rt.setSize(16, 16)` 또는 rt.dispose(PlanarReflection.render가 setSize로 다시 키운다)로 한다. Q.shadows가 false면 `this.sun.shadow.map?.dispose(); this.sun.shadow.map = null`로 한다."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/renderer.js",
+      "line": 90,
+      "title": "창 크기는 그대로이고 기기 픽셀 비율만 바뀌면 캔버스 해상도가 따라가지 않는다",
+      "evidence": "resize()는 window 'resize'에만 걸려 있고, 픽셀 비율도 그때만 다시 읽는다. 헤드리스에서 CDP Emulation으로 ?spot=lake_gravel&quality=high를 1920×1080 · DPR 1에서 DPR 2로만 바꿨다. devicePixelRatio는 2가 됐지만 캔버스 버퍼는 1920×1080, getPixelRatio()는 1 그대로였다(high 상한 2). 이어 1280×720 · DPR 1.5로 크기까지 바꾸자 버퍼가 1920×1080 · 비율 1.5로 맞춰졌다.",
+      "playerImpact": "배율이 다른 모니터로 창을 옮기면(100% ↔ 150 · 200%) 캔버스가 이전 해상도에 머문다. 고배율 모니터에서는 흐릿하게, 저배율 모니터에서는 쓸데없이 큰 버퍼로 그린다. 크기를 한 번 바꿔야 풀린다. 사람이 확인할 것: Jay의 PC에서 배율이 다른 모니터로 창을 끌어 옮겨 보기(브라우저가 이때 resize를 보내지 않는 경우).",
+      "suggestedFix": "`matchMedia(`(resolution: ${devicePixelRatio}dppx)`)`의 change에서 resize()를 부르고 다시 등록한다. 또는 render()에서 window.devicePixelRatio가 마지막 값과 다르면 resize()를 부른다(비교 하나라 매 프레임 해도 싸다)."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/fish/FishLayer.js",
+      "line": 324,
+      "title": "실패 뒤 달아나는 그림자는 옅어지는데 V자 물결은 불투명도 0.6 그대로 있다가 0.6초에 한 번에 사라진다",
+      "evidence": "exit 모드(313–328행)는 _shadowMat.opacity만 (1 − k)로 줄인다. _wake.visible = true로 켜면서 _wakeMat.opacity는 건드리지 않는다. 물결 길이(_wakeLen · _wakeL)도 마지막으로 달리던 때 값이다. Node에서 실제 sim + mindless 봇(호수 자갈 · 꼬리물 · 조류 홈 · 반나절씩)으로 실패 21번의 퇴장을 프레임마다 쟀다. 그림자는 0.21–0.55에서 0.01로 줄었고, 물결은 35프레임 내내 0.60이었다가 다음 프레임에 사라졌다(21/21). 1번은 실패 직전 물결이 없었는데 퇴장 첫 프레임에 0.6으로 나타났다.",
+      "playerImpact": "라인이 끊기거나 바늘이 빠지면 물고기 그림자는 부드럽게 사라진다. 그 위의 흰 V자 물결만 진한 채 0.6초 떠 있다가 한 프레임에 꺼진다. 깊은 물고기(그림자 0.2대)는 물결이 그림자보다 훨씬 진해, 끝난 물고기가 「흰 자국」으로 남았다가 툭 사라진다.",
+      "suggestedFix": "_startExit에서 그때의 _wakeMat.opacity와 _wake.visible을 기억한다. exit 동안 `_wakeMat.opacity = 기억한 값 × (1 − k)`로 함께 줄이고, 실패 직전에 보이지 않았으면 켜지 않는다."
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "summary": "관점: 실제 브라우저 조건에서의 견고성(src/app · main.js · index.html · vite.config.js · 렌더러 · 오디오 · README). 방법: 코드 정독과 헤드리스 Chromium(CDP)으로 재현했다. dev 서버는 5305, 프로덕션 빌드의 vite preview는 5306을 썼다. 입력은 합성 이벤트(Input.dispatchKeyEvent · dispatchMouseEvent)로 보냈다. 포인터 락은 헤드리스가 주지 않아서 preload로 가짜 락을 심어 흉내 냈다(requestPointerLock · pointerLockElement · exitPointerLock · pointerlockchange). 누산기는 Node에서 30–240Hz 프레임 dt를 직접 넣어 봤다. 재현된 결함은 다섯이다. (1) major: 결과 「어창에 넣기」 · 패널 × · 일시정지 「계속하기」를 마우스로 더블클릭하면 두 번째 누름이 캐스팅으로 샌다. 첫 클릭이 패널을 닫으면서 포인터 락을 다시 잡고, 두 번째 누름은 잠긴 캔버스로 간다(미끼 −1 · 9.8m 캐스팅). 메타 흐름 리뷰가 「더블클릭이 새지 않았다」고 본 것은 락이 없는 헤드리스라서 두 번째 클릭이 락 요청으로 삼켜졌기 때문이다. (2) minor: 타이틀을 마우스로 고르면 소리가 켜지지 않는다. play에 들어가 3초가 지나도 AudioContext가 0개다. (3) minor: Ctrl+휠(브라우저 확대 · 트랙패드 핀치)이 드랙 눈금으로 먹히고 확대가 막힌다. (4) minor: DPR만 바뀌면(모니터 이동) 캔버스 해상도가 그대로다. (5) minor: 컨텍스트 로스트 중에 일시정지를 닫으면 안내 없는 빈 화면에서 멈춘다. 결함이 나오지 않은 것은 다음과 같다. 한글 IME(key 'Process' · code 'KeyW')로 걷는다. 키 반복은 에지가 아니다(Z 반복 6번에도 1눈금). 옆 버튼(뒤로)과 우클릭 메뉴는 게임 중 막히고 페이지가 그대로다. 누산기는 30·50·60·75·120·144·165·240Hz 모두 60초에 3599–3607틱이다. 탭 복귀는 resetClock과 MAX_FRAME_DT로 처리된다(리셋 없이도 최대 8틱). WebGL이 없으면 치명 안내와 gameError 'webgl'이 나오고 예외는 0이다. 컨텍스트가 복구되면 렌더 · errors() 정리 · sim이 돌아온다. 터치 에뮬레이션에서는 타이틀에 「키보드와 마우스가 필요하다」가 뜬다. localStorage 접근자가 던져도 타이틀에 「저장할 수 없는 환경」이 뜨고 예외가 0이다. 가짜 락으로 본 락 수명도 맞다: 걷기 중 락 상실이면 일시정지, 파이팅 중 락 상실이면 일시정지 → Esc → 클릭 재고정, 첫 요청 거부면 드래그 대체. blur 일시정지 20회와 「타이틀로 → 새 게임」 4회 뒤에도 memory()가 그대로다(geometries 106 · textures 21 · listeners 88 · audioNodes 44 · domNodes 194→199 뒤 고정). 프로덕션 빌드(preview)에서도 IME · 휠 · 오디오 · 더블클릭 결과가 dev와 같았다. README의 명령 · 쿼리 · 키 표는 코드와 맞았다. 확인하지 못한 것: 진짜 포인터 락의 허가 지연, Chrome에서 Esc keydown이 오는지, 실제 탭 숨김(헤드리스는 다른 탭을 앞으로 해도 visible로 남는다), Firefox · Safari의 휠 deltaMode와 자동 재생, 실제 모니터 사이 이동, 게임패드(브리프 §9 범위 밖 — 코드 없음). 정리: 띄운 서버 둘(PID 15206 · 18203과 부모)을 껐고, 임시 폴더 docs/_scratch/browser-robustness/(스크립트 · 빌드 · 스크린샷)를 지웠다.",
+  "findings": [
+    {
+      "severity": "major",
+      "area": "ui-app",
+      "file": "src/app/input.js",
+      "line": 213,
+      "title": "패널을 닫는 클릭을 더블클릭하면 두 번째 누름이 다시 잡힌 포인터 락으로 캔버스에 가서 캐스팅이 나간다(결과 「어창」 · × · 「계속하기」)",
+      "evidence": "재현(dblclick.mjs — 지움): 가짜 포인터 락을 썼다. 요청하면 마이크로태스크로 바로 허가해 실제 브라우저처럼 프레임 안에 락이 잡히게 했다. `?spot=lake_gravel&seed=3&time=8`에서 캔버스를 클릭해 락을 잡았다. 결과 패널(`skipToResult('carp',0.5)`)이 열리면 락이 풀리고, 1.5초 기다려 유예를 넘겼다. 그 뒤 「어창에 넣기」 행(640,446)을 더블클릭했다(두 누름 간격 150ms · 300ms).\n- 첫 클릭 직후: phase 'ready' · hold 1 · locked true · casts 0 · worm 20. 락 로그는 `…,off(app),req,on`이다. 첫 클릭의 click 처리기가 패널을 confirm으로 닫고, Game.js:512가 `requestLock({soft:true})`를 불러 락이 다시 잡혔다.\n- 두 번째 누름 뒤: phase 'casting' · casts 1 · worm 19 · power 0.17 · dist 9.8m이다.\n- 같은 결과가 낚시 자리의 채비 패널 × 더블클릭(dev 5305)과 프로덕션 빌드(preview 5306)의 결과 「어창」 더블클릭에서도 나왔다.\n코드 경로: 패널이 사라진 뒤 두 번째 mousedown은 락 대상인 캔버스로 간다. 그러면 `_onMouseDown`(input.js:213)이 `this.locked`라서 삼키지 않는다. 'Mouse0' 홀드와 pressed 에지를 내고(capture는 PANEL_CLOSED depth 0에서 이미 true), updateReady가 `primaryPressed`로 충전을 시작한다. mouseup의 `!primary`로 바로 캐스팅한다.\n메타 흐름 리뷰가 「결과 패널 더블클릭이 다음 캐스팅으로 새지 않았다」고 본 것은 락이 없는 헤드리스라서 두 번째 클릭이 규칙 ②(락 요청으로 삼킴)에 걸렸기 때문이다. 락이 있는 Chrome · Edge에서는 샌다.",
+      "playerImpact": "결과 패널에서 「어창에 넣기」 · 「방생」을 더블클릭하는 습관이 있으면 물고기를 넣자마자 원치 않은 약한 캐스팅(약 10m)이 나간다. 일시정지 「계속하기」나 패널 ×를 더블클릭해도 같다. 미끼가 하나 빠지고 줄을 다시 감아야 한다(회수하면 미끼는 돌아온다). 그 사이 짧은 캐스팅에 입질이 오면 그대로 그 자리에서 낚게 된다. QUALITY §1의 실패 조건 「결과 화면의 연타가 다음 화면에서 재화나 소모품을 쓰지 않는다」에 정면으로 걸린다.",
+      "suggestedFix": "패널이 닫힌 직후의 캔버스 누름을 규칙 ②처럼 삼킨다. app이 PANEL_CLOSED(depth 0 · by 'pointer'|'confirm')에서 `input.armClickGuard(ms)`를 부르고, InputCollector._onMouseDown은 `now < guardUntil`이면 그 버튼을 `_swallowed`에 넣고 return한다(뗄 때까지 홀드 · 에지 없음). 창은 OS 더블클릭 시간보다 길게 둔다(400–500ms · data/settings.js MOUSE.closeGuardMs). 덧붙여 `e.detail >= 2`인 mousedown이 창 안이면 무조건 삼켜도 된다. 회귀 테스트: 가짜 canvas · doc으로 InputCollector를 만든다. locked=true로 PANEL_CLOSED 직후 mousedown/mouseup을 보내면 buildFrame의 primary · primaryPressed가 false이고, 창이 지난 뒤의 누름은 정상으로 나가야 한다."
+    },
+    {
+      "severity": "minor",
+      "area": "ui-app",
+      "file": "src/app/input.js",
+      "line": 179,
+      "title": "타이틀(패널)을 마우스로 고르면 첫 클릭이 소리를 켜지 않는다 — 첫 제스처는 window keydown과 캔버스 mousedown만 본다",
+      "evidence": "재현(audio.mjs — 지움): preload로 AudioContext 생성을 기록했다. `/` 타이틀에서 「새 게임」 행(640,387)을 CDP 마우스로 클릭했다. 3초 뒤 play인데 `{AudioContext 0개 · memory().audioNodes 0 · userActivation.hasBeenActive true}`였다. 대조군으로 첫 제스처를 Enter로 하면 `{1개 · 'running' · audioNodes 44}`다. 프로덕션 빌드(5306)도 같았다.\n코드 경로: `onGesture`를 부르는 곳은 InputCollector._onKeyDown(window keydown)과 _onMouseDown뿐이다. _onMouseDown은 캔버스에만 붙어 있다(input.js:179). 타이틀 · 일시정지 같은 패널 층은 `pointer-events: auto`(style.css:222)라서 클릭이 캔버스에 닿지 않는다. 그래서 첫 키나 첫 캔버스 클릭 전까지 AudioContext를 만들지 않는다. window mousedown 리스너(input.js:181)가 이미 있지만 옆 버튼 막기에만 쓴다.",
+      "playerImpact": "마우스만으로 타이틀에서 「새 게임」 · 「이어하기」를 누르면, 그 클릭의 UI 소리와 집에 들어간 직후의 환경음이 나오지 않는다. 처음 키를 누르거나 캔버스를 클릭할 때 비로소 켜진다. README의 「사람이 확인할 것 — 소리: 첫 키 · 클릭에서 켜지고」를 Jay가 클릭으로 확인하면 어긋난다(QUALITY §5 「키와 클릭 모두」 · 계약 §11.3 「첫 사용자 제스처(keydown · mousedown)」).",
+      "suggestedFix": "window 수준 mousedown(이미 있는 input.js:181 리스너 또는 capture 단계 리스너)에서 버튼과 무관하게 `this.onGesture()`를 부른다. 패널 버튼의 mousedown은 preventDefault만 하고 전파는 막지 않으므로 window까지 온다. 회귀 테스트: 캔버스가 아닌 대상에서 온 mousedown(가짜 win에 dispatch)이 onGesture를 한 번 부르는지 본다."
+    },
+    {
+      "severity": "minor",
+      "area": "ui-app",
+      "file": "src/app/input.js",
+      "line": 252,
+      "title": "Ctrl+휠(브라우저 확대 · 트랙패드 핀치)이 드랙 조절로 먹히고 확대가 막힌다 — 휠 처리기가 modifier를 보지 않는다",
+      "evidence": "재현(input.mjs — 지움): `?spot=lake_gravel&seed=3&time=8&nopause=1`에서 rig.dragNotch 5로 시작했다. CDP mouseWheel(640,360)을 modifiers=2(Ctrl)로 보냈다. deltaY −100이면 6, 이어서 deltaY +300이면 3이 됐다. 페이지 리스너는 그 Ctrl+휠 이벤트를 `[ctrlKey true, defaultPrevented true]`로 봤다. 브라우저 확대 기본 동작이 취소된 것이다.\n코드 경로: `_onWheel`(input.js:252)은 무조건 `prevent(e)` 뒤 wheelToSteps로 눈금을 쌓는다. 키 처리기(:195)에는 있는 `ctrlKey||altKey||metaKey` 검사가 여기에는 없다. 계약 §11.3 「ctrlKey · altKey · metaKey가 눌린 이벤트는 건드리지 않는다(매핑 · preventDefault 둘 다 안 함)」에 어긋난다.",
+      "playerImpact": "Ctrl+휠로 화면을 확대/축소하려 하면 확대는 되지 않고, 드랙이 몇 눈금씩 조여지거나 풀린다. 노트북 정밀 터치패드의 두 손가락 핀치도 Chrome에서 Ctrl+휠로 오므로, 파이팅 중 실수로 핀치하면 드랙이 바뀐다.",
+      "suggestedFix": "`_onWheel` 첫 줄에 `if (e.ctrlKey || e.altKey || e.metaKey) return;`를 넣는다(prevent보다 앞). 회귀 테스트: ctrlKey가 켜진 가짜 휠 이벤트는 눈금을 쌓지 않고 preventDefault도 부르지 않는다."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/renderer.js",
+      "line": 91,
+      "title": "devicePixelRatio만 바뀌면(배율이 다른 모니터로 창 이동) 캔버스 해상도를 다시 잡지 않는다 — resize 이벤트에만 의존",
+      "evidence": "재현(resize.mjs — 지움): 페이지에서 resize 이벤트 수와 canvas.width/height를 쟀다. 크기를 그대로 두고 Emulation.setDeviceMetricsOverride로 deviceScaleFactor만 바꿨다.\n- 1280×720 · DPR 1: canvas 1280×720이다.\n- DPR만 2로: resize 0회 · canvas 1280×720 그대로다. 중간 화질 상한 1.5면 1920×1080이어야 한다.\n- 1920×1080 · DPR 2(크기 변화): resize 1회 · 2880×1620이다.\n- DPR만 1로: resize 1회 그대로 · canvas 2880×1620 그대로다. 1920×1080이어야 하니 픽셀 2.25배를 더 그린다.\n코드 경로: createRenderContext는 `window.addEventListener('resize', resize)`(renderer.js:91)만 구독한다. 픽셀 비율은 resize() 안에서만 다시 읽는다. FishPreview도 첫 사용 때의 devicePixelRatio를 고정한다(FishPreview.js:61).",
+      "playerImpact": "노트북(150%)과 외부 모니터(100%)를 오가며 창을 옮기면, 고배율 화면에서는 게임 화면이 흐릿하다. 저배율 화면에서는 필요 이상 큰 버퍼를 그려 fps가 떨어진다. 창 크기를 한 번 바꿔야 고쳐진다.",
+      "suggestedFix": "`matchMedia(`(resolution: ${devicePixelRatio}dppx)`)`의 change 리스너를 달고, 바뀔 때마다 resize()를 부른 뒤 새 DPR로 다시 단다. 또는 render()에서 `window.devicePixelRatio !== lastDpr`이면 resize()를 부른다(매 프레임 비교 한 번). dispose에서 리스너를 뗀다."
+    },
+    {
+      "severity": "minor",
+      "area": "ui-app",
+      "file": "src/app/Game.js",
+      "line": 502,
+      "title": "WebGL 컨텍스트를 잃은 동안 일시정지를 닫으면 안내 없는 빈 화면에서 멈춘다(알림은 수명이 지나 사라진다)",
+      "evidence": "재현(webgl.mjs — 지움): `?scene=lake&seed=3&time=12`에서 WEBGL_lose_context.loseContext()를 불렀다.\n- 일시정지 패널과 알림 「그래픽 장치가 초기화됐다 — 복구되면 「계속하기」로 돌아간다」가 떴다(errors ['webglcontextlost']).\n- 컨텍스트가 없는 채로 Esc를 누르니 패널이 닫혔다. 4초 뒤 `{panel false · notices [] · tick 40 고정}`이었다.\n- 스크린샷 ctxlost-resumed.png: 남색 빈 화면에 HUD와 「클릭해서 시점 고정」만 있다. 무엇이 멈췄는지 알리는 문구가 없다.\n- restoreContext() 뒤에는 알림 없이 tick 48로 바로 다시 돌았다(렌더 정상 · errors 정리).\n코드 경로: PANEL_CLOSED{pause}(Game.js:502)는 contextLost를 보지 않고 일시정지를 푼다. 그러면 _frame은 `!this.contextLost` 때문에 sim을 진행하지 않는다. 알림은 toast 수명대로 사라진다. webglcontextrestored(:543)는 알림 없이 바로 재개한다.",
+      "playerImpact": "GPU 드라이버 리셋 · 노트북 GPU 전환 · 절전 복귀로 컨텍스트를 잃었을 때, 갑자기 뜬 일시정지를 Esc나 「계속하기」로 바로 닫으면 화면이 빈 채 아무 입력도 먹지 않는다. 복구되면 예고 없이 다시 돈다(파이팅 중이었다면 그대로 이어진다). Chrome이 컨텍스트를 돌려주지 않는 경우(반복된 GPU 충돌)에는 설명 없이 빈 화면에 갇힌다.",
+      "suggestedFix": "contextLost인 동안에는 일시정지를 닫아도 sim 재개 대신 지속 안내를 띄운다. 예: ui.showFatal과 비슷한 반투명 층에 「그래픽 장치를 다시 잡는 중 — 잠시 기다려 주세요」. 아니면 PANEL_CLOSED{pause}에서 contextLost면 일시정지를 다시 연다. webglcontextrestored에서는 「복구됐다」 알림을 띄우고, 일시정지가 닫혀 있었다면 다시 연다(파이팅을 예고 없이 재개하지 않게)."
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "summary": "관점: 진행 · 경제 · 저장 · 화면 흐름. 실제 앱(dev 5303 · 헤드리스 Chromium을 CDP로 몰아 실제 키 · 마우스 · 탭 열고 닫기)과 Node 재현 스크립트로 확인했다. 재현된 결함은 넷이다. (1) 불러올 때마다 난수가 시드부터 다시 시작한다. 그래서 이어하기 할 때마다 첫 물고기가 똑같고, 트로피를 불러오기 반복으로 무한히 낚을 수 있다(major). (2) 탭을 둘 열면 오래된 탭이 숨거나 닫힐 때 새 탭의 진행을 덮어쓴다(major · 조건부 데이터 손실). (3) 충전 중 Tab · 포커스 잃음에서 돌아오면 원치 않은 캐스팅이 나간다(minor). (4) 같은 실행에서 「타이틀로 → 새 게임」을 하면 첫 플레이 안내가 다시 뜨지 않는다(minor). 반증을 시도했고 결함이 나오지 않은 것은 다음과 같다. 경제 보존 퍼즈(150판 × 400명령 — 결과 · 어창 교체 · 판매 · 구매 · 장착 · 라인 · 스킬 · 이동 · 수면 · 세이브 왕복)는 돈 · 경험치 장부와 이벤트 합 일치, 이중 지급 · 이중 판매 · 음수 · 어창 초과 · 보유 초과 장착 0건. 깨진 · 악의적 세이브 퍼즈(6,000개 변형 · __proto__/constructor 키 · 잘린 원문)는 throw 0 · 받아들인 1,101개로 GameSim이 돌고 NaN 0. 실제 앱 무작위 입력 퍼즈 2회(자리 · 타이틀부터 각 300동작 · blur 포함)는 막힘 · 막 남음 · 결과 패널 없는 결과 단계 · errors() 0. 결과 패널 더블클릭이 다음 캐스팅으로 새지 않았다. 확인하지 못한 것: 실제 포인터 락 · 실제 GPU에서 시간 경과에 따른 동작.",
+  "findings": [
+    {
+      "severity": "major",
+      "area": "sim",
+      "file": "src/sim/progression/save.js",
+      "line": 41,
+      "title": "세이브에 난수 상태가 없다 — 불러올 때마다 난수열이 처음부터라 이어하기 첫 물고기가 늘 같고, 트로피를 불러오기 반복으로 무한히 낚는다",
+      "evidence": "코드 경로: createSaveData는 seed만 저장한다(save.js:41 `seed: s.seed >>> 0` — state.rng 없음). GameSim 생성자는 `rng: seedRng(save.seed)`(GameSim.js:75 · 81)로 난수열을 위치 0부터 다시 시작한다. 걷기 · 자리 서기 · 캐스팅은 난수를 쓰지 않는다. 그래서 대기 틱마다 뽑는 입질 판정(rig.js:607) → pickSpecies → rollFish(z)가 매 세션 같은 값이 된다.\n재현 1(docs/_scratch/meta-flow/reload-rng.mjs — 지움): 시드 8개 × 세션 5번. 같은 호수 세이브를 parseSave → new GameSim({save, start:{spotId:'lake_gravel'}})로 불러왔고, 세션마다 시각을 +20분 옮기고 충전 틱도 20–48로 바꿨다. 8개 시드 모두 5세션의 첫 입질이 어종 · 무게 · 백분위까지 같았다. 예: seed 11은 israeliCarp 4.868kg pct 0.8692가 5번, seed 88은 skygager 0.839kg가 5번이다. 대기 틱만 충전 길이만큼 3–6틱 밀렸다.\n재현 2(reload-farm.mjs — 지움): 실제 파이팅(조절 봇)으로 랜딩 → keepCatch → createSaveData를 돌렸다. 다음 세션은 그 세이브를 불러와 같은 자리에서 첫 물고기를 낚았다. seed 105에서 세션 1–6 모두 steedBarbel 2.038kg pct 0.989 trophy(9,375원)였다. 어창은 1 → 6, 실패는 0이었다.",
+      "playerImpact": "같은 자리에서 이어하기를 하면 첫 물고기가 매번 같은 어종 · 같은 크기다. 낚시가 정해진 각본처럼 느껴진다. 첫 물고기가 트로피 · 레전드인 세이브(트로피 약 10% · 레전드 약 1%)는 「불러오기 → 자리 → 랜딩 → 어창」을 되풀이하면 그 물고기를 원하는 만큼 다시 얻는다(2배 경험치 · 높은 값).",
+      "suggestedFix": "SaveData에 난수 상태를 넣는다. createSaveData에 `rng: s.rng.s >>> 0`를 더한다. parseSave에서는 uint32로 정리하고, 없으면(옛 세이브) `seed ^ hash(day, tickInDay)` 같은 파생값을 쓴다. GameSim 생성자는 `rng: save && Number.isFinite(save.rng) ? {s: save.rng >>> 0} : seedRng(s0)`로 바꾼다. 계약 §3.7 SaveData에 필드를 더한다(오케스트레이터 몫). 회귀 테스트: 첫 물고기를 낚아 저장한 세이브를 불러오면 다음 첫 입질이 앞 세션과 다르고, 같은 세이브를 두 번 불러오면 저장 시점의 난수열을 잇는다."
+    },
+    {
+      "severity": "major",
+      "area": "ui-app",
+      "file": "src/app/Game.js",
+      "line": 556,
+      "title": "탭을 둘 열면 오래된 탭이 숨거나 닫힐 때 새 탭의 진행을 덮어쓴다(조건부 진행 손실)",
+      "evidence": "재현(docs/_scratch/meta-flow/s2.mjs — 지움): 헤드리스 Chromium 프로필 하나(같은 localStorage)에 탭을 둘 열었다.\n① 탭 A: `/` → Enter(새 게임) → 세이브 {level 1, xpTotal 0, home}\n② 탭 B: 같은 주소 → 타이틀 「이어하기 레벨 1 · 5,000원」 → Enter → play\n③ 탭 A를 앞으로 → 숨김 때 뜬 일시정지를 Esc로 닫음 → setBot('controlled') + step으로 진행 → 세이브 {level 2, xpTotal 70, landed 3, scene lake, tick 74593}\n④ 탭 A 닫기(Page.close → pagehide) → 세이브 그대로\n⑤ 오래된 탭 B 닫기 → 세이브가 {level 1, xpTotal 0, landed 0, scene home, tick 54324}로 되돌아감\n⑥ 새 탭 C 타이틀 「이어하기 레벨 1 · 5,000원」\n코드 경로: Game.saveNow(556)는 visibilitychange hidden · pagehide · beforeunload에서 screen === 'play'면 메모리 상태를 조건 없이 쓴다(_write 567). 다른 탭이 쓴 세이브를 감지하지 않는다 — window 'storage' 이벤트 구독도, 쓰기 전 savedAt · 작성자 비교도 없다. 같은 뿌리의 다른 경로도 있다. 세이브가 없을 때 연 탭은 타이틀에 그대로 두면 hasSave가 부팅 때 값(false)이다. 다른 탭이 세이브를 만든 뒤 그 탭에서 「새 게임」을 누르면 확인 없이 덮는다(백업은 남는다).",
+      "playerImpact": "갤러리 링크를 다시 눌러 새 탭에서 플레이하고 나중에 옛 탭을 닫거나 그 탭으로 돌아가면, 레벨 · 경험치 · 돈 · 어창이 옛 탭의 상태로 조용히 되돌아간다. 안내도 없다.",
+      "suggestedFix": "Game에서 window 'storage' 이벤트로 SAVE_KEY 변경(다른 탭의 쓰기)을 받으면 이 탭을 stale로 표시한다. 그 뒤 saveNow · _flushSave는 쓰지 않고, 알림(예: 「다른 탭에서 저장됐다」)과 함께 타이틀로 보낸다. 타이틀은 loadSave를 다시 읽어 hasSave와 이어하기를 최신으로 만든다. 또는 세이브에 탭별 writerId를 넣고, 쓰기 전에 지금 저장된 writerId · savedAt이 이 탭이 마지막으로 쓴 것과 다르면 쓰지 않는다. 회귀 테스트: 가짜 Storage 두 개로 Game 저장 규칙을 돌리거나 storage 이벤트를 흉내 낸다."
+    },
+    {
+      "severity": "minor",
+      "area": "ui-app",
+      "file": "src/app/Game.js",
+      "line": 493,
+      "title": "충전 중 Tab(채비 패널)이나 포커스 잃음 뒤 돌아오면 그 순간 원치 않은 캐스팅이 나간다",
+      "evidence": "재현 s4(지움): `?spot=lake_gravel&time=8&seed=3`에서 락 클릭 → 좌클릭 누름 700ms(charging · power 0.31) → Tab(채비 패널 열림 · 1.5초 동안 charging에서 멈춤)을 했다. 패널이 열린 채 마우스를 떼고 Tab으로 닫으면 300ms 뒤 phase 'casting', worm 20 → 19, casts 0 → 1이 됐다. 재현 s4b: charging 중 window blur → 일시정지 → 마우스 뗌 → Esc로 닫으면 바로 phase 'casting', worm −1이 됐다. 코드 경로: rig.updateCharging(rig.js:478)은 `!input.primary`를 「놓음」으로 친다. PANEL_OPENED(Game.js:493)는 setCapture(false)만 하고, _onFocusLost(430)는 releaseAll()로 Mouse0 홀드를 지운다. 그래서 다시 도는 첫 틱에 멈춰 있던 힘으로 캐스팅한다.",
+      "playerImpact": "충전 도중 미끼를 바꾸려고 Tab을 열었다 닫거나 알림 · Alt+Tab으로 창을 잠깐 떠났다 오면, 의도하지 않은 어중간한 힘의 캐스팅이 바로 나간다. 다시 감아 던져야 한다(미끼는 회수하면 돌아온다). QUALITY §1 「UI가 처리한 입력은 게임 입력으로 새지 않는다」에 어긋난다.",
+      "suggestedFix": "패널이 열리거나(PANEL_OPENED) 포커스를 잃을 때(_onFocusLost) rig.phase === 'charging'이면 충전을 취소한다(ready · power 0 · 미끼 소모 없음). 예: GameSim에 cancelCharge() 명령을 더하고 Game이 부른다. 또는 updateCharging이 캡처가 끊긴 뒤에는 새 primaryReleased 에지가 있어야 캐스팅하게 한다. 회귀 테스트: 충전 → 패널 열림 → 뗌 → 닫힘에서 캐스팅이 나가지 않고 casts · 미끼가 그대로다."
+    },
+    {
+      "severity": "minor",
+      "area": "ui-app",
+      "file": "src/ui/UIRoot.js",
+      "line": 77,
+      "title": "같은 실행에서 「타이틀로 → 새 게임」을 하면 첫 플레이 안내 카드가 다시 뜨지 않는다",
+      "evidence": "재현 s3(지움): 새 프로필 `/` → Enter(새 게임)를 했다. 3.5초 뒤 안내 카드 「시작」이 보였고 flags.hints는 {start:true}였다. 이어서 Esc → 「타이틀로」 → 「새 게임」 → 확인 「예」를 눌렀다. 4초 뒤 안내 카드는 hidden이었고, profile.flags.hints는 {}(새 프로필), stats.casts는 0이었다. 스크린샷 s3-second.png에도 집 화면에 안내 카드가 없었다(지움). 코드 경로: UIRoot._seenHints(77 — 실행 동안 유지되는 Set)를 _hintSeen(506)이 프로필 플래그보다 먼저 본다. 새 게임(SCENE_CHANGED{reason:'new'})에서 이를 비우는 곳이 없다.",
+      "playerImpact": "Jay가 같은 탭에서 처음부터 다시 해 보려고 새 게임을 하면 시작 · 스테이지 · 낚시 조작 · 입질 · 드랙 · 뜰채 안내가 나오지 않는다. 새로고침해야 다시 뜬다. 첫 경험을 다시 볼 수 없다.",
+      "suggestedFix": "UIRoot가 SCENE_CHANGED의 reason === 'new'를 받으면 _seenHints · _hint(지금 카드) · 알림 · 배너 대기열을 비운다. 회귀 테스트: 가짜 sim으로 안내를 한 번 본 뒤 new 장면 전환이 오면 같은 안내가 다시 후보가 된다."
+    }
+  ]
+}

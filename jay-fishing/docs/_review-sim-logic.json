@@ -1,0 +1,55 @@
+{
+  "summary": "시뮬레이션 결함 리뷰(src/sim · src/data · src/bot). 실제 GameSim과 봇으로 Node 재현 스크립트를 돌렸다. 표적 시나리오와 무작위 입력 퍼즈 두 종(퍼즈 18판 × 40,000틱, 봇+교란 81칸 × 4시간), 진행 봇 6~10일을 썼다. 예외 · NaN · 돈 음수 · 어창 초과 · 걷기 경계 이탈 · 장애물 끼임은 0이다. 재현된 결함은 다섯이다. (1) major: 찌 흘림 중(베일 열림) 챔질하면 베일이 열린 채 파이팅이 시작된다. 강 꼬리물에서 60판 중 60판이 중앙 4.1초 만에 바늘 빠짐으로 끝났다. 입질 · 캐스팅 단계에서 누른 R은 조용히 버려진다. (2) major: 바닥 채비 봉돌 밀림이 라인 길이를 보지 않는다. 봉돌이 라인 끝 너머(최대 +19m)로 가고, 챔질 첫 틱에 스풀 바닥으로 진다. (3) major: 계획 봇이 충전 도중 자리를 떠난 뒤 같은 자리 봇을 다시 쓰면 누름 에지가 나오지 않는다. 그래서 ready에서 최대 7게임시간 멈춘다(조절 봇 10일 중 12~24게임시간 손실 · README의 강 봇 주소). (4) minor: 입질 신호 세기가 1에서 잘린다. 그래서 낚시 숙련 2~3단계와 3단계 찌의 감도 효과가 화면 · 소리에서 0이다. (5) minor: 계획 봇은 무료 미끼 규칙을 발동시키지 못한다. 돈 2,000원 미만 · 미끼 0이면 하루 내내 서 있다. 한 행동의 반복으로 무한히 이기는 루프 · 재화 복사 · 판정 이중 적용은 찾지 못했다. 무지성 ≥ 조절 칸과 강 드랙 문제는 NOTES-BALANCE의 알려진 문제다.",
+  "findings": [
+    {
+      "severity": "major",
+      "area": "sim",
+      "file": "src/sim/fishing/rig.js",
+      "line": 319,
+      "title": "찌 흘림(베일 열림) 중 입질에 챔질하면 베일이 열린 채 파이팅이 시작된다 — 몇 초 안에 바늘 빠짐. 입질 · 캐스팅 단계의 R은 조용히 버려진다",
+      "evidence": "재현은 docs/_scratch/sim-logic/bail.mjs다(river_tailrace · L12 · 2단계 · 찌/새우 · 조절 손 · 시드 60개). 대기 중 R 한 번(힌트대로 흘림) 뒤 평소처럼 챔질했다. 출력: noDrift → landed 45 · lineBreak 5 · hookOff 10(중앙 18.6s) / drift → bailOpenAtHookSet=60/60 · hookOff 60/60 · 중앙 4.1s / 챔질 0.4초 뒤 R → landed 42 · lineBreak 6 · hookOff 12. bail3.mjs: 챔질 1.0초 뒤 R → landed 40 · lineBreak 6 · hookOff 14. bail2.mjs는 흐름 0.05인 lake_gravel에서 돌렸다. 흘림은 없지만 대기 중 R로 베일이 열린다. 입질 첫 틱에 R(닫기 시도)을 눌렀다. 출력: 'BAIL_CHANGED = 0 · RIG_BUSY = 0 · 챔질 뒤에도 베일 열림 37/40', 끝 = {hookOff:slack 31, hookOff:active 6, landed 3}. bail3.mjs: 'casting 단계에서 R: bailOpen=false · BAIL_CHANGED 0 · RIG_BUSY 0'. 코드: hookFish(rig.js 319–328)가 closeBail을 부르지 않는다. handleSettings(733)는 waiting · fighting에서만 베일을 토글한다. updateFight (a) 베일 열림이면 target 0이라 텐션 0 → 슬랙 누적 → HOOK.slackRate로 빠진다.",
+      "playerImpact": "브리프가 내세운 찌 흘림(힌트 「R로 베일을 열면 … 다시 R로 멈춘다」 · 흘림 중 입질 ×1.4)을 쓰면 걸린 물고기를 거의 다 놓친다. 챔질하는 순간 줄이 풀린 채라 텐션이 0이 되고, 약 4초 안에 바늘이 빠진다. HUD 정보 칩 「베일 열림(R)」을 보고 곧바로 R을 다시 눌러야만 산다. 입질이 오자 흘림을 멈추려고 누른 R은 알림도 없이 씹힌다(QUALITY §1). 봇은 베일을 쓰지 않아 측정에 한 번도 잡히지 않았다.",
+      "suggestedFix": "hookFish에서 createFight 전에 closeBail(ctx)를 부른다(챔질할 때 베일을 닫는다 — 실제 낚시와 같고 「편의성은 게임처럼」). handleSettings의 input.bail도 고친다. bite에서는 닫기만 받는다(흘림은 이미 멈췄다). casting · retrieving에서는 착수 · 대기 때 적용되게 미루거나 RIG_BUSY{action:'bail'}을 낸다. 회귀 테스트를 더한다: 대기 중 베일 열림 → forceBite → 챔질 → fight 첫 틱 rig.bailOpen === false."
+    },
+    {
+      "severity": "major",
+      "area": "sim",
+      "file": "src/sim/fishing/rig.js",
+      "line": 551,
+      "title": "바닥 채비의 봉돌 밀림(bottomSlip)이 라인 길이를 보지 않는다 — 봉돌이 라인 끝 너머로 가고, 챔질 첫 틱에 스풀 바닥(spoolEmpty)",
+      "evidence": "slip.mjs: 1단계 봉돌(버팀 0.5m/s)로 32m 완벽 캐스팅을 하고 debugNoBites로 대기했다. river_trench · lineM 60에서 600초 뒤 'dist 68.0m · bottomSlip true · lineM 60'이었다. 거기서 흰철갑상어 입질 → 챔질하면 'fight.dist=68.0 · spoolLeftM=-8.0' → FIGHT_END spoolEmpty 0초 · lineLostM 60. coast_channel · lineM 60: dist 73.8 · spoolLeftM -13.8 → spoolEmpty 0초. river_tailrace · lineM 60: dist 58.3 · spoolLeftM 1.7 → spoolEmpty 2.7초. 자연 입질은 slip2.mjs로 쟀다(조절 자리 봇 · 20시드 × 24시간 · 판매상 라인 감기 없음). river_tailrace 바닥/생미끼 2단계(sinker_2 버팀 0.9 < 흐름 1.32): 파이팅 532 중 챔질 때 dist > lineM−5가 12 · 최대 (dist − lineM) +19.0m · 1.5초 안 spoolEmpty 10. river_trench 1단계: 748 중 3 · 최대 +7.5m · 즉시 2. 코드: updateDrift의 경계 (4) `kind !== 1 || d <= min(maxDriftM, lineM − driftReserveM)`가 봉돌 밀림(kind 2)을 면제한다.",
+      "playerImpact": "흐르는 자리(강 꼬리물 · 깊은 홈 · 갯바위 조류 홈)에서 바닥 채비를 쓰고, 끊김으로 라인이 줄어 있을 때 일어난다. 봉돌이 스풀에 남은 줄보다 멀리 밀려간다. 다음 입질에 챔질하는 순간 줄이 다 풀린 상태로 시작한다. 그래서 그 틱에 라인 전부 · 바늘 · 봉돌 · 미끼 · 물고기를 한꺼번에 잃는다. 대응할 방법이 없다(QUALITY §2 「대응할 수 없는 손해」). 대기 중에도 줄이 스풀 용량보다 길게 나가 있다.",
+      "suggestedFix": "봉돌 밀림에도 라인 상한을 건다. 예: `d <= lineM − CAST.lineReserveM`(또는 driftReserveM)을 kind 2에도 적용해, 넘는 틱에 bottomSlip을 멈춘다. 회귀 테스트를 더한다: 바닥 세트 · 흐름 > 버팀 · lineM 60에서 10분 대기한 뒤 rig.dist ≤ lineM − reserve, 챔질 직후 spoolLeftM ≥ reserve."
+    },
+    {
+      "severity": "major",
+      "area": "sim",
+      "file": "src/bot/angler.js",
+      "line": 163,
+      "title": "계획 봇: 충전 도중 자리를 떠난 자리 봇(angler)을 다시 쓰면 누름 에지가 나오지 않는다 — ready에서 좌클릭을 쥔 채 몇 시간 멈춘다",
+      "evidence": "days3.mjs(최소 재현): angler로 10틱 → phase charging. 그 상태에서 exitFishing을 부르고 같은 자리에 다시 섰다. 같은 angler로 600틱을 돌린 출력: 'phase=ready · primary 누른 틱 600/600 · primaryPressed 에지 0 · 충전 시작 0'. 기억 prevPrimary=true가 남아 primaryPressed = primary && !prevPrimary가 영원히 false다. bot.js 196–198은 exitFishing 때 hand만 null로 돌리고 angler를 reset하지 않는다. anglerFor는 같은 키(세트|미끼|수심)로 그 객체를 다시 쓴다. 실제 진행 봇(days.mjs · 새 프로필 · 6일): controlled 시드 1의 캐스팅 사이 최대 간격은 7.02게임시간(d7 04:09 · river)이었다. days2.mjs 추적: 21.47 exitFishing → sellAll · refillLine 뒤 river_trench로 돌아왔다. 그 뒤 'd6 22.18 … 23.68 mode=fish spot=river_trench phase=ready canCast=true bait=live:17'에서 움직이지 않았다. days4.mjs(10일): controlled 시드 1/2/3이 ready에서 1분 넘게 멈춘 횟수는 6/6/4회, 합은 12.2/24.5/11.8게임시간(실제 31/61/29분)이다. 낚시 모드 약 229게임시간 중이다. basic은 0이다.",
+      "playerImpact": "README 첫 화면의 `?scene=river&level=12&gear=2&bot=controlled`나 `?bot=controlled`로 봇을 보면, 밤에 판매상을 다녀온 뒤 자리에 앉아 아무것도 하지 않는다. 최대 약 7게임시간(실제 약 17분) 동안이라 봇이 얼어 붙은 것으로 보인다. 진행 측정(M11 · M12 · M16)도 조절 봇의 낚시 시간 5~11%를 잃은 채로 쟀다(레벨 20 도달일이 실제보다 길게 나온다).",
+      "suggestedFix": "angler에서 손의 기억을 다시 맞춘다. 'ready'에 새로 들어온 틱(entered)이나 낚시 모드가 아니었다가 돌아온 틱에는 prevPrimary = false로 한다. 또는 bot.js가 손을 놓을 때(exitFishing 직전 · hand = null) hand.reset()을 부른다. 고친 뒤 npm run measure의 M11 · M12 · M16을 다시 잰다. 회귀 테스트를 더한다: 충전 중 exitFishing → 같은 자리 재진입 → 2초 안에 CAST_RELEASE."
+    },
+    {
+      "severity": "minor",
+      "area": "sim",
+      "file": "src/sim/fishing/rig.js",
+      "line": 345,
+      "title": "예신 세기 = clamp01(0.6 × signalMul)이 1에서 잘린다 — 낚시 숙련 2~3단계와 3단계 찌의 「감도」 효과가 화면 · 소리에서 0",
+      "evidence": "signal.mjs 출력(rigStats로 계산 · 세기 = min(1, 0.6 × signalMul)). 찌 2단계 로드+찌: 숙련 0 ×1.44 → 0.86 · 숙련 1 ×1.65 → 0.99 · 숙련 2 ×1.87 → 1.00(잘림) · 숙련 3 ×2.16 → 1.00(잘림). 찌 3단계: 숙련 0~3 모두 ×1.95~2.93 → 1.00(잘림). 바닥 3단계 로드: 숙련 2 ×1.69 → 1.00(잘림) · 숙련 3 ×1.95 → 1.00(잘림). 이 값은 BITE_NIBBLE.strength · rig.signal.strength로 나간다. TackleLayer(찌 잠김 · 초리 떨림 · 고리)와 AudioEngine(예신 소리)이 읽는 유일한 「감도」 값이다. 스킬 · 상점 미리보기는 mod.signalMul / stat.signal로 「×1.30 → ×1.50」처럼 늘어난 값을 보인다.",
+      "playerImpact": "3단계 장비를 끼우려면 낚시 숙련 2가 필요하다. 그런데 2단계 이상 찌 장비나 3단계 바닥 로드로는 숙련 3단계에 스킬 포인트(20점에 30칸)를 써도 입질 신호가 조금도 커지지 않는다. 3단계 찌(80,000원)의 감도 1.5도 3단계 로드와 함께면 차이가 없다. 미리보기는 좋아진다고 보여서 선택을 잘못 이끈다.",
+      "suggestedFix": "곱이 커도 포화하지 않게 바꾼다. 예: SIGNAL.baseStrength 0.6 → 0.34(최대 곱 2.93에서 1.0)로 낮추거나, 세기를 1 − 0.4^signalMul 같은 포화 곡선으로 바꾼다. 또는 숙련 3단계 효과를 다른 가독성 수단(예: 예신 지속 시간)으로 옮긴다. 미리보기도 실제 세기의 변화로 보인다."
+    },
+    {
+      "severity": "minor",
+      "area": "sim",
+      "file": "src/bot/angler.js",
+      "line": 102,
+      "title": "계획 봇이 무료 미끼 규칙을 쓰지 못한다 — 돈 2,000원 미만 · 미끼 0이면 하루 내내 자리에 서 있다",
+      "evidence": "botbait.mjs: lakeDay · basic 봇이다. 새 프로필에 돈 1,500 · 미끼 전부 0을 넣고 lake_gravel 06:00에서 시작했다. 22게임시간을 돌린 출력: '무료 미끼 지급 없음 · 첫 캐스팅 없음 · CAST_BLOCKED 0 · 끝 씬 lake 4.00시 · 미끼 전부 0'. 같은 조건에서 매초 좌클릭만 누르면 '무료 미끼 지급 6.00시 · 첫 캐스팅 6.00시'다. 원인: 무료 미끼(grantFreeBaitIfNeeded)는 캐스팅을 시도할 때(startCharge)와 집 도착 때만 지급된다. angler는 ready에서 `if (!rig.canCast) break;`로 누르지 않는다. planner의 vendorNeeded는 미끼 팩을 살 돈이 없으면 false다.",
+      "playerImpact": "돈이 바닥난 세이브에서 `?bot=1`을 켜거나 setBot(true)를 부르면, 봇이 다음 날 04:30까지(실제 약 55분) 자리에 서 있기만 한다. 게임은 첫 캐스팅 시도에 지렁이 10개를 주는데도 그렇다.",
+      "suggestedFix": "angler가 ready에서 castBlock === 'noBait'이면 몇 초에 한 번 좌클릭을 눌러 본다. sim이 무료 미끼를 주거나 CAST_BLOCKED를 낸다. 또는 planner가 FREE_BAIT 조건(돈 < moneyBelow · 미끼 0 · 오늘 미지급)이면 캐스팅 시도를 목표로 삼는다."
+    }
+  ]
+}
