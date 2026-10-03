@@ -51,6 +51,7 @@ export function buildDex(panel, state) {
   panel.addInfo(wrap);
 
   const k = sim.ctx && sim.ctx.mods ? sim.ctx.mods.knowledge : 0;
+  const firstCard = panel.items.length;
   for (const c of cards) {
     const card = el('div', 'dex-card' + (c.caught ? ' is-caught' : '') + (c.fantasy ? ' is-fantasy' : ''));
     const url = fp && fp.ok ? fp.snapshot(c.speciesId, 0, { silhouette: !c.caught, size: SNAP_SIZE }) : '';
@@ -72,7 +73,10 @@ export function buildDex(panel, state) {
     panel.addItem(card, { onFocus: () => showDexDetail(panel, c, view, info, k) }, grid);
   }
   if (!cards.length) grid.append(el('div', 'empty', t('dex.empty')));
-  else showDexDetail(panel, cards[0], view, info, k);   // 포커스가 스테이지 선택에 있어도 상세가 비지 않게
+  else {
+    panel.setGrid(firstCard, panel.items.length - 1);   // 4열 카드 — ←→ 이웃 · ↑↓ 한 줄(widgets)
+    showDexDetail(panel, cards[0], view, info, k);   // 포커스가 스테이지 선택에 있어도 상세가 비지 않게
+  }   // 포커스가 스테이지 선택에 있어도 상세가 비지 않게
 }
 
 /** @param {any} panel @param {any} c DexCard @param {HTMLElement} view @param {HTMLElement} info @param {number} k */
@@ -88,6 +92,14 @@ function showDexDetail(panel, c, view, info, k) {
   const head = el('div', 'dex-title', t('species.' + c.speciesId));
   if (c.fantasy) head.append(el('span', 'dex-tag', t('dex.fantasy')));
   info.append(head);
+  // 전설 어종의 출현 조건(시간대 + 날씨) — 처음부터 보인다(리뷰 수정: 게임 안 어디에도 없었고 PC 날씨 문면은 반대로 일렀다)
+  const fz = /** @type {any} */ (sp).fantasy;
+  if (fz && Array.isArray(fz.bands) && Array.isArray(fz.weather)) {
+    info.append(line('dex.appear', t('dex.appearWhen', {
+      bands: fz.bands.map((b) => t('band.' + b)).join(t('list.sep')),
+      weather: fz.weather.map((w) => t('weather.' + w)).join(t('list.sep')),
+    }), 'is-fantasy'));
+  }
   info.append(line('dex.style', t('style.' + sp.style)));
   info.append(line('dex.layers', c.layers.map(l => t('layer.' + l)).join(t('list.sep'))));
   info.append(line('dex.method', t('method.' + sp.method)));
@@ -111,6 +123,7 @@ function showDexDetail(panel, c, view, info, k) {
   if (c.baits) info.append(line('dex.baits', c.baits.map(b => t('bait.' + b)).join(t('list.sep'))));
   else info.append(line('dex.baits', t('dex.needKnowledge', { n: 2 }), 'is-dim'));
   info.append(line('dex.trophyAt', t('unit.kg', { v: fmt(c.trophyKg, 2) })));
+  info.append(line('dex.unitPrice', t('unit.wonPerKg', { v: fmt(unitPrice(panel.sim, c.speciesId)) })));
   if (c.caught && c.entry) {
     const e = c.entry;
     info.append(line('dex.count', fmt(e.count)));
@@ -122,6 +135,17 @@ function showDexDetail(panel, c, view, info, k) {
   } else {
     info.append(el('div', 'dex-line is-dim', t('dex.notCaught')));
   }
+}
+
+/**
+ * 어종 단가(원/kg — 흥정 반영). 판매가는 무게 × 단가 × 등급 보너스 × 흥정(§7.9) — 브리프 §3.1 「어종 단가」.
+ * @param {any} sim GameSim @param {string} speciesId @returns {number}
+ */
+export function unitPrice(sim, speciesId) {
+  let per = 0;
+  try { per = getSpecies(speciesId).pricePerKg; } catch (e) { void e; }
+  const mul = sim && sim.ctx && sim.ctx.mods && Number.isFinite(sim.ctx.mods.sellMul) ? sim.ctx.mods.sellMul : 1;
+  return Math.round((Number.isFinite(per) ? per : 0) * mul);
 }
 
 /** @param {string} key @param {string} value @param {string} [cls] */
@@ -188,7 +212,8 @@ export function addGearRow(panel, item, memo) {
   const sub = el('div', 'row-sub');
   sub.append(el('span', '', t('shop.slot.' + item.slot)));
   if (item.owned > 0) sub.append(el('span', 'row-owned', t('shop.owned', { n: item.owned })));
-  if (sets.length) sub.append(el('span', 'row-set', t('shop.forSet', { set: t('set.' + target) })));
+  // 「(◀▶)」는 세트를 바꿀 수 있을 때만(리뷰 수정 — 한 세트뿐인 줄에서 ◀▶ 는 탭을 바꿨다)
+  if (sets.length) sub.append(el('span', 'row-set', t(sets.length > 1 ? 'shop.forSet' : 'shop.forSetOne', { set: t('set.' + target) })));
   row.append(sub);
   const pv = item.previews && item.previews[target];
   if (pv) row.append(rigCompare(pv.before, pv.after));

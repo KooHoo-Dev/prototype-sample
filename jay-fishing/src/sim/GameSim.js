@@ -17,7 +17,7 @@ import { addHours, advanceClock, deriveClock, nextBandStart, nextWake, rederiveC
 import { currentWeatherOf, refreshWeather, weatherPayload } from './weather.js';
 import { arriveHome, placePlayer, updateWalk } from './world.js';
 import {
-  createRigState, enterSpot, exitSpot, forceBite, forceFight, keepCatch as rigKeepCatch, releaseCatch as rigReleaseCatch,
+  cancelCharge as rigCancelCharge, createRigState, enterSpot, exitSpot, forceBite, forceFight, keepCatch as rigKeepCatch, releaseCatch as rigReleaseCatch,
   setFloatDepth, skipToResult, syncRig, updateRig,
 } from './fishing/rig.js';
 import { biteRate, biteWeights, meanWait } from './fishing/biteModel.js';
@@ -78,7 +78,8 @@ export class GameSim {
     const state = /** @type {any} */ ({
       version: STATE_VERSION,
       seed: s0,
-      rng: seedRng(s0),
+      // 세이브의 난수 상태를 잇는다(리뷰 수정 — 시드에서 다시 시작하면 불러올 때마다 같은 난수열: 이어하기 첫 물고기가 늘 같았다)
+      rng: save && typeof save.rng === 'number' && Number.isFinite(save.rng) ? { s: save.rng >>> 0 } : seedRng(s0),
       tick: 0,
       scene,
       clock: deriveClock(day, tickInDay, 'clear'),
@@ -316,6 +317,11 @@ export class GameSim {
   exitFishing() {
     if (this.state.player.mode !== 'fish') return fail('notHere');
     return this._done(exitSpot(this.ctx));
+  }
+
+  /** charging 만 — 캐스팅 없이 ready 로(미끼 · casts 소모 없음 · 이벤트 없음). 아니면 notHere */
+  cancelCharge() {
+    return this._done(rigCancelCharge(this.ctx));
   }
 
   /** result 단계만. 어창이 차 있으면 opts.swapUid 가 있어야 한다 @param {{swapUid?:number}} [opts] */

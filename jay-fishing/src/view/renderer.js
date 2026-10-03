@@ -1,6 +1,7 @@
 // OWNER: P5 — 계약 §6.9 · §9.2 · §9.11
 // 렌더러: sRGB 출력 · ACESFilmic · 노출 1.0 · PCF 그림자(QUALITY[q].shadows) · 픽셀 비율 = min(devicePixelRatio, QUALITY[q].pixelRatio ≤ 2)
-//   · 후처리 없음 · 캔버스 크기의 주인(window resize 구독) · prewarm = 지금 장면의 셰이더 미리 컴파일.
+//   · 후처리 없음 · 캔버스 크기의 주인(window resize 구독 + render 마다 devicePixelRatio 비교 — DPR 만 바뀌면 resize 가 오지 않는다)
+//   · prewarm = 지금 장면의 셰이더 미리 컴파일.
 // 물 반사 · 안개 입자 · 빗방울 수는 레이어(WorldLayer)가 rc.quality 를 보고 바꾼다.
 
 import * as THREE from 'three';
@@ -42,6 +43,8 @@ export function createRenderContext(canvas, settings) {
   scene.add(camera);   // 1인칭 로드(viewModel — P6)가 카메라의 자식으로 그려지게
 
   let disposed = false;
+  /** 마지막 resize 때의 devicePixelRatio — 배율이 다른 모니터로 창을 옮기면 resize 이벤트 없이 DPR 만 바뀐다(render 가 비교해 다시 잡는다) */
+  let lastDpr = 0;
   /** @type {RenderContext} */
   const rc = {
     renderer,
@@ -65,6 +68,7 @@ export function createRenderContext(canvas, settings) {
     },
     render() {
       if (disposed) return;
+      if ((window.devicePixelRatio || 1) !== lastDpr) resize();
       renderer.render(scene, camera);
     },
     prewarm() {
@@ -82,7 +86,8 @@ export function createRenderContext(canvas, settings) {
     if (disposed) return;
     const w = Math.max(1, window.innerWidth);
     const h = Math.max(1, window.innerHeight);
-    const pr = Math.min(window.devicePixelRatio || 1, QUALITY[rc.quality].pixelRatio, MAX_PIXEL_RATIO);
+    lastDpr = window.devicePixelRatio || 1;
+    const pr = Math.min(lastDpr, QUALITY[rc.quality].pixelRatio, MAX_PIXEL_RATIO);
     if (renderer.getPixelRatio() !== pr) renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
     camera.aspect = w / h;

@@ -18,12 +18,13 @@
       "slug": "jay-fishing",
       "dir": "jay-fishing",
       "title": "Jay Fishing v0.1",
-      "summary": "1인칭 3D 낚시 RPG. 집(PC로 정비)과 실제 장소를 본뜬 스테이지 3곳을 오가며 찌낚시 · 바닥낚시로 잡고, 드랙 · 텐션 손맛으로 랜딩해 팔고 레벨과 장비로 더 큰 물고기를 노린다.",
+      "summary": "1인칭 3D 낚시 RPG. 집(PC로 상점 · 날씨 · 도감 · 스킬)과 충주호 · 조가사키 갯바위 · 컬럼비아강을 오가며 찌낚시 · 바닥낚시로 36종을 잡는다. 드랙 · 텐션 · 펌핑의 파이팅, 시간대 · 날씨별 어종, 트로피 · 레전드, 레벨 20 · 스킬 10종 · 장비 3단계.",
       "port": 5300,
-      "status": "making",
+      "status": "playable",
       "public": false,
       "created": "2026-10-02",
-      "controls": "키보드 · 마우스"
+      "controls": "키보드 · 마우스",
+      "notes": "갯바위 · 강은 레벨 5 · 10에 열린다 — 바로 보려면 README 「바로 해 보기」의 ?scene · ?spot 쿼리."
     }
   ]
 }

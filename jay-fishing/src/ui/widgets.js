@@ -252,6 +252,8 @@ export class PanelBase {
     this.focus = 0;
     /** @type {MenuItem[]} */
     this.items = [];
+    /** @type {{from:number, to:number}|null} 격자로 놓인 항목 범위(setGrid — 렌더마다 다시 정한다) */
+    this.grid = null;
     this.isOpen = false;
 
     this.el = el('section', `panel panel-${id} size-${opts.size || 'm'}`);
@@ -325,6 +327,7 @@ export class PanelBase {
     }
     const keepScroll = this.body.scrollTop;
     this.items = [];
+    this.grid = null;
     this.body.replaceChildren();
     this.build(this.tabs ? this.tabs[this.tab] : null);
     if (this.focus >= this.items.length) this.focus = Math.max(0, this.items.length - 1);
@@ -357,6 +360,48 @@ export class PanelBase {
     this.items.push(item);
     (parent || this.body).append(node);
     return item;
+  }
+
+  /**
+   * items[from..to] 은 가로로 이어지는 격자(도감 카드 · 지도 카드) — ←→ 는 이웃 항목, ↑↓ 는 한 줄 위 · 아래(리뷰 수정:
+   * 4열 도감에서 ↓ 가 오른쪽으로 가고 → 가 탭을 바꿨다 · 가로 지도 카드에서 → 가 듣지 않았다). build 안에서 부른다.
+   * @param {number} from @param {number} to
+   */
+  setGrid(from, to) {
+    this.grid = to >= from && from >= 0 ? { from, to } : null;
+  }
+
+  /** 지금 배치에서 격자 한 줄의 항목 수(첫 항목과 같은 높이의 수 — 배치가 없으면 한 줄) @returns {number} */
+  _gridCols() {
+    const g = /** @type {{from:number, to:number}} */ (this.grid);
+    const top0 = this.items[g.from].el.offsetTop;
+    let c = 0;
+    for (let i = g.from; i <= g.to && this.items[i].el.offsetTop === top0; i++) c++;
+    return Math.max(1, c);
+  }
+
+  /** 격자 안 포커스의 화살표 @param {string} code @returns {boolean} 처리했는가 */
+  _gridKey(code) {
+    const g = this.grid;
+    const i = this.focus;
+    if (!g || i < g.from || i > g.to || g.to >= this.items.length) return false;
+    const n = g.to - g.from + 1;
+    const k = i - g.from;
+    const cols = this._gridCols();
+    switch (code) {
+      case 'ArrowLeft': if (k > 0) this.setFocus(i - 1); return true;
+      case 'ArrowRight': if (k < n - 1) this.setFocus(i + 1); return true;
+      case 'ArrowUp':
+        if (k - cols >= 0) this.setFocus(i - cols);
+        else if (g.from > 0) this.setFocus(g.from - 1);
+        return true;
+      case 'ArrowDown':
+        if (k + cols < n) this.setFocus(i + cols);
+        else if (g.to + 1 < this.items.length) this.setFocus(g.to + 1);
+        else if (Math.floor(k / cols) < Math.floor((n - 1) / cols)) this.setFocus(g.to);
+        return true;
+      default: return false;
+    }
   }
 
   /** 포커스 없는 정보 줄 @param {HTMLElement} node @param {HTMLElement} [parent] */
@@ -417,6 +462,7 @@ export class PanelBase {
   handleKey(e, grace) {
     if (this.onKey(e, grace)) return true;
     const c = e.code;
+    if (this._gridKey(c)) return true;
     switch (c) {
       case 'ArrowUp': this.setFocus(this.focus - 1); return true;
       case 'ArrowDown': this.setFocus(this.focus + 1); return true;

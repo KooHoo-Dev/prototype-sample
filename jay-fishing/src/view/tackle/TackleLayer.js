@@ -9,6 +9,7 @@ import { EV } from '../../core/events.js';
 import { angleDiff, clamp, clamp01, damp, fwdX, fwdZ, lerp, smoothstep } from '../../core/math.js';
 import { SIGNAL } from '../../data/bite.js';
 import { GEAR_BY_ID } from '../../data/gear.js';
+import { SPOTS_BY_ID } from '../../data/stages/index.js';
 import { LEFT_HAND_CAM, NET_HOOP_R, netPose, fishPoint } from './netPose.js';
 
 // ── 연출 상수(§9.7 의 값은 계약 그대로)
@@ -80,6 +81,8 @@ const NIGHT_GLOW = new THREE.Color('#8dff3a');
 const DAY_TOP = new THREE.Color('#ff5a14');
 const RING_WHITE = new THREE.Color('#ffffff');
 const RING_PERFECT = new THREE.Color('#ffe03a');
+/** 착수점이 장애물 띠 안(dist ≥ spot.snag.fromM) — 완벽보다 앞선다(HUD 「장애물 띠」와 같은 판정) */
+const RING_SNAG = new THREE.Color('#ff4a3a');
 const HOOKSET_KICK = 14 * DEG;            // 챔질: 로드가 확 선다(0.25초에 풀린다)
 const HOOKSET_TIME = 0.25;
 const LINE_COLOR = '#f1efe2';
@@ -1042,7 +1045,9 @@ export class TackleLayer {
       this._ring.position.set(rig.aimPreview.x, RING_Y, rig.aimPreview.z);
       this._ring.scale.setScalar(floatScale(Math.hypot(rig.aimPreview.x - rig.origin.x, rig.aimPreview.z - rig.origin.z)));
       const perfect = rig.power >= rig.perfectFrom;
-      this._ringMat.color.copy(perfect ? RING_PERFECT : RING_WHITE);
+      const spot = SPOTS_BY_ID[state.player.spotId];
+      const snag = !!(spot && rig.aimPreview.distM >= spot.snag.fromM);
+      this._ringMat.color.copy(snag ? RING_SNAG : perfect ? RING_PERFECT : RING_WHITE);
       this._ringMat.opacity = perfect ? 1 : 0.85;
       this._ring.visible = true;
     }

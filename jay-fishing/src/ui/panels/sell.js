@@ -5,7 +5,7 @@
 import { HOLD } from '../../data/economy.js';
 import { t, has } from '../i18n.js';
 import { PanelBase, el, fmt, won } from '../widgets.js';
-import { addBaitRow, addLineRow } from './shared.js';
+import { addBaitRow, addLineRow, unitPrice } from './shared.js';
 
 class SellPanel extends PanelBase {
   /** @param {import('../widgets.js').PanelCtx} ctx */
@@ -57,7 +57,9 @@ class SellPanel extends PanelBase {
       if (rec.tier === 'legend') name.append(el('span', 'stars is-legend', '★★'));
       else if (rec.tier === 'trophy') name.append(el('span', 'stars is-trophy', '★'));
       head.append(name, el('span', 'row-price', won(priceOf.get(rec.uid) ?? rec.price)));
-      row.append(head, el('div', 'row-sub', t('sell.fish', { cm: fmt(rec.lengthCm, 1), kg: fmt(rec.weightKg, 3), tier: t('tier.' + rec.tier) })));
+      // 어종 단가(원/kg · 흥정 반영 — 브리프 §3.1 · 리뷰 수정)
+      const unit = t('unit.wonPerKg', { v: fmt(unitPrice(sim, rec.speciesId)) });
+      row.append(head, el('div', 'row-sub', t('sell.fish', { cm: fmt(rec.lengthCm, 1), kg: fmt(rec.weightKg, 3), tier: t('tier.' + rec.tier), unit })));
       this.addItem(row, {
         activate: () => {
           const r = sim.sellOne(rec.uid);

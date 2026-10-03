@@ -3,14 +3,14 @@
 // 부팅 표식은 ./bootMarker.js 의 markReady · markError 만 쓴다(§11.9).
 
 import { markError, markReady } from './bootMarker.js';
-import { DT, MAX_FRAME_DT } from '../core/constants.js';
+import { DT, MAX_FRAME_DT, SAVE_KEY } from '../core/constants.js';
 import { EV, EventBus } from '../core/events.js';
 import { NEUTRAL_INPUT, makeInput } from '../core/inputFrame.js';
 import { KEYBINDS } from '../data/keybinds.js';
 import { getStage } from '../data/stages/index.js';
 import { GameSim } from '../sim/GameSim.js';
 import { makeDevProfile } from '../sim/progression/profile.js';
-import { createSaveData, sanitizeSettings } from '../sim/progression/save.js';
+import { createSaveData, parseSave, sanitizeSettings } from '../sim/progression/save.js';
 import { createBot } from '../bot/bot.js';
 import { createRenderContext } from '../view/renderer.js';
 import { WorldLayer } from '../view/WorldLayer.js';
@@ -73,6 +73,14 @@ export class Game {
     this.devSession = false;
     this.saveFlag = false;
     this.saveFailToasted = false;
+    /** @type {Storage|undefined} 저장소(테스트용 주입 — 기본 localStorage) */
+    this.store = undefined;
+    /** 이 탭이 알고 있는 SAVE_KEY 원문(부팅 때 읽은 것 · 이 탭이 마지막으로 쓴 것) — 다르면 다른 탭이 썼다 @type {string|null} */
+    this._saveRaw = null;
+    /** 다른 탭이 세이브를 썼다 — 이 탭은 더 쓰지 않고 타이틀로 간다(리뷰 수정: 옛 탭이 숨거나 닫힐 때 새 탭의 진행을 덮었다) */
+    this.staleSave = false;
+    /** 마지막으로 연 타이틀의 hasSave */
+    this._titleHasSave = false;
     this.acc = { acc: 0 };
     this._lastEsc = -Infinity;
     /** @type {Array<{n:number, res:() => void}>} */
@@ -153,9 +161,7 @@ export class Game {
     const bus = new EventBus();
     this.bus = bus;
     this.devSession = q.devSession;
-    this.canSave = storage.canPersist();
-    const loaded = q.devSession ? { save: null, broken: false, future: false, raw: null } : storage.loadSave();
-    this.loaded = loaded;
+    const loaded = this._initSave();
     const seed = q.seed ?? newSeed();
     const profile = q.level !== null || q.money !== null || q.gear !== null ? makeDevProfile({ level: q.level, money: q.money, gear: q.gear }) : undefined;
     const sim = new GameSim({
@@ -249,12 +255,28 @@ export class Game {
     this.loop.start();
   }
 
-  _openTitle(hasSave, broken = false, future = false) {
+  /** 저장소 확인 · 세이브 읽기 · 이 탭이 아는 원문 기억(개발 세션은 읽지 않는다) @returns {{save:Object|null, broken:boolean, future:boolean, raw:string|null}} */
+  _initSave() {
+    this.canSave = storage.canPersist(this.store);
+    const loaded = this.devSession ? { save: null, broken: false, future: false, raw: null } : storage.loadSave(this.store);
+    this.loaded = loaded;
+    // loadSave 가 손상 원문을 지운 뒤의 값(지우지 못했으면 그 원문 — 백업은 이미 됐다)
+    this._saveRaw = this.devSession ? null : storage.readSaveRaw(this.store);
+    return loaded;
+  }
+
+  /**
+   * @param {boolean} hasSave @param {boolean} [broken] @param {boolean} [future]
+   * @param {{stale?:boolean, info?:{level:number, money:number}|null}} [extra] 다른 탭의 세이브(stale) — 이어하기 문면 · 확인 본문은 info 로
+   */
+  _openTitle(hasSave, broken = false, future = false, extra = {}) {
     const notes = [];
+    if (extra.stale) notes.push('title.staleSave');
     if (!this.canSave) notes.push('title.noStorage');
     if (this._touchOnly()) notes.push('title.needInput');
+    this._titleHasSave = !!hasSave;
     this.ui.setTitleNotes(notes);
-    this.ui.openPanel('title', { hasSave, saveBroken: broken, saveFuture: future });
+    this.ui.openPanel('title', { hasSave, saveBroken: broken, saveFuture: future, stale: !!extra.stale, saveInfo: extra.info || null });
   }
 
   /** @returns {boolean} 터치만 있는 기기(§11.4) */
@@ -310,6 +332,11 @@ export class Game {
 
   continueGame() {
     if (this.screens.busy || this.screens.screen !== 'title') return;
+    if (this.staleSave) {
+      // 메모리의 상태는 다른 탭보다 옛것이다 — 다시 읽어 최신 세이브로 부팅한다(타이틀이 최신 「이어하기」를 보인다)
+      this._reloadPage();
+      return;
+    }
     this.input.requestLock({ soft: true });   // 사용자 활성화 처리기 안(Enter · 클릭)
     this.screens.transition(() => {
       this._closeAllPanels();
@@ -321,8 +348,17 @@ export class Game {
   /** 확인(confirm{danger})은 ui 가 이미 받았다 — 두 번째 확인 없이 백업 → sim.newGame → 막 */
   newGame() {
     if (this.screens.busy) return;
+    if (!this.devSession && this.canSave && this.screens.screen === 'title' && !this._titleHasSave
+        && storage.readSaveRaw(this.store) !== null && storage.readSaveRaw(this.store) !== this._saveRaw) {
+      // 세이브 없이 연 타이틀인데 그 사이 다른 탭이 세이브를 만들었다 — 확인 없이 덮지 않는다(타이틀을 최신으로)
+      this._markStale();
+      return;
+    }
     this.input.requestLock({ soft: true });
-    if (!this.devSession) storage.backupSave();
+    if (!this.devSession) {
+      storage.backupSave(undefined, this.store);
+      this._adoptSave();   // 사용자가 새 게임을 골랐다 — 지금 세이브(백업됨) 위에 이 탭이 쓴다
+    }
     this.sim.newGame(newSeed());
     this.screens.transition(() => {
       this._closeAllPanels();
@@ -338,6 +374,7 @@ export class Game {
   quitToTitle() {
     if (this.screens.busy) return;
     this.saveNow();
+    if (this.staleSave) return;   // 저장하려다 다른 탭의 세이브를 만났다 — _markStale 이 이미 타이틀로 보냈다
     this.screens.transition(() => {
       this.input.releaseLock();
       this.screens.go('title');
@@ -429,6 +466,7 @@ export class Game {
 
   _onFocusLost() {
     this.input.releaseAll();
+    this._cancelCharge();
     if (this.query.nopause) return;
     if (this.screens.busy) {
       this.screens.requestPause();
@@ -437,6 +475,16 @@ export class Game {
     }
     this.audio.setPaused(true);
     if (this.screens.screen === 'play') this.openPause();
+  }
+
+  /**
+   * 충전 중에 패널이 열리거나 포커스를 잃었다 — 캐스팅 없이 ready 로(최종 게이트: 그동안 뗀 좌클릭이 닫힌 뒤
+   * 「놓음」으로 읽혀 원치 않은 캐스팅이 나갔다). 고정 상태(fixture)는 sim 을 바꾸지 않고, 봇은 마우스를 쓰지 않으니 두지 않는다.
+   */
+  _cancelCharge() {
+    const sim = this.sim;
+    if (!sim || this.fixtureMode || this.bot || sim.state.rig.phase !== 'charging') return;
+    sim.cancelCharge();
   }
 
   _onPendingPause() {
@@ -453,6 +501,7 @@ export class Game {
       this.input.setCapture(!this.ui.isBlocking());
       this.acc.acc = 0;
       this.loop && this.loop.resetClock();
+      if (this.staleSave) this._leaveStale();   // 막 동안 다른 탭이 썼다
     }
   }
 
@@ -493,6 +542,7 @@ export class Game {
     on(EV.PANEL_OPENED, (p) => {
       this.input.setCapture(false);
       this.input.releaseLock();
+      this._cancelCharge();
       if (p.panel === 'pause' && !this.paused) {
         this.paused = true;
         this.audio.setPaused(true);
@@ -502,11 +552,13 @@ export class Game {
     on(EV.PANEL_CLOSED, (p) => {
       if (p.panel === 'pause' && this.paused) {
         this.paused = false;
-        this.audio.setPaused(false);
+        this.audio.setPaused(this.contextLost);   // 컨텍스트를 잃은 동안은 화면 · sim 이 멈춰 있다 — 소리도
         this.acc.acc = 0;
         if (this.loop) this.loop.resetClock();
         bus.emit(EV.PAUSED, { on: false });
       }
+      // 클릭 · Enter 로 닫았다 — 그 클릭의 더블클릭 두 번째 누름이 다시 잡힌 락으로 캔버스에 와도 캐스팅하지 않는다(리뷰 수정)
+      if (p.depth === 0 && (p.by === 'confirm' || p.by === 'pointer')) this.input.armClickGuard();
       if (p.depth === 0 && !this.screens.busy) {
         this.input.setCapture(true);
         if ((p.by === 'confirm' || p.by === 'pointer') && this.screens.screen === 'play') this.input.requestLock({ soft: p.by === 'confirm' });
@@ -533,11 +585,13 @@ export class Game {
     });
     this._listen(w, 'pagehide', () => this.saveNow());
     this._listen(w, 'beforeunload', () => this.saveNow());
+    this._listen(w, 'storage', (e) => this._onStorage(e));
     this._listen(this.canvas, 'webglcontextlost', (e) => {
       if (e.cancelable) e.preventDefault();   // 복구를 허락한다
       this.contextLost = true;
       this._pushError('webglcontextlost');
-      this.ui.toast('hud.notice.contextLost');   // §11.10 「일시정지 + 알림」(W2 통합 — 키 추가)
+      // §11.10 「일시정지 + 알림」 — 알림은 복구될 때까지 남는다(리뷰 수정: 일시정지를 닫으면 안내 없는 빈 화면에서 멈춰 있었다)
+      this.ui.setSticky('hud.notice.contextLost');
       if (this.screens.screen === 'play') this.openPause();
     });
     this._listen(this.canvas, 'webglcontextrestored', () => {
@@ -547,12 +601,70 @@ export class Game {
       if (i >= 0) this.errors.splice(i, 1);
       this.acc.acc = 0;
       if (this.loop) this.loop.resetClock();
+      this.ui.setSticky(null);
+      this.ui.toast('hud.notice.contextRestored');
+      // 일시정지가 닫혀 있었다면 다시 연다 — 파이팅이 예고 없이 이어지지 않게(다른 패널이 막고 있으면 그대로 멈춰 있다)
+      if (this.screens.screen === 'play' && !this.screens.busy && !this.ui.isBlocking()) this.openPause();
+      else if (!this.paused) this.audio.setPaused(false);
     });
+  }
+
+  // ── 여러 탭(리뷰 수정 — 같은 localStorage 를 쓰는 탭이 서로의 진행을 덮지 않게)
+
+  /** 다른 탭이 SAVE_KEY 를 바꿨다(window 'storage' — 쓴 탭에는 오지 않는다) @param {StorageEvent} e */
+  _onStorage(e) {
+    if (this.devSession || !this.canSave) return;
+    const key = e ? e.key : null;
+    if (key !== SAVE_KEY && key !== null) return;   // null = clear()
+    if (storage.readSaveRaw(this.store) === this._saveRaw) return;
+    this._markStale();
+  }
+
+  /** 이 탭의 메모리 상태는 옛것이다 — 더 쓰지 않고 타이틀로(이미 타이틀이면 최신 세이브로 다시 그린다) */
+  _markStale() {
+    if (this.devSession) return;
+    this.staleSave = true;
+    this.saveFlag = false;
+    this._leaveStale();
+  }
+
+  _leaveStale() {
+    const sc = this.screens;
+    if (!sc || !this.ui || sc.busy) return;   // 막이 끝나면 _onTransition 이 다시 부른다
+    if (sc.screen === 'play') {
+      this._closeAllPanels();
+      this.input.releaseLock();
+      sc.go('title');
+    }
+    if (sc.screen !== 'title') return;
+    const raw = storage.readSaveRaw(this.store);
+    const parsed = raw === null ? null : parseSave(raw);
+    const save = parsed && parsed.save ? /** @type {any} */ (parsed.save) : null;
+    const info = save && save.profile ? { level: save.profile.level, money: save.profile.money } : null;
+    this._openTitle(raw !== null, false, false, { stale: true, info });
+    // 숨은 탭에서 일어났으면(다른 탭이 저장) 일시정지가 닫히며 켠 소리를 다시 끈다 — 돌아오면 'focus' 가 켠다
+    const d = /** @type {any} */ (this.doc);
+    if (d && (d.hidden || (typeof d.hasFocus === 'function' && !d.hasFocus()))) this.audio.setPaused(true);
+  }
+
+  /** 지금 저장된 세이브를 이 탭의 것으로 삼는다(새 게임 — 사용자가 덮기로 골랐다) */
+  _adoptSave() {
+    this._saveRaw = storage.readSaveRaw(this.store);
+    this.staleSave = false;
+  }
+
+  _reloadPage() {
+    const loc = this.win && this.win.location;
+    try {
+      if (loc && typeof loc.reload === 'function') loc.reload();
+    } catch (e) {
+      this._pushError('reload: ' + errText(e));
+    }
   }
 
   // ── 저장(§11.5)
 
-  /** 숨김 · 닫힘 · 타이틀로 — 플래그와 무관하게 즉시(play · 개발 세션 아님) */
+  /** 숨김 · 닫힘 · 타이틀로 — 플래그와 무관하게 즉시(play · 개발 세션 아님 · 다른 탭이 쓴 뒤가 아님) */
   saveNow() {
     if (this.screens && this.screens.screen === 'play' && !this.devSession && !this.fixtureMode) this._write();
   }
@@ -565,9 +677,18 @@ export class Game {
   }
 
   _write() {
-    if (!this.canSave) return;
-    const ok = storage.writeSave(createSaveData(this.sim.state, Date.now()));
-    if (!ok && !this.saveFailToasted) {
+    if (!this.canSave || this.staleSave) return;
+    // 쓰기 전에 지금 저장된 원문이 이 탭이 아는 것인지 본다 — 'storage' 이벤트를 놓쳐도(다른 프로세스 · 숨은 탭) 남의 진행을 덮지 않는다
+    const r = storage.writeSaveChecked(createSaveData(this.sim.state, Date.now()), this._saveRaw, this.store);
+    if (r.ok) {
+      this._saveRaw = r.raw;
+      return;
+    }
+    if (r.conflict) {
+      this._markStale();
+      return;
+    }
+    if (!this.saveFailToasted) {
       this.saveFailToasted = true;
       this.ui.toast('save.failed');
     }

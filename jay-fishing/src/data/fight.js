@@ -21,6 +21,7 @@ export const FIGHT = {
   rodStressAt: 0.85, lineDangerAt: 0.85, rodBreakHold: 0.3,          // 🔒 rodBreakHold — 세운 로드가 상한을 0.3초 넘겨야 부러진다
   tiredStamina: 0.3, tiredDepth: 0.4, midDepthFrac: 0.5, depthSpeed: 1.5,
   bearingSlack: 0.35, bearingMinDist: 3.0, nearArc: 0.3, nearDist: 8, maxArc: 1.3,
+  snagArcPad: 0.05,                                                  // 장애물 띠 판정의 각도 여유 — 띠는 facing ± spot.arc 에만 그려진다(§9.10 · 리뷰 수정)
 };
 export const HOOK = {                                                // 🔒 전부
   slackFracLine: 0.06, slackFracFish: 0.2, slackRate: 0.06, slackCap: 4, slackDecay: 2,

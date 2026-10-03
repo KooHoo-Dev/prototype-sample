@@ -126,6 +126,7 @@
 #ui-root .cast-bar.is-perfect .cast-fill { background: rgba(255, 211, 77, 0.75); }
 #ui-root .cast-mark { position: absolute; top: -1px; bottom: -1px; width: 3px; margin-left: -1px; background: #fff; }
 #ui-root .cast-text { margin-top: 3px; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
+#ui-root .cast-text.is-snag { color: var(--danger); }
 
 #ui-root .hud-net {
   position: absolute; left: 50%; bottom: clamp(150px, 27vh, 300px); transform: translateX(-50%);
@@ -192,6 +193,7 @@
   text-align: center; font-size: var(--fs);
 }
 #ui-root .notice-fail { border-color: var(--danger); background: rgba(52, 14, 12, 0.9); }
+#ui-root .notice-sticky { border-color: var(--gold); }
 #ui-root .notice-title { font-weight: 800; color: #ffc7c0; }
 #ui-root .notice-line { font-size: var(--fs-s); }
 #ui-root .notice-cause { color: var(--warn); }
@@ -397,6 +399,7 @@
 #ui-root .dex-line { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-s); padding: 1px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
 #ui-root .dex-line .k { color: var(--fg-dim); flex: none; }
 #ui-root .dex-line .v { text-align: right; font-weight: 700; }
+#ui-root .dex-line.is-fantasy .v { color: var(--gold); }
 #ui-root .timebars { display: flex; gap: 5px; align-items: flex-end; }
 #ui-root .tb-col { display: flex; flex-direction: column; align-items: center; gap: 1px; }
 #ui-root .tb { width: 1.2em; border-radius: 2px; background: var(--accent); }

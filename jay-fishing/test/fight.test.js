@@ -438,6 +438,29 @@ test('장애물 띠 — dist ≥ snag.fromM 이면 inSnag · SNAG · 쓸림이 s
   assert.equal(env.ctx.events.filter(e => e.name === EV.SNAG).at(-1).payload.on, false);
 });
 
+test('장애물 띠(리뷰 수정): 띠가 그려진 부채꼴(facing ± arc) 밖의 방위에서는 fromM 너머라도 inSnag 가 아니다 · 쓸리지 않는다', () => {
+  for (const spotId of ['lake_shallows', 'coast_channel', 'river_tailrace']) {
+    const spot = getSpot(spotId);
+    // 부채꼴 안(가장자리)은 띠 — 시작부터 inSnag
+    const edge = setup({ speciesId: 'crucian', spotId, notch: 20, dist: spot.snag.fromM + 4, bearing: spot.facing + spot.arc });
+    assert.equal(edge.f.inSnag, true, `${spotId} 가장자리`);
+    // 부채꼴 밖(arc + 0.12rad) — 띠가 없는 옆 수면
+    for (const sign of [-1, 1]) {
+      const env = setup({ speciesId: 'crucian', spotId, notch: 20, dist: spot.snag.fromM + 4, bearing: spot.facing + sign * (spot.arc + 0.12) });
+      env.f.halfArc = FIGHT.maxArc;
+      assert.equal(env.f.inSnag, false, `${spotId} 옆 수면(${sign})`);
+      assert.equal(countEvents(env.ctx.events, EV.SNAG), 0);
+      force(env, 'hold');
+      for (let i = 0; i < 60; i++) {
+        env.f.bearing = spot.facing + sign * (spot.arc + 0.12);   // 방위를 붙잡아 둔다(hold 의 옆걸음 없이)
+        tick(env);
+        assert.equal(env.f.inSnag, false);
+      }
+      assert.equal(env.f.abrasion, 0, `${spotId}: 띠 밖에서 라인이 쓸렸다`);
+    }
+  }
+});
+
 test('밸런스 게이트: 쓸림이 maxAbrasion 에 닿은 라인을 물고기가 끌고 나가면 끊긴다(cause abrasion) · 감아 들이는 중이면 버틴다', () => {
   const spot = getSpot('lake_gravel');
   // 띠 안 · 드랙 아주 낮게(조절 봇이 유효 강도에 맞춰 내린 모양) → 물고기가 계속 끌고 나간다 → 몇 분짜리 헛판이 아니라 끊김

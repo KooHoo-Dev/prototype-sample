@@ -260,3 +260,42 @@ test('계획: skillOrder · buyOrder 는 프로필에서 다시 읽는다 — �
   assert.ok(!eq.some(([s, slot]) => s === 'float' && slot === 'reel'), JSON.stringify(eq));
   assert.throws(() => createPlanner(/** @type {any} */ ('nope')));
 });
+
+// ── 리뷰 수정
+
+test('자리 봇(리뷰 수정): 충전 중 exitFishing → 같은 자리에 다시 서면 같은 손으로 2초 안에 다시 던진다(쥔 채 멈추지 않는다)', async () => {
+  const { createAngler } = await import('../src/bot/angler.js');
+  const { EV } = await import('../src/core/events.js');
+  const { sim, listen } = makeSim({ seed: 1, start: { spotId: 'lake_gravel', hour: 8 }, session: { ignoreGates: true, devSession: true } });
+  let releases = 0;
+  listen((name) => { if (name === EV.CAST_RELEASE) releases++; });
+  const a = createAngler({ strategy: 'controlled', seed: 1 });
+  let n = 0;
+  while (sim.state.rig.phase !== 'charging') { sim.step(a.decide(sim.state, sim).input); assert.ok(++n < 120); }
+  sim.step(a.decide(sim.state, sim).input);                     // 충전 중(손은 버튼을 쥐고 있다)
+  assert.equal(sim.state.rig.phase, 'charging');
+  assert.ok(sim.exitFishing().ok);
+  assert.ok(sim.debugGotoSpot('lake_gravel').ok);
+  assert.equal(sim.state.rig.phase, 'ready');
+  for (let i = 0; i < Math.round(2 / DT) && releases === 0; i++) sim.step(a.decide(sim.state, sim).input);
+  assert.equal(releases, 1, `다시 서고 2초 동안 던지지 않았다 — phase ${sim.state.rig.phase}`);
+});
+
+test('자리 봇(리뷰 수정): 돈 < 무료 미끼 기준 · 미끼 0 이면 눌러 보아 무료 미끼를 받고 바로 던진다(lakeDay · basic)', async () => {
+  const { EV } = await import('../src/core/events.js');
+  const { createNewProfile } = await import('../src/sim/progression/profile.js');
+  const { FREE_BAIT } = await import('../src/data/economy.js');
+  const profile = createNewProfile();
+  profile.money = FREE_BAIT.moneyBelow - 500;
+  for (const k of Object.keys(profile.baits)) profile.baits[k] = 0;
+  const { sim, listen } = makeSim({ seed: 3, profile, start: { spotId: 'lake_gravel', hour: 6 } });
+  let granted = -1;
+  let released = -1;
+  listen((name, p, s) => {
+    if (name === EV.BAIT_GRANTED && granted < 0) granted = s.state.tick;
+    if (name === EV.CAST_RELEASE && released < 0) released = s.state.tick;
+  });
+  runBot(sim, createBot({ strategy: 'basic', seed: 3, plan: 'lakeDay' }), { maxTicks: Math.round(20 / DT) });
+  assert.ok(granted >= 0, '20초 동안 무료 미끼를 받지 못했다');
+  assert.ok(released >= granted, '무료 미끼를 받고도 던지지 않았다');
+});

@@ -125,7 +125,7 @@
  * @property {number} maxDriftM        흘림 최대 거리
  * @property {number|null} farFromM    이 거리 이상에서 풀의 farMul이 붙는다(먼 곳에 사는 어종 — 흘림 · 원투의 보상). 없으면 null
  * @property {Vec2} flow               흐름(m/s, 월드 XZ). 호수는 거의 0
- * @property {{fromM:number, rate:number}} snag   장애물 띠: 물고기 거리가 fromM 이상이면 라인 쓸림 rate(/s)
+ * @property {{fromM:number, rate:number}} snag   장애물 띠: 물고기 거리 ≥ fromM 이고 |angleDiff(facing, bearing)| ≤ arc + FIGHT.snagArcPad 이면 라인 쓸림 rate(/s) — fight.js inSnagAt
  * @property {number} abrasion         0..1 바닥 암반 정도 — 잠수(dive)형 쓸림 배율
  * @property {'mud'|'gravel'|'rock'|'sand'} bottom    연출 · 도감
  * @property {Array<{id:SpeciesId, w:number, farMul?:number}>} pool   어종 풀과 풍부도(판타지 어종은 w를 쓰지 않는다 — 1로 적는다). farMul: dist ≥ farFromM일 때 w에 곱한다(없으면 1)
@@ -313,7 +313,7 @@
  * @property {number} lineKg           세트의 라인 강도(스킬 배율 포함)
  * @property {number} lineEffKg        lineKg × (1 − abrasion)
  * @property {number} abrasion         0..FIGHT.maxAbrasion
- * @property {boolean} inSnag          dist ≥ spot.snag.fromM
+ * @property {boolean} inSnag          inSnagAt(spot, dist, bearing) = dist ≥ spot.snag.fromM && |angleDiff(spot.facing, bearing)| ≤ spot.arc + FIGHT.snagArcPad(리뷰 수정)
  * @property {number} inCover          0..1 잠수형이 바닥/바위에 박힌 정도(≥ 0.5 이면 HUD 「박힘」)
  * @property {number} rodLift          0..1 (0 숙임 · 1 세움)
  * @property {boolean} rodUp           rodLift ≥ 0.5
@@ -529,6 +529,7 @@
  * @property {number} version          SAVE_VERSION = 1
  * @property {number} savedAt          ms(app이 넣는다)
  * @property {number} seed
+ * @property {number} rng              state.rng.s(uint32) — 불러오면 난수열을 잇는다(리뷰 수정). 없거나 깨진 옛 세이브는 parseSave 가 hash32(seed, day, tickInDay, 0x5a7e)로 채운다
  * @property {{day:number, tickInDay:number}} clock
  * @property {SceneId} scene           불러오면 이 씬의 spawn에서 걷기 모드로 시작
  * @property {Profile} profile

@@ -182,6 +182,8 @@ export class FishLayer {
     this._havePrev = false;
     this._pose = { hand: new THREE.Vector3(), dir: new THREE.Vector3(), hoop: new THREE.Vector3(), target: new THREE.Vector3(), handleLen: 1, reach: 1, p: 0 };
     this._exitOpacity = 0;
+    /** 실패 순간의 V자 물결 불투명도(0 = 그때 보이지 않았다) — 퇴장 동안 그림자와 같이 옅어진다 */
+    this._exitWake = 0;
     this._mtx = { a: new THREE.Matrix4(), b: new THREE.Matrix4() };
     this._viewYaw = 0;
     this._wakeL = 0;
@@ -214,6 +216,7 @@ export class FishLayer {
     this._mode = 'exit';
     this._exitT = 0;
     this._exitOpacity = this._shadowMat.opacity;
+    this._exitWake = this._wake.visible ? this._wakeMat.opacity : 0;
     if (this._model) this._model.visible = false;
   }
 
@@ -311,7 +314,7 @@ export class FishLayer {
     if (this._mode === 'none') return;
 
     if (this._mode === 'exit') {
-      // 끊긴 물고기: 그림자가 옅어지며 달아난다
+      // 끊긴 물고기: 그림자가 옅어지며 달아난다 · V자 물결은 실패 순간에 보이던 것만 같은 비율로 옅어진다
       this._exitT += fdt;
       const k = clamp01(this._exitT / FADE_OUT);
       this._shadow.position.x += -Math.sin(this._heading) * ESCAPE_SPEED * fdt;
@@ -321,7 +324,8 @@ export class FishLayer {
       this._shadowMat.opacity = this._exitOpacity * (1 - k);
       this._tailMat.opacity = this._shadowMat.opacity;
       this._tailPivot.rotation.y = 0.6 * Math.sin(this.time * Math.PI * 2 * 6);
-      this._wake.visible = true;
+      this._wakeMat.opacity = this._exitWake * (1 - k);
+      this._wake.visible = this._exitWake > 0;
       this._mud.visible = false;
       if (k >= 1) this._clear();
       return;

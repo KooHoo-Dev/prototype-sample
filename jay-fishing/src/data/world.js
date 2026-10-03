@@ -5,6 +5,8 @@ export const WORLD = {
   walkSpeed: 3.2, backMul: 0.7, strafeMul: 0.85, accel: 16,   // m/s · 뒤 · 옆 배율 · m/s² (멈출 때도 같은 가속)
   eyeHeight: 1.65,                                            // 브리프 §5
   spotRadius: 1.4, interactFov: 1.22,                         // 자리 진입 반경(m) · 상호작용 시선 반각(rad, 70°)
+  interactDepthM: 0.5,                                        // 상호작용 물체의 깊이 — 시선은 점 또는 점 뒤(approach → 점 방향) 0.5m 중 하나를 interactFov 안에 두면 된다
+                                                              // (벽 위의 점 — 문 — 에 몸을 붙이면 점은 옆 90°에 있어 프롬프트가 사라지던 것 · 리뷰 수정)
   exitStepBack: 1.0,                                          // 낚시 자리에서 일어나면 facing 반대로 1m
   pitchMin: -1.40, pitchMax: 1.40,
 };

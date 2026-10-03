@@ -308,6 +308,16 @@ function startBite(ctx, speciesId, roll) {
   setPhase(r, 'bite');
 }
 
+/**
+ * 예신 세기 = 1 − (1 − SIGNAL.baseStrength)^signalMul — 곱 1 이면 baseStrength 그대로, 곱이 커질수록 1 에 다가가되 닿지 않는다.
+ * (리뷰 수정: clamp01(base × 곱)은 곱 1.67 에서 1 로 잘려 숙련 2 · 3단계와 3단계 찌의 「감도」가 화면 · 소리에서 0 이었다)
+ * @param {number} signalMul @returns {number} 0..1
+ */
+export function signalStrength(signalMul) {
+  const m = Number.isFinite(signalMul) && signalMul > 0 ? signalMul : 1;
+  return clamp01(1 - Math.pow(1 - SIGNAL.baseStrength, m));
+}
+
 /** @param {RigState} r */
 function clearSignalKeepBite(r) {
   const b = r.bite;
@@ -315,12 +325,17 @@ function clearSignalKeepBite(r) {
   r.bite = b;
 }
 
-/** 챔질 성공 → HOOK_SET → createFight → fighting @param {SimCtx} ctx @param {string} speciesId @param {FishRoll} roll */
+/**
+ * 챔질 성공 → HOOK_SET → createFight → fighting.
+ * 챔질하면 베일이 닫힌다(흘림 중 입질도 — 열린 채 시작하면 텐션 0 · 슬랙으로 몇 초 안에 바늘이 빠진다). 파이팅 중 R 로 다시 열 수 있다.
+ * @param {SimCtx} ctx @param {string} speciesId @param {FishRoll} roll
+ */
 function hookFish(ctx, speciesId, roll) {
   const s = ctx.state;
   const r = s.rig;
   ctx.emit(EV.HOOK_SET, { weightKg: roll.weightKg, lengthCm: roll.lengthCm });
   clearSignal(r);
+  closeBail(ctx);
   r.drifting = false;
   r.bottomSlip = false;
   s.fight = fightImpl.createFight(ctx, { speciesId, roll, dist: r.dist, bearing: r.bearing, depth: r.baitDepth });
@@ -342,7 +357,7 @@ function updateBite(ctx, input) {
       b.touched = true;
       g.kind = 'nibble';
       g.t = 0;
-      g.strength = clamp01(SIGNAL.baseStrength * ctx.rigStats.signalMul);
+      g.strength = signalStrength(ctx.rigStats.signalMul);
       g.count = index + 1;
       ctx.emit(EV.BITE_NIBBLE, { set: r.set, strength: g.strength, index });
     }
@@ -545,10 +560,13 @@ function updateDrift(ctx) {
   const dz = nz - r.origin.z;
   const d = Math.hypot(dx, dz);
   const lineM = s.profile.sets[r.set].lineM;
+  // (4) 라인 상한 — 흘림은 min(maxDriftM, lineM − driftReserveM) · 봉돌 밀림은 캐스팅과 같은 lineM − lineReserveM
+  //     (리뷰 수정: 봉돌이 스풀에 남은 줄보다 멀리 밀려 챔질 첫 틱에 spoolEmpty 로 끝나던 것)
+  const maxD = kind === 1 ? Math.min(spot.maxDriftM, lineM - CAST.driftReserveM) : lineM - CAST.lineReserveM;
   const ok = Math.abs(angleDiff(spot.facing, yawOf(dx, dz))) <= CAST.driftArc
     && d >= spot.minCastM
     && nz < shoreZAt(ctx.stage.shore, nx) - CAST.shoreMarginM
-    && (kind !== 1 || d <= Math.min(spot.maxDriftM, lineM - CAST.driftReserveM));
+    && d <= maxD;
   if (!ok) {
     r.drifting = false;
     r.bottomSlip = false;
@@ -618,13 +636,17 @@ function updateRetrieving(ctx, input) {
     return;
   }
   const d = r.dist - ctx.rigStats.reelSpeedMS * CAST.emptyRetrieveMul * DT;
-  if (d <= CAST.retrieveDoneM) {
+  const nx = r.origin.x + fwdX(r.bearing) * d;
+  const nz = r.origin.z + fwdZ(r.bearing) * d;
+  // 물가(흘림 경계 (3)과 같은 여유)에 닿으면 회수 끝 — 리뷰 수정 중 발견: 해안선이 휜 방위에서는 retrieveDoneM(2m) 전에
+  // 찌가 땅 위로 올라와, 거기서 손을 떼면 땅 위의 찌로 대기(입질)했다
+  if (d <= CAST.retrieveDoneM || !(nz < shoreZAt(ctx.stage.shore, nx) - CAST.shoreMarginM)) {
     retrieveNow(ctx);
     return;
   }
   r.dist = d;
-  r.bobber.x = r.origin.x + fwdX(r.bearing) * d;
-  r.bobber.z = r.origin.z + fwdZ(r.bearing) * d;
+  r.bobber.x = nx;
+  r.bobber.z = nz;
   recomputeWater(ctx);
 }
 
@@ -730,10 +752,23 @@ function handleSettings(ctx, input) {
     const lineKg = ctx.rigStats.lineKg;
     ctx.emit(EV.DRAG_CHANGED, { notch: r.dragNotch, notches: r.dragNotches, kg: r.dragKg, ratio: lineKg > 0 ? r.dragKg / lineKg : 0 });
   }
-  if (input.bail && (r.phase === 'waiting' || r.phase === 'fighting')) {
-    r.bailOpen = !r.bailOpen;
-    if (!r.bailOpen) r.drifting = false;
-    ctx.emit(EV.BAIL_CHANGED, { open: r.bailOpen });
+  if (input.bail) {
+    switch (r.phase) {
+      // 물속 채비 · 파이팅 — 토글. casting · retrieving 에서 바꾼 상태는 착수 · 대기 때 흘림에 적용된다
+      case 'casting': case 'waiting': case 'retrieving': case 'fighting':
+        r.bailOpen = !r.bailOpen;
+        if (!r.bailOpen) r.drifting = false;
+        ctx.emit(EV.BAIL_CHANGED, { open: r.bailOpen });
+        break;
+      // 입질 — 흘림은 이미 멈췄다. 닫기만 받는다(챔질도 베일을 닫는다)
+      case 'bite':
+        if (r.bailOpen) closeBail(ctx);
+        else ctx.emit(EV.RIG_BUSY, { action: 'bail' });
+        break;
+      // ready · charging(물속 채비 없음 — ready 는 베일이 닫혀 있다) · failed · landing
+      default:
+        ctx.emit(EV.RIG_BUSY, { action: 'bail' });
+    }
   }
 }
 
@@ -807,6 +842,24 @@ export function exitSpot(ctx) {
     r.origin = { x: back.x, z: back.z };
     placeBobber(ctx, 0, r.aimYaw);
   }
+  return { ok: true };
+}
+
+/**
+ * 충전을 캐스팅 없이 끝낸다(§6.3 cancelCharge — 최종 게이트 추가). charging → ready · power 0 · aimPreview null.
+ * 미끼 · stats.casts 는 놓을 때 쓰므로 소모가 없다. 이벤트는 없다(view · ui 는 phase 를 읽는다).
+ * app 이 패널을 열거나 포커스를 잃을 때 부른다 — 그동안 뗀 좌클릭이 닫힌 뒤 「놓음」으로 읽혀 원치 않은 캐스팅이 나가던 것을 막는다.
+ * @param {SimCtx} ctx @returns {{ok:boolean, reason?:string}}
+ */
+export function cancelCharge(ctx) {
+  const s = ctx.state;
+  const r = s.rig;
+  if (s.player.mode !== 'fish' || r.phase !== 'charging') return { ok: false, reason: 'notHere' };
+  setPhase(r, 'ready');
+  r.power = 0;
+  r.aimPreview = null;
+  r.castBuffered = false;
+  updateCanCast(ctx);
   return { ok: true };
 }
 

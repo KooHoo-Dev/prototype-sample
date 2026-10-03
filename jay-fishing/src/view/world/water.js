@@ -289,10 +289,12 @@ export function createWater({ stage, depthTex, reflTex }) {
   return { mesh, uniforms, geo, mat };
 }
 
+const REFLECT_IDLE = 16;   // 반사가 꺼진 동안의 렌더 타깃 크기(처음 크기 — GPU 자원은 쓰일 때만 잡힌다)
+
 /** 평면 반사(high) — 물 메시의 onBeforeRender 에서 거울 카메라로 ½ 해상도 렌더 타깃에 그린다(three Reflector 방식) */
 export class PlanarReflection {
   constructor() {
-    this.rt = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType });
+    this.rt = new THREE.WebGLRenderTarget(REFLECT_IDLE, REFLECT_IDLE, { type: THREE.HalfFloatType });
     this.rt.texture.generateMipmaps = false;
     this.virtualCam = new THREE.PerspectiveCamera();
     this.texMatrix = new THREE.Matrix4();
@@ -371,6 +373,11 @@ export class PlanarReflection {
     const vp = /** @type {any} */ (cam).viewport;
     if (vp !== undefined) renderer.state.viewport(vp);
     this._rendering = false;
+  }
+
+  /** 반사를 끈 동안 ½ 해상도 버퍼를 놓는다 — 크기가 바뀌면 setSize 가 GPU 자원을 해제하고, 다시 켜면 render 가 키운다 */
+  release() {
+    if (this.rt.width !== REFLECT_IDLE || this.rt.height !== REFLECT_IDLE) this.rt.setSize(REFLECT_IDLE, REFLECT_IDLE);
   }
 
   dispose() { this.rt.dispose(); }

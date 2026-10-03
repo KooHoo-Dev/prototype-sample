@@ -79,6 +79,32 @@ export function writeSave(save, storage) {
   }
 }
 
+/** 지금 SAVE_KEY 의 원문(없거나 못 읽으면 null) — 던지지 않는다 @param {Storage} [storage] @returns {string|null} */
+export function readSaveRaw(storage) {
+  const s = ls(storage);
+  return s ? getItem(s, SAVE_KEY) : null;
+}
+
+/**
+ * 지금 저장된 원문이 expectRaw(이 탭이 마지막으로 읽거나 쓴 것)와 같을 때만 쓴다 — 여러 탭이 같은 세이브를 덮지 않게(리뷰 수정).
+ * 다르면 쓰지 않고 {conflict:true}(다른 탭이 썼다). 성공하면 {ok:true, raw:쓴 원문}.
+ * @param {Object} save SaveData @param {string|null} expectRaw @param {Storage} [storage]
+ * @returns {{ok:boolean, conflict:boolean, raw:string|null}}
+ */
+export function writeSaveChecked(save, expectRaw, storage) {
+  const s = ls(storage);
+  if (!s) return { ok: false, conflict: false, raw: null };
+  const cur = getItem(s, SAVE_KEY);
+  if (cur !== expectRaw) return { ok: false, conflict: true, raw: cur };
+  try {
+    const text = serializeSave(/** @type {any} */ (save));
+    s.setItem(SAVE_KEY, text);
+    return { ok: true, conflict: false, raw: text };
+  } catch {
+    return { ok: false, conflict: false, raw: cur };
+  }
+}
+
 /** @param {Storage} s @returns {number[]} */
 function readIndex(s) {
   const raw = getItem(s, INDEX_KEY);

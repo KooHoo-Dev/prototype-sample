@@ -21,6 +21,11 @@ export const PREVENT_CODES = ['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft
 const MAX_PENDING_EDGES = 32;
 /** 휠 · 키 드랙 눈금의 한 틱 상한(절댓값) */
 const MAX_STEPS = 20;
+/**
+ * 패널이 닫힌 직후 캔버스 누름을 삼키는 창(ms — 리뷰 수정). 패널을 닫는 클릭을 더블클릭하면 두 번째 누름이
+ * 다시 잡힌 포인터 락으로 캔버스에 와서 캐스팅이 나갔다. OS 더블클릭 간격(보통 ≤ 500ms)을 덮는다.
+ */
+export const CLOSE_CLICK_GUARD_MS = MOUSE.closeGuardMs;   // 값은 data/settings.js MOUSE
 
 /** @param {Iterable<string>|Record<string, boolean>|null|undefined} keys @returns {(code:string) => boolean} */
 function heldFn(keys) {
@@ -117,9 +122,9 @@ function prevent(e) {
 export class InputCollector {
   /**
    * @param {{canvas:HTMLCanvasElement, settings:Object, bus:import('../core/events.js').EventBus,
-   *          win?:any, doc?:any}} deps win · doc 은 테스트용(기본 window · document)
+   *          win?:any, doc?:any, now?:() => number}} deps win · doc · now 는 테스트용(기본 window · document · performance.now)
    */
-  constructor({ canvas, settings, bus, win, doc }) {
+  constructor({ canvas, settings, bus, win, doc, now }) {
     this.canvas = /** @type {any} */ (canvas);
     this.settings = /** @type {any} */ (settings);
     this.bus = bus;
@@ -140,6 +145,10 @@ export class InputCollector {
     this._swallowed = new Set();
     /** @type {Set<number>} 시선 드래그 중인 버튼(드래그 대체) */
     this._dragButtons = new Set();
+    /** @type {() => number} ms */
+    this._now = typeof now === 'function' ? now : () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    /** 이 시각(ms) 전의 캔버스 누름은 뗄 때까지 삼킨다(armClickGuard) */
+    this._guardUntil = -Infinity;
 
     // 포인터 락
     const c = this.canvas;
@@ -178,7 +187,11 @@ export class InputCollector {
     on(w, 'blur', () => this.releaseAll());
     on(c, 'mousedown', (e) => this._onMouseDown(e));
     on(w, 'mouseup', (e) => this._onMouseUp(e));
-    on(w, 'mousedown', (e) => { if (this.playing && (e.button === 3 || e.button === 4)) prevent(e); });
+    // 캡처 단계 — 패널(타이틀 · 일시정지)의 클릭도 첫 제스처다(리뷰 수정: 캔버스만 보면 마우스로 「새 게임」을 눌러도 소리가 켜지지 않았다)
+    on(w, 'mousedown', (e) => {
+      if (this.onGesture) this.onGesture();
+      if (this.playing && (e.button === 3 || e.button === 4)) prevent(e);
+    }, true);
     on(w, 'mousemove', (e) => this._onMouseMove(e));
     on(c, 'wheel', (e) => this._onWheel(e), { passive: false });
     on(c, 'contextmenu', (e) => prevent(e));
@@ -221,6 +234,11 @@ export class InputCollector {
       if (this.lockGate()) this.requestLock();
       return;
     }
+    // 패널을 닫은 직후(armClickGuard) — 닫는 클릭의 더블클릭 두 번째 누름 · 연타는 게임 입력이 아니다(뗄 때까지 삼킨다)
+    if (this._now() < this._guardUntil) {
+      this._swallowed.add(btn);
+      return;
+    }
     // 규칙 ④: 드래그 대체 — 가운데는 언제나, 걷기 모드면 좌 · 우도 시선
     if (!this.locked && !this.lockAvailable && (btn === 1 || this.mode === 'walk')) this._dragButtons.add(btn);
     if (btn === 1) return;
@@ -250,6 +268,8 @@ export class InputCollector {
 
   /** @param {WheelEvent} e */
   _onWheel(e) {
+    // Ctrl+휠(브라우저 확대 · 트랙패드 핀치) · Alt · Meta 조합은 건드리지 않는다(§11.3 — 매핑 · preventDefault 둘 다 안 함)
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
     prevent(e);
     if (!this.capture) return;
     const r = wheelToSteps(this._wheelAcc, e.deltaY, e.deltaMode);
@@ -275,6 +295,15 @@ export class InputCollector {
       this._onLockFail();
     }
     return true;
+  }
+
+  /**
+   * 지금부터 ms 동안 캔버스 누름을 삼킨다(app 이 패널을 클릭 · Enter 로 닫은 직후 부른다 — 리뷰 수정).
+   * 삼킨 버튼은 뗄 때까지 홀드 · 에지가 없다(규칙 ②와 같은 방식). @param {number} [ms]
+   */
+  armClickGuard(ms = CLOSE_CLICK_GUARD_MS) {
+    const d = Number.isFinite(ms) && ms > 0 ? ms : 0;
+    this._guardUntil = this._now() + d;
   }
 
   /** app 이 푼다(패널 열림) — 상실로 치지 않는다 */

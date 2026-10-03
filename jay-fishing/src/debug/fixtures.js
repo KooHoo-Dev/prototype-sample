@@ -271,7 +271,7 @@ function makeFight(state, spot, rs, roll, o) {
     lineKg,
     lineEffKg,
     abrasion,
-    inSnag: o.dist >= spot.snag.fromM,
+    inSnag: o.dist >= spot.snag.fromM && Math.abs(angleDiff(spot.facing, o.bearing)) <= spot.arc + FIGHT.snagArcPad,   // fight.js inSnagAt 의 사본(리뷰 수정 — 각도)
     inCover: o.inCover ?? 0,
     rodLift,
     rodUp,
@@ -429,7 +429,7 @@ const BUILDERS = {
     r.phaseTime = 1.2;
     r.canCast = false;
     r.castBlock = null;
-    r.signal = { kind: 'nibble', t: 0.1, strength: clamp01(SIGNAL.baseStrength * rs.signalMul), takeStyle: 'lift', count: 2 };
+    r.signal = { kind: 'nibble', t: 0.1, strength: clamp01(1 - Math.pow(1 - SIGNAL.baseStrength, rs.signalMul > 0 ? rs.signalMul : 1)), takeStyle: 'lift', count: 2 };   // rig.js signalStrength 의 사본(리뷰 수정)
     r.hookWindow = { open: false, remaining: 0, total: 0 };
     r.bite = { speciesId: roll.speciesId, roll, nibblesLeft: 1, nextNibbleT: 0.7, touched: true };
     return s;

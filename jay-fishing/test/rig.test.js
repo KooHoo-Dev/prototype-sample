@@ -13,7 +13,7 @@ import { WORLD } from '../src/data/world.js';
 import { getSpot, getStage } from '../src/data/stages/index.js';
 import {
   fightImpl, syncRig, updateRig, enterSpot, exitSpot, keepCatch, releaseCatch, setFloatDepth,
-  forceBite, forceFight, skipToResult, createRigState,
+  forceBite, forceFight, skipToResult, createRigState, signalStrength,
 } from '../src/sim/fishing/rig.js';
 import { depthAt } from '../src/sim/fishing/biteModel.js';
 import { createAngler } from '../src/bot/angler.js';
@@ -222,6 +222,24 @@ test('빈 채비 회수: 릴 속도 × emptyRetrieveMul · 떼면 waiting(minWai
   assert.ok(Math.abs((28 - CAST.retrieveDoneM) / speed - 5.8) < 0.1);
 });
 
+test('빈 채비 회수(리뷰 수정 중 발견): 해안선이 휜 방위에서도 찌가 땅 위로 올라오지 않는다 — 물가에 닿으면 회수 끝(환불)', () => {
+  for (const spotId of ['coast_channel', 'coast_shoal', 'coast_cape', 'lake_shallows', 'lake_gravel', 'lake_cape', 'river_tailrace', 'river_trench', 'river_riffle']) {
+    for (const yawOff of [-0.6, 0, 0.6]) {
+      const { ctx, r, state } = setup({ spotId, set: 'float' });
+      state.debug.noBites = true;
+      cast(ctx, 20, { yaw: ctx.spot.facing + yawOff });
+      land(ctx);
+      let n = 0;
+      while (r.phase !== 'ready') {
+        step(ctx, { primary: true, primaryPressed: n === 0, yaw: ctx.spot.facing + yawOff });
+        if (r.phase === 'retrieving') assert.ok(r.bobber.z < shoreZAt(ctx.stage.shore, r.bobber.x) - CAST.shoreMarginM + 1e-9, `${spotId} ${yawOff}: 회수 중 찌가 땅 위(${r.bobber.x.toFixed(2)}, ${r.bobber.z.toFixed(2)})`);
+        assert.ok(++n < 3000);
+      }
+      assert.deepEqual(last(ctx, EV.RETRIEVE_DONE).payload, { baitReturned: true });
+    }
+  }
+});
+
 test('물속 미끼(castBaitId)로 입질 가중치를 본다 — 대기 중 profile 의 미끼를 바꿔도 입질 시각 · 어종이 같다', () => {
   const run = (swapTo) => {
     const { ctx, r, state } = setup({ seed: 11, hour: 12 });
@@ -290,6 +308,86 @@ test('흘림: 흐름이 driftMinFlow 아래면(호수) 베일을 열어도 움�
   assert.equal(r.drifting, false);
 });
 
+test('베일(리뷰 수정): 흘림 중 입질에 챔질하면 베일이 닫힌 채 파이팅 · 입질 중 R 은 닫기 · casting/retrieving 의 R 은 대기 때 적용 · 그 밖은 RIG_BUSY{bail}', () => {
+  // 흘림(베일 열림) → 입질 → 챔질: 파이팅 첫 틱에 베일이 닫혀 있다(열린 채면 텐션 0 · 슬랙으로 몇 초 안에 바늘이 빠진다)
+  for (const set of ['float', 'bottom']) {
+    const { ctx, r, state } = setup({ spotId: 'river_tailrace', set });
+    state.debug.noBites = true;
+    cast(ctx, 30);
+    land(ctx);
+    step(ctx, { bail: true });
+    for (let i = 0; i < 30; i++) step(ctx);
+    assert.equal(r.bailOpen, true);
+    if (set === 'float') assert.equal(r.drifting, true);
+    state.debug.noBites = false;
+    forceBite(ctx, set === 'float' ? 'steelhead' : 'whiteSturgeon', 0.5);
+    assert.equal(r.phase, 'bite');
+    untilTakeNext(ctx);
+    const bails0 = countEvents(ctx.events, EV.BAIL_CHANGED);
+    step(ctx, { hook: true });
+    assert.equal(r.phase, 'fighting');
+    assert.equal(r.bailOpen, false, `${set}: 챔질했는데 베일이 열려 있다`);
+    assert.equal(countEvents(ctx.events, EV.BAIL_CHANGED), bails0 + 1);
+    assert.deepEqual(last(ctx, EV.BAIL_CHANGED).payload, { open: false });
+    const names = ctx.events.map(e => e.name);
+    assert.ok(names.lastIndexOf(EV.HOOK_SET) < names.lastIndexOf(EV.BAIL_CHANGED));
+    // 파이팅 중에는 여전히 R 로 연다(줄 풀기 — 마지막 수단)
+    step(ctx, { bail: true });
+    assert.equal(r.bailOpen, true);
+  }
+  // 입질 중 R: 열려 있으면 닫는다(BAIL_CHANGED) · 닫혀 있으면 RIG_BUSY{bail}
+  {
+    const { ctx, r, state } = setup({ spotId: 'river_tailrace', set: 'float' });
+    state.debug.noBites = true;
+    cast(ctx, 30);
+    land(ctx);
+    step(ctx, { bail: true });
+    forceBite(ctx, 'steelhead', 0.5);
+    step(ctx, { bail: true });
+    assert.equal(r.phase, 'bite');
+    assert.equal(r.bailOpen, false);
+    assert.deepEqual(last(ctx, EV.BAIL_CHANGED).payload, { open: false });
+    const busy0 = countEvents(ctx.events, EV.RIG_BUSY);
+    step(ctx, { bail: true });
+    assert.equal(r.bailOpen, false);
+    assert.equal(countEvents(ctx.events, EV.RIG_BUSY), busy0 + 1);
+    assert.deepEqual(last(ctx, EV.RIG_BUSY).payload, { action: 'bail' });
+  }
+  // casting 중 R → 베일이 열린 채 착수 → 대기 첫 틱부터 흘림 / retrieving 중 R 도 토글
+  {
+    const { ctx, r, state } = setup({ spotId: 'river_tailrace', set: 'float' });
+    state.debug.noBites = true;
+    cast(ctx, 30);
+    assert.equal(r.phase, 'casting');
+    step(ctx, { bail: true });
+    assert.equal(r.bailOpen, true);
+    assert.deepEqual(last(ctx, EV.BAIL_CHANGED).payload, { open: true });
+    land(ctx);
+    step(ctx);
+    assert.equal(r.drifting, true);
+    step(ctx, { primary: true, primaryPressed: true });
+    assert.equal(r.phase, 'retrieving');
+    step(ctx, { primary: true, bail: true });
+    assert.equal(r.bailOpen, false);
+    step(ctx);
+    assert.equal(r.phase, 'waiting');
+    assert.equal(r.drifting, false);
+  }
+  // ready · charging 의 R → RIG_BUSY{bail}(조용히 버리지 않는다) · 베일은 닫힌 채
+  {
+    const { ctx, r } = setup({ spotId: 'river_tailrace', set: 'float' });
+    step(ctx, { bail: true });
+    assert.equal(r.phase, 'ready');
+    assert.equal(r.bailOpen, false);
+    assert.deepEqual(last(ctx, EV.RIG_BUSY).payload, { action: 'bail' });
+    step(ctx, { primary: true, primaryPressed: true });
+    step(ctx, { primary: true, bail: true });
+    assert.equal(r.phase, 'charging');
+    assert.equal(r.bailOpen, false);
+    assert.equal(countEvents(ctx.events, EV.RIG_BUSY), 2);
+  }
+});
+
 test('봉돌 밀림: 흐름 > sinkerHoldMS 면 (흐름 − 버팀) × bottomSlipSpeed 로 밀리고 경계에서 멈춘다(강 깊은 홈)', () => {
   const { ctx, r, state } = setup({ spotId: 'river_trench', set: 'bottom' });
   state.debug.noBites = true;
@@ -310,6 +408,33 @@ test('봉돌 밀림: 흐름 > sinkerHoldMS 면 (흐름 − 버팀) × bottomSlip
   land(lake.ctx);
   step(lake.ctx);
   assert.equal(lake.r.bottomSlip, false);
+});
+
+test('봉돌 밀림(리뷰 수정): 라인 상한 lineM − lineReserveM 에서 멈춘다 — 10분 대기 뒤 챔질해도 스풀에 lineReserveM 이 남는다', () => {
+  for (const spotId of ['river_trench', 'coast_channel', 'river_tailrace']) {
+    const profile = makeTestProfile({ baits: { worm: 50, paste: 50, corn: 10, shrimp: 10, krill: 10, live: 10 } });
+    profile.sets.bottom.lineM = 60;
+    const { ctx, r, state } = setup({ spotId, set: 'bottom', profile });
+    state.debug.noBites = true;
+    cast(ctx, 47);                                   // 완벽 띠(0.78초 — 32m)
+    land(ctx);
+    for (let i = 0; i < 60 * 600; i++) {
+      step(ctx);
+      checkBoundary(ctx);
+      assert.ok(r.dist <= 60 - CAST.lineReserveM + 1e-9, `${spotId}: 봉돌이 ${r.dist.toFixed(1)}m — 라인 상한을 넘었다`);
+    }
+    assert.equal(r.bottomSlip, false, `${spotId}: 10분 뒤에도 밀린다`);
+    fightImpl.createFight = realFight.createFight;
+    fightImpl.updateFight = realFight.updateFight;
+    state.debug.noBites = false;
+    forceBite(ctx, 'whiteSturgeon', 0.5);
+    untilTakeNext(ctx);
+    step(ctx, { hook: true });
+    assert.equal(r.phase, 'fighting');
+    assert.ok(state.fight.spoolLeftM >= CAST.lineReserveM - 1e-9, `${spotId}: 챔질 직후 스풀 ${state.fight.spoolLeftM}m`);
+    step(ctx);
+    assert.equal(r.phase, 'fighting', `${spotId}: 챔질 첫 틱에 끝났다(spoolEmpty)`);
+  }
 });
 
 // ── 수심 · 세트 · 드랙
@@ -563,7 +688,7 @@ test('챔질: 본신 직전 earlyGrace 안의 Space 는 선입력(본신 첫 틱
     const nib = last(ctx, EV.BITE_NIBBLE).payload;
     assert.equal(nib.set, 'float');
     assert.equal(nib.index, 0);
-    assert.ok(Math.abs(nib.strength - SIGNAL.baseStrength * ctx.rigStats.signalMul) < 1e-12);
+    assert.ok(Math.abs(nib.strength - (1 - Math.pow(1 - SIGNAL.baseStrength, ctx.rigStats.signalMul))) < 1e-12);
     step(ctx, { hook: true });
     assert.equal(r.phase, 'failed');
     assert.equal(last(ctx, EV.HOOK_MISS).payload.reason, 'early');
@@ -992,4 +1117,18 @@ test('createAngler: 같은 시드면 같은 행동 · reset 뒤 처음부터 같
   assert.equal(a.input.primary, false);
   assert.equal(a.input.hook, false);
   void getStage;
+});
+
+test('예신 세기(리뷰 수정): 곱 1 이면 baseStrength · 곱이 커지면 늘 커지고 1 에 닿지 않는다(숙련 · 3단계 찌의 감도가 보인다)', () => {
+  assert.ok(Math.abs(signalStrength(1) - SIGNAL.baseStrength) < 1e-12);
+  // 실제 조합의 곱: 1단계 · 2단계 로드+찌 숙련 0~3 · 3단계 로드+찌 숙련 3
+  const muls = [1, 1.15 * 1.25, 1.15 * 1.25 * 1.15, 1.15 * 1.25 * 1.3, 1.15 * 1.25 * 1.5, 1.3 * 1.5 * 1.5];
+  let prev = 0;
+  for (const m of muls) {
+    const v = signalStrength(m);
+    assert.ok(v > prev + 0.01, `곱 ${m.toFixed(2)}: 세기 ${v} — 앞(${prev})보다 커지지 않았다`);
+    assert.ok(v < 1, `곱 ${m.toFixed(2)}: 1 로 잘렸다`);
+    prev = v;
+  }
+  for (const bad of [0, -1, NaN, Infinity]) assert.ok(Number.isFinite(signalStrength(bad)) && signalStrength(bad) >= 0 && signalStrength(bad) <= 1);
 });

@@ -243,3 +243,50 @@ test('설정 sanitizeSettings: 기본값 · 범위 자르기 · 모르는 키 �
   assert.deepEqual(out.volume, DEFAULT_SETTINGS.volume);
   assert.notEqual(out.volume, DEFAULT_SETTINGS.volume, '기본값 객체를 그대로 내주지 않는다');
 });
+
+test('난수 상태(리뷰 수정): 세이브가 rng 를 담고 불러오면 잇는다 — 첫 입질을 본 뒤 저장한 세이브는 다음 첫 입질이 다르다 · 같은 세이브는 같은 난수열 · 옛 세이브는 시각에서 파생', async () => {
+  const { EventBus } = await import('../src/core/events.js');
+  const { GameSim } = await import('../src/sim/GameSim.js');
+  const { makeInput } = await import('../src/core/inputFrame.js');
+  const { derivedRngState } = await import('../src/sim/progression/save.js');
+  const load = (save) => {
+    const sim = new GameSim({ bus: new EventBus(), seed: 1, save: parseSave(serializeSave(save)).save, start: { spotId: 'lake_gravel' } });
+    sim.start();
+    return sim;
+  };
+  /** 캐스팅 → 첫 입질(어종 · 무게) */
+  const firstBite = (sim) => {
+    const s = sim.state;
+    const inp = (o = {}) => makeInput({ yaw: s.player.yaw, ...o });
+    sim.step(inp({ primary: true, primaryPressed: true }));
+    for (let i = 0; i < 30; i++) sim.step(inp({ primary: true }));
+    sim.step(inp({ primaryReleased: true }));
+    let n = 0;
+    while (s.rig.phase !== 'bite') { sim.step(inp()); assert.ok(++n < 60 * 1800, '30분 동안 입질 없음'); }
+    return `${s.rig.bite.speciesId} ${s.rig.bite.roll.weightKg}`;
+  };
+  for (const seed of [11, 88, 105]) {
+    const sim0 = new GameSim({ bus: new EventBus(), seed, start: { scene: 'lake', hour: 9 } });
+    sim0.start();
+    const s0 = createSaveData(sim0.state, 1);
+    assert.equal(s0.rng, sim0.state.rng.s >>> 0, 'rng = state.rng.s');
+    const a = load(s0);
+    assert.equal(a.state.rng.s, s0.rng, '불러오면 저장한 난수 상태에서 시작');
+    const bite1 = firstBite(a);
+    assert.equal(firstBite(load(s0)), bite1, '같은 세이브 → 같은 난수열(결정성)');
+    const s1 = createSaveData(a.state, 2);              // 첫 입질을 본 뒤 저장(이어하기)
+    assert.notEqual(s1.rng, s0.rng);
+    const bite2 = firstBite(load(s1));
+    assert.notEqual(bite2, bite1, `seed ${seed}: 이어하기 첫 입질이 앞 세션과 같다(${bite1})`);
+  }
+  // 옛 세이브(rng 없음) → seed · 시각에서 파생 — 저장 시각이 다르면 다른 난수열 · 깨진 값도 파생
+  const good = createSaveData(makeTestState(), 1);
+  const old1 = { ...good, rng: undefined };
+  const old2 = { ...good, rng: 'x', clock: { ...good.clock, tickInDay: good.clock.tickInDay + 600 } };
+  const p1 = parseSave(JSON.stringify(old1)).save;
+  const p2 = parseSave(JSON.stringify(old2)).save;
+  assert.equal(p1.rng, derivedRngState(good.seed, good.clock.day, good.clock.tickInDay));
+  assert.equal(p2.rng, derivedRngState(good.seed, good.clock.day, good.clock.tickInDay + 600));
+  assert.notEqual(p1.rng, p2.rng);
+  assert.equal(parseSave(JSON.stringify({ ...good, rng: -1 })).save.rng, 0xffffffff, 'uint32 로 정리');
+});

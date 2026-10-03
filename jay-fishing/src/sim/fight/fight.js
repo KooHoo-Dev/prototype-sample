@@ -42,6 +42,16 @@ export function hookOffMulOf(species, hookSize) {
   return BITE.hookSmallerHookOff[clamp(species.mouth - hookSize, 0, 2)];
 }
 
+/**
+ * 장애물 띠 안인가(§5.3.2 8 · §9.10) — 거리 ≥ snag.fromM 이고 방위가 띠가 그려진 부채꼴(facing ± arc + FIGHT.snagArcPad) 안.
+ * (리뷰 수정: 각도를 보지 않아 띠가 없는 옆 수면에서도 「장애물」이 뜨고 라인이 쓸렸다)
+ * @param {any} spot SpotDef @param {number} dist @param {number} bearing
+ */
+export function inSnagAt(spot, dist, bearing) {
+  if (!spot) return false;
+  return dist >= spot.snag.fromM && Math.abs(angleDiff(spot.facing, bearing)) <= spot.arc + FIGHT.snagArcPad;
+}
+
 /** 피로 배율(§5.3.2 3) @param {number} stamina */
 function fatOf(stamina) {
   return FIGHT.fatigueFloor + (1 - FIGHT.fatigueFloor) * stamina;
@@ -91,7 +101,7 @@ export function createFight(ctx, { speciesId, roll, dist, bearing, depth }) {
     lineKg: rs.lineKg,
     lineEffKg: rs.lineKg,
     abrasion: 0,
-    inSnag: spot ? dist >= spot.snag.fromM : false,
+    inSnag: inSnagAt(spot, dist, bearing),
     inCover: 0,
     rodLift: 0,
     rodUp: false,
@@ -294,7 +304,7 @@ export function updateFight(ctx, input) {
   } else {
     f.inCover = clamp01(f.inCover - FIGHT.coverDecay * DT);
   }
-  f.inSnag = spot ? f.dist >= spot.snag.fromM : false;
+  f.inSnag = inSnagAt(spot, f.dist, f.bearing);
   const spotAbr = spot ? spot.abrasion : 0;
   const snagRate = f.inSnag ? spot.snag.rate : 0;
   f.abrasion = Math.min(FIGHT.maxAbrasion,

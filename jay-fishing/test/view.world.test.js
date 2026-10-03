@@ -59,7 +59,7 @@ test('settings.js 가 §7.11 그대로', () => {
     medium: { pixelRatio: 1.5, shadows: true, shadowMap: 1024, waterReflect: 'sky', fogParticles: 60, rainDrops: 1500, terrainSeg: 160 },
     high: { pixelRatio: 2.0, shadows: true, shadowMap: 2048, waterReflect: 'planar', fogParticles: 140, rainDrops: 3000, terrainSeg: 256 },
   });
-  assert.deepEqual(MOUSE, { radPerPx: 0.0022, spikeClampPx: 120, keyYawRate: 1.2 });
+  assert.deepEqual(MOUSE, { radPerPx: 0.0022, spikeClampPx: 120, keyYawRate: 1.2, closeGuardMs: 450 });   // closeGuardMs — 최종 게이트(input.js 상수를 data 로)
   for (const q of Object.values(QUALITY)) assert.ok(q.pixelRatio <= 2);
 });
 

@@ -2,7 +2,9 @@
 // UI용 물고기 미리보기 — WebGL 컨텍스트는 이것 하나(결과 패널의 회전 모델 · 도감 포커스 카드 · 도감 카드의 snapshot 이미지).
 // WebGL 은 첫 show/snapshot 때 만든다. 실패하면 canvas 는 빈 채 · ok = false · snapshot → ''.
 // ok 는 「아직 실패하지 않았다」는 뜻이다 — 생성 직후에는 document 가 있으면 true(첫 사용 때 만들어 보고 실패하면 false).
-// 모델은 길이 1로 만들어 화면에 맞춘다(크기는 패널의 숫자가 말한다) · 모델 · 재질은 바꿀 때 정리하고 지오메트리는 어종 캐시를 쓴다.
+// 모델은 길이 1로 만들어 화면에 맞춘다(크기는 패널의 숫자가 말한다) · 지오메트리 · 무늬는 어종 캐시(fishModel)를 쓴다.
+// 모델은 (어종 · 실루엣)마다 한 번 만들어 _models 에 두고, 바꿀 때는 pivot 에서 떼고 붙이기만 한다(최대 어종 수 × 2) — 재질을 dispose 하면
+// three 가 쓰는 곳이 없어진 셰이더 프로그램을 지우고 다음 모델이 같은 프로그램을 다시 링크한다(결과 패널 · 도감 카드마다 멈칫). 정리는 dispose() 에서 한 번.
 
 import * as THREE from 'three';
 import { getSpecies } from '../../data/species/index.js';
@@ -38,6 +40,8 @@ export class FishPreview {
     /** @type {THREE.Group|null} */
     this._model = null;
     this._modelKey = '';
+    /** @type {Map<string, THREE.Group>} (어종 · 실루엣) → 모델 — 바꿀 때 떼고 붙이기만 한다 */
+    this._models = new Map();
     this._shown = false;
     this._spin = true;
     this._angle = 0;
@@ -88,18 +92,28 @@ export class FishPreview {
   _setModel(speciesId, silhouette) {
     const key = `${speciesId}|${silhouette ? 1 : 0}`;
     if (this._model && this._modelKey === key) return this._model;
-    if (this._model) {
-      disposeFishModel(this._model);
-      this._model = null;
+    if (!this._pivot) return null;
+    let m = this._models.get(key);
+    if (!m) {
+      const sp = getSpecies(speciesId);
+      if (!sp) return null;
+      m = buildFishModel(sp, 1, { silhouette, lod: 0 });
+      m.rotation.y = 0;
+      this._models.set(key, m);
     }
-    const sp = getSpecies(speciesId);
-    if (!sp || !this._pivot) return null;
-    const m = buildFishModel(sp, 1, { silhouette, lod: 0 });
-    m.rotation.y = 0;
+    if (this._model) this._pivot.remove(this._model);
     this._pivot.add(m);
     this._model = m;
     this._modelKey = key;
     return m;
+  }
+
+  /** 픽셀 비율 = min(devicePixelRatio, 2) — 배율이 다른 모니터로 창을 옮기면(resize 없이 DPR 만 바뀐다) 따라간다 */
+  _syncPixelRatio() {
+    const r = this._renderer;
+    if (!r) return;
+    const pr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
+    if (r.getPixelRatio() !== pr) r.setPixelRatio(pr);
   }
 
   /** 모델이 화면에 들어오도록 카메라를 둔다 @param {number} aspect */
@@ -150,6 +164,7 @@ export class FishPreview {
     const c = /** @type {HTMLCanvasElement} */ (this.canvas);
     const w = c.clientWidth > 0 ? Math.round(c.clientWidth) : DEFAULT_W;
     const h = c.clientHeight > 0 ? Math.round(c.clientHeight) : DEFAULT_H;
+    this._syncPixelRatio();
     this._resize(w, h);
     if (this._spin && Number.isFinite(dt)) this._angle = (this._angle + Math.max(0, dt) * SPIN_RATE) % (Math.PI * 2);
     this._pivot.rotation.y = BASE_YAW + this._angle;
@@ -205,7 +220,8 @@ export class FishPreview {
   }
 
   dispose() {
-    if (this._model) disposeFishModel(this._model);
+    for (const m of this._models.values()) disposeFishModel(m);
+    this._models.clear();
     this._model = null;
     this._modelKey = '';
     this._shown = false;

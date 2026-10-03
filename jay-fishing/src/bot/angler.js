@@ -8,7 +8,7 @@ import { makeRng, seedRng } from '../core/rng.js';
 import { clamp } from '../core/math.js';
 import { DT } from '../core/constants.js';
 import { NEUTRAL_INPUT } from '../core/inputFrame.js';
-import { BOT } from '../data/bot.js';
+import { BOT, PLAN } from '../data/bot.js';
 import { CAST } from '../data/bite.js';
 import { HOLD } from '../data/economy.js';
 import { createFightPolicy } from './policy.js';
@@ -34,6 +34,7 @@ export function createAngler({ strategy = 'basic', seed = 1, set = null, baitId 
   let reactLeft = -1;         // 신호를 본 뒤 Space 까지 남은 시간(s) — 음수면 아직 보지 못했다
   let hookSent = false;
   let depthWait = 0;          // 수심 눈금을 2틱에 한 번만(사람의 키 반복 속도)
+  let pokeWait = 0;           // 미끼가 없을 때 다음에 좌클릭을 눌러 볼 때까지(s)
 
   /** @type {InputFrame} */
   const out = { ...NEUTRAL_INPUT };
@@ -49,6 +50,7 @@ export function createAngler({ strategy = 'basic', seed = 1, set = null, baitId 
     reactLeft = -1;
     hookSent = false;
     depthWait = 0;
+    pokeWait = 0;
     policy.reset();
   }
 
@@ -99,7 +101,22 @@ export function createAngler({ strategy = 'basic', seed = 1, set = null, baitId 
           }
           break;
         }
-        if (!rig.canCast) break;                         // 미끼 · 라인이 없다 — 자리 봇은 살 수 없다(계획 봇이 맡는다)
+        if (!rig.canCast) {
+          // 미끼 · 라인이 없다 — 자리 봇은 살 수 없다(계획 봇이 맡는다). 미끼가 없으면 사람처럼 가끔 눌러 본다:
+          // sim 이 첫 캐스팅 시도에 무료 미끼를 주거나(§5.6) CAST_BLOCKED 로 알린다(리뷰 수정 — 누르지 않으면 무료 미끼를 영영 받지 못했다)
+          if (rig.castBlock === 'noBait' && !prevPrimary) {
+            pokeWait -= DT;
+            if (pokeWait <= 0) {
+              pokeWait = PLAN.noBaitPokeS;
+              primary = true;
+            }
+          }
+          break;
+        }
+        pokeWait = 0;
+        // ready 인데 손이 이미 버튼을 쥐고 있다(충전 중 자리를 떠났다가 같은 손으로 돌아왔다 — 누름이 충전을 시작하지 못했다):
+        // 사람처럼 한 틱 떼었다가 다시 누른다(리뷰 수정 — 쥔 채로는 누름 에지가 영영 나오지 않아 몇 시간 서 있었다)
+        if (prevPrimary) break;
         primary = true;                                  // 누름 → 다음 틱 charging
         break;
       }

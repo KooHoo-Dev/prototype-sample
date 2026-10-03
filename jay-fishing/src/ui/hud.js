@@ -8,6 +8,7 @@
 import { BAIT_IDS, LAYER_IDS, TICKS_PER_MINUTE } from '../core/constants.js';
 import { CAST } from '../data/bite.js';
 import { HOLD } from '../data/economy.js';
+import { SPOTS_BY_ID } from '../data/stages/index.js';
 import { TIME } from '../data/time.js';
 import { formatClock } from '../sim/clock.js';
 import { xpToNext } from '../sim/progression/progress.js';
@@ -308,7 +309,12 @@ export class Hud {
       setStyle(this.castFill, 'width', (pw * 100).toFixed(1) + '%');
       setStyle(this.castMark, 'left', (pw * 100).toFixed(1) + '%');
       setClass(this.castBar, 'is-perfect', pw >= from);
-      if (rig.aimPreview) numText(this.castText, rig.aimPreview.distM, 1, 'hud.castDist');
+      // 착수점이 그 자리의 장애물 띠 안이면 붉게 「장애물 띠」(최종 게이트 — 캐스팅 숙련으로 비거리가 늘면 완벽 캐스팅이 띠 안에 떨어진다).
+      // 조준은 늘 facing ± arc 안이라 거리 비교가 sim 의 inSnagAt 과 같다
+      const spot = SPOTS_BY_ID[s.player.spotId];
+      const snag = !!(rig.aimPreview && spot && rig.aimPreview.distM >= spot.snag.fromM);
+      setClass(this.castText, 'is-snag', snag);
+      if (rig.aimPreview) numText(this.castText, rig.aimPreview.distM, 1, snag ? 'hud.castDistSnag' : 'hud.castDist');
       else setText(this.castText, '');
     }
 
@@ -334,8 +340,13 @@ export class Hud {
     numText(this.rigLine, rs.lineKg, 1, 'hud.rigLine');
     const inWater = rig.phase === 'waiting' || rig.phase === 'bite' || rig.phase === 'retrieving' || rig.phase === 'fighting';
     const out = rig.phase === 'fighting' && s.fight ? s.fight.dist : rig.dist;
-    numText(this.rigLeft, cfg.lineM, 0, 'hud.rigLeft');
-    setClass(this.rigLeft, 'is-warn', inWater && cfg.lineM - out < CAST.driftReserveM);
+    // 파이팅 · 랜딩 중에는 숨긴다 — 파이팅 상자의 「라인 잔량」이 그때의 값이다(리뷰 수정: 「스풀 120m」와 「라인 잔량 96m」가 같이 보였다)
+    const fightBox = rig.phase === 'fighting' || rig.phase === 'landing';
+    setHidden(this.rigLeft, fightBox);
+    if (!fightBox) {
+      numText(this.rigLeft, cfg.lineM, 0, 'hud.rigLeft');
+      setClass(this.rigLeft, 'is-warn', inWater && cfg.lineM - out < CAST.driftReserveM);
+    }
     const bait = cfg.bait;
     once(this.rigBait, BAIT_IDS.indexOf(bait) * 1e7 + (p.baits[bait] || 0), () => t('hud.rigBait', { name: t('bait.' + bait), n: fmt(p.baits[bait] || 0) }));
     setClass(this.rigBait, 'is-warn', !(p.baits[bait] > 0));
@@ -395,7 +406,8 @@ export class Hud {
     numText(this.fLeft, f.spoolLeftM, 0, 'hud.left');
     setClass(this.fLeft, 'is-warn', f.spoolLeftM < LINE_LOW_M);
 
-    const tg = f.telegraph;
+    // 랜딩(뜰채로 뜨는 중)에는 fight 가 더 돌지 않아 마지막 예고가 남는다 — 그물 속 물고기에 「드랙을 풀어라」를 보이지 않는다(최종 게이트)
+    const tg = rig.phase === 'fighting' ? f.telegraph : null;
     setHidden(this.tele, !tg);
     if (tg) {
       setIcon(this.teleIco, tg.kind);

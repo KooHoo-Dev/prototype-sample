@@ -200,7 +200,7 @@ jay-fishing/
 │  ├─ audio/
 │  │  └─ AudioEngine.js                 P7   (폴더 P7)
 │  ├─ ui/                               P8   (폴더 P8)
-│  │  ├─ UIRoot.js · hud.js · i18n.js · style.css
+│  │  ├─ UIRoot.js · hud.js · i18n.js · style.css · hints.js(리뷰 수정 — 안내 카드의 순수 규칙)
 │  │  └─ panels/ title.js · pause.js · tackle.js · result.js · sell.js · pc.js · camp.js · map.js · bed.js · confirm.js
 │  └─ app/
 │     ├─ bootMarker.js                  P0   완성 — markReady · markError (진입점을 다시 써도 남는다)
@@ -231,6 +231,7 @@ jay-fishing/
    ├─ ui.strings.test.js                P8   쓰인 문자열 키가 전부 있다
    ├─ app.query.test.js                 P9
    ├─ app.input.test.js                 P9
+   ├─ app.review.test.js · ui.review.test.js · fakeDom.js   리뷰 수정(ui-app): Game 저장 규칙(여러 탭) · 컨텍스트 상실 · 클릭 가드 / 안내 · 패널 격자 · 문면 — 실제 GameSim + UIRoot(가짜 DOM · .css 로더)
    ├─ bot.test.js                       P10
    ├─ headless.test.js                  P10  봇 1 게임 일 완주 · 예외 · NaN · 결정성 · 돈
    ├─ measure.test.js                   P10  측정 목표(§7.12 · §12.5)
@@ -620,7 +621,7 @@ app(사람)과 봇이 **같은 모양**을 매 틱 하나 만든다. 에지 필�
  * @property {number} lineKg           세트의 라인 강도(스킬 배율 포함)
  * @property {number} lineEffKg        lineKg × (1 − abrasion)
  * @property {number} abrasion         0..FIGHT.maxAbrasion(닿은 채 미끄러지면 끊긴다 — §5.3.2 10c)
- * @property {boolean} inSnag          dist ≥ spot.snag.fromM
+ * @property {boolean} inSnag          dist ≥ spot.snag.fromM && |angleDiff(facing, bearing)| ≤ spot.arc + FIGHT.snagArcPad(띠가 그려진 부채꼴 — 리뷰 수정)
  * @property {number} inCover          0..1 잠수형이 바닥/바위에 박힌 정도(≥ 0.5 이면 HUD 「박힘」)
  * @property {number} rodLift          0..1 (0 숙임 · 1 세움)
  * @property {boolean} rodUp           rodLift ≥ 0.5
@@ -844,6 +845,7 @@ app(사람)과 봇이 **같은 모양**을 매 틱 하나 만든다. 에지 필�
  * @property {number} version          SAVE_VERSION = 1
  * @property {number} savedAt          ms(app이 넣는다)
  * @property {number} seed
+ * @property {number} rng              저장할 때의 난수 상태 state.rng.s(uint32) — 불러오면 GameSim 이 이 상태에서 잇는다(리뷰 수정 · 없는 옛 세이브는 parseSave 가 hash32(seed, day, tickInDay, 0x5a7e)로 채운다)
  * @property {{day:number, tickInDay:number}} clock
  * @property {SceneId} scene           불러오면 이 씬의 spawn에서 걷기 모드로 시작
  * @property {Profile} profile
@@ -926,7 +928,7 @@ app(사람)과 봇이 **같은 모양**을 매 틱 하나 만든다. 에지 필�
 | `CAST_RELEASE` | `cast/release` | `{power, perfect, distM, aimYaw}` | P1 | tackle(휘두름) · audio(휙) · ui(완벽 알림) |
 | `CAST_SPLASH` | `cast/splash` | `{x, z, distM, waterDepthM, baitDepthM, layer, set}` | P1 | fx(착수 물보라) · audio(퐁당) · ui(층 표시) |
 | `CAST_BLOCKED` | `cast/blocked` | `{reason:'noBait'\|'noLine'}` | P1 | ui(안내) · audio(실패음) |
-| `RIG_BUSY` | `rig/busy` | `{action:'set'\|'depth'}` | P1 | ui(알림 `reason.busy` — 그 단계에서 한 번) · audio(부정음) — 입질 · 파이팅 · 결과 중의 세트 전환 · 입질 · 파이팅 · 랜딩 · 결과 중의 수심 입력을 버렸다(조용한 실패 금지 · W1 확정: 랜딩 · 실패 중의 세트 전환은 §5.2대로 `pendingSet`) |
+| `RIG_BUSY` | `rig/busy` | `{action:'set'\|'depth'\|'bail'}` | P1 | ui(알림 `reason.busy` — 그 단계에서 한 번) · audio(부정음) — 입질 · 파이팅 · 결과 중의 세트 전환 · 입질 · 파이팅 · 랜딩 · 결과 중의 수심 입력 · 베일을 바꿀 수 없는 단계의 `R`(§5.2 1 — 리뷰 수정)을 버렸다(조용한 실패 금지 · W1 확정: 랜딩 · 실패 중의 세트 전환은 §5.2대로 `pendingSet`) |
 | `RETRIEVE_DONE` | `rig/retrieved` | `{baitReturned}` | P1 | tackle · ui |
 | `BITE_NIBBLE` | `bite/nibble` | `{set, strength, index}` | P1 | tackle(찌 톡 · 초리 떨림) · fx(파문) · audio(물방울 · 방울 작게) |
 | `BITE_TAKE` | `bite/take` | `{set, style:'sink'\|'lift'\|'pull', window}` | P1 | tackle(본신 · 로드 숙임) · fx · audio(방울 · 본신음) · ui(첫 안내 `bite`) |
@@ -1022,7 +1024,7 @@ idle ──enterSpot──▶ ready ──좌클릭 누름──▶ charging ─
      - `waiting` → 적용하고 물속 미끼의 `baitDepth` · `layer`를 바로 다시 계산 · `phaseTime = 0`(`BITE.minWait`를 다시 센다 — 수심을 바꿔 공짜로 다시 뽑지 못하게).
      - `bite` · `fighting` · `landing` · `result` → 버리고 `RIG_BUSY{action:'depth'}`.
    - `input.dragSteps` — 낚시 모드의 **모든 단계**. `profile.sets[set].dragNotch = clamp(… + steps, 0, rigStats.dragNotches)` → `syncRig(ctx)` · `DRAG_CHANGED`.
-   - `input.bail` — `waiting` · `fighting`에서 토글(`BAIL_CHANGED`). `ready`로 돌아오면 닫힌다.
+   - `input.bail` — `casting` · `waiting` · `retrieving` · `fighting`에서 토글(`BAIL_CHANGED` — `casting` · `retrieving`에서 바꾼 상태는 대기 때 흘림에 적용된다). `bite`에서는 닫기만(열려 있으면 닫고 `BAIL_CHANGED`, 닫혀 있으면 `RIG_BUSY{action:'bail'}`). 그 밖(`ready` · `charging` · `failed` · `landing`)은 버리고 `RIG_BUSY{action:'bail'}`. `ready`로 돌아오면 닫힌다. **챔질 성공(`HOOK_SET`)도 베일을 닫는다**(리뷰 수정 — 흘림 중 입질에 열린 채 파이팅이 시작되면 텐션 0 · 슬랙으로 몇 초 안에 바늘이 빠졌다).
    - 낚시 모드의 `input.interact`는 버린다(일어나기는 Esc → `exitFishing`). `waiting` · `casting` · `retrieving`의 `input.hook`(Space)도 버린다 — 헛챔질은 입질 신호가 시작된 `bite` 단계에서만 생긴다.
 2. **단계 처리** (`phaseTime += DT` 뒤):
    - `ready`: `pendingSet`이 있으면 먼저 전환. **재고는 profile에서 직접 읽는다**(RigStats의 `baitCount` · `lineM`은 표시용 스냅샷): `bait = profile.sets[set].bait` · `canCast = profile.baits[bait] > 0 && profile.sets[set].lineM ≥ CAST.minLineM`(`castBlock` = `'noBait'` · `'noLine'` · null). `input.primaryPressed`(또는 진입 틱에 `castBuffered && input.primary`)면 — 캐스팅 불가면 먼저 `grantFreeBaitIfNeeded(ctx)`(P4)를 부르고 다시 판정, 그래도 불가면 `CAST_BLOCKED{reason}` · 남은 처리 없음 / 가능하면 `charging`(`power = 0` · `CAST_START`).
@@ -1036,11 +1038,11 @@ idle ──enterSpot──▶ ready ──좌클릭 누름──▶ charging ─
    - `waiting`:
      - 흘림 후보: 찌 세트 && `bailOpen` && `|spot.flow| ≥ BITE.driftMinFlow`면 `next = bobber + flow × floatDriftMul × DT`.
      - 봉돌 밀림 후보: 바닥 세트 && `|flow| > sinkerHoldMS`면 `next = bobber + 흐름 방향 × (|flow| − sinkerHoldMS) × BITE.bottomSlipSpeed × DT`.
-     - **경계**: 후보 `next`가 (1) `|angleDiff(facing, yawOf(next − stand))| ≤ CAST.driftArc` (2) `|next − stand| ≥ spot.minCastM` (3) `next.z < shoreZAt(stage.shore, next.x) − CAST.shoreMarginM` (4) 흘림이면 `|next − stand| ≤ min(spot.maxDriftM, lineM − CAST.driftReserveM)` 를 모두 만족할 때만 `bobber = next`(`drifting` 또는 `bottomSlip = true`). 하나라도 어기는 틱에 멈춘다(둘 다 false). 그래서 찌/봉돌은 땅 위로 가지 않고, `createFight`의 bearing은 늘 `facing ± CAST.driftArc` 안이다.
+     - **경계**: 후보 `next`가 (1) `|angleDiff(facing, yawOf(next − stand))| ≤ CAST.driftArc` (2) `|next − stand| ≥ spot.minCastM` (3) `next.z < shoreZAt(stage.shore, next.x) − CAST.shoreMarginM` (4) 흘림이면 `|next − stand| ≤ min(spot.maxDriftM, lineM − CAST.driftReserveM)` · 봉돌 밀림이면 `|next − stand| ≤ lineM − CAST.lineReserveM`(캐스팅 상한과 같다 — 리뷰 수정: 봉돌이 라인 끝 너머로 밀려 챔질 첫 틱에 `spoolEmpty`로 끝나던 것) 를 모두 만족할 때만 `bobber = next`(`drifting` 또는 `bottomSlip = true`). 하나라도 어기는 틱에 멈춘다(둘 다 false). 그래서 찌/봉돌은 땅 위로 가지 않고, `createFight`의 bearing은 늘 `facing ± CAST.driftArc` 안이다.
      - `dist` · `bearing` · `waterDepth` · `baitDepth` · `layer`를 다시 계산(층이 바뀌면 입질 가중치도 다음 틱부터 바뀐다).
      - `input.primary`면 `retrieving`.
      - **입질**: `phaseTime ≥ BITE.minWait` && `!debug.noBites`면 `w = biteWeights({spot, band, weather, layer, baitId: castBaitId, rigStats, distM: dist})` · `rate = biteRate(w, …)`(§5.4) · `p = 1 − exp(−rate × DT)` · `rng.chance(p)`면 어종을 뽑고(`pickSpecies(rng, w, castBaitId)`) `roll = rollFish(rng, species)` → `bite`. `debug.forceBite`가 있으면 대기 없이 그 어종 · 퍼센타일로 바로 `bite`(그리고 비운다).
-   - `retrieving`(빈 채비 회수): `input.primary` 동안 `dist −= rigStats.reelSpeedMS × CAST.emptyRetrieveMul × DT`(찌가 origin 쪽으로 — 28m 약 6초 · 100m 약 22초). 떼면 `waiting`으로(입질 위험률 재개, `minWait`는 다시 세지 않는다). `dist ≤ CAST.retrieveDoneM`이면 `castBaitId` **환불 +1**(아무것도 물지 않았으니까) → `RETRIEVE_DONE{baitReturned:true}` → `ready`(`castBaitId = null` · `ctx.refresh()`).
+   - `retrieving`(빈 채비 회수): `input.primary` 동안 `dist −= rigStats.reelSpeedMS × CAST.emptyRetrieveMul × DT`(찌가 origin 쪽으로 — 28m 약 6초 · 100m 약 22초). 떼면 `waiting`으로(입질 위험률 재개, `minWait`는 다시 세지 않는다). `dist ≤ CAST.retrieveDoneM`이거나 다음 점이 물가 여유 안(`z ≥ shoreZAt − CAST.shoreMarginM` — 흘림 경계 (3)과 같다 · 리뷰 수정: 해안선이 휜 방위에서 찌가 땅 위로 올라왔다)이면 `castBaitId` **환불 +1**(아무것도 물지 않았으니까) → `RETRIEVE_DONE{baitReturned:true}` → `ready`(`castBaitId = null` · `ctx.refresh()`).
    - `bite`: 신호 타임라인(§5.4.4)을 민다. 창 길이 = `rigStats.hookWindowS + (takeStyle === 'lift' ? SIGNAL.float.liftWindowAdd : 0)`. `input.hook` 에지:
      - 본신 창이 열려 있으면 **성공** → `HOOK_SET` → `state.fight = createFight(ctx, …)`(P2) → `fighting`.
      - 본신 전이고 본신까지 남은 시간 ≤ `SIGNAL.earlyGrace`면 **선입력**으로 잡아 두고 본신 첫 틱에 성공 처리한다.
@@ -1125,7 +1127,7 @@ dist = rig.dist ; bearing = rig.bearing ; depth = rig.baitDepth ; stamina = 1 ; 
          kind === 'rest' && 예고 아님 && tension < FIGHT.recoverBelow × Fmax 이면 stamina += FIGHT.recoverRate / E × DT     (0..1)
 8. 쓸림: (kind === 'dive' || s.abrades) && 예고 아님 → inCover += (slipping ? FIGHT.coverRate : −FIGHT.coverEscape) × DT, 아니면 inCover −= FIGHT.coverDecay × DT  (0..1)
          ← 「드랙이 버티면(미끄러지지 않으면) 바닥에 박히지 못한다」 — 潛 의 대응(초반에 드랙을 조여 띄운다)이 판정과 맞는다. 클리커 소리 · HUD 「박힘」으로 읽힌다
-         inSnag = dist ≥ spot.snag.fromM
+         inSnag = dist ≥ spot.snag.fromM && |angleDiff(spot.facing, bearing)| ≤ spot.arc + FIGHT.snagArcPad(0.05)   ← 띠가 그려진 부채꼴 안만(리뷰 수정 — 옆 수면에서 쓸리지 않는다) · createFight 도 같은 식
          abrasion += (FIGHT.coverAbrasion × inCover × spot.abrasion × brain.abrasionMul + (inSnag ? spot.snag.rate : 0)) × rigStats.lineAbrasionMul × DT   (≤ FIGHT.maxAbrasion)
          lineEffKg = lineKg × (1 − abrasion)
          limitKg = rodUp ? min(lineEffKg, rodMaxLoadKg) : lineEffKg ; limitBy ; limitRatio = tension / limitKg
@@ -1225,7 +1227,7 @@ W1 확정: F 가 둘 이상이면 먼저 F 에서 하나(균등)를 고르고 �
 | 찌 | 예신 횟수 = `rng.int(...(s.bite?.nibbles ?? SIGNAL.float.nibbles))`. 첫 예신은 `SIGNAL.firstDelay` 범위 뒤. 한 번 = `SIGNAL.float.nibbleDur`초 잠김 · 간격 `SIGNAL.float.gap` 범위. 매번 `BITE_NIBBLE` | `takeStyle = s.bite?.take ?? 'sink'`(붕어는 `'lift'` — 찌올림) · `BITE_TAKE` | `rigStats.hookWindowS`(0.9 + 스킬) · `lift`면 `+ SIGNAL.float.liftWindowAdd`(0.3 — 예신과 방향이 반대인 신호라 늦기 쉽다) |
 | 바닥 | 초리 떨림 `SIGNAL.bottom.tremble` 범위 동안, `SIGNAL.bottom.pulse`초마다 `BITE_NIBBLE` | `takeStyle = 'pull'`(로드가 숙여진다 + 방울) · `BITE_TAKE` | `rigStats.hookWindowS`(1.1 + 스킬) |
 
-`signal.strength = clamp01(SIGNAL.baseStrength × rigStats.signalMul)` — 예신 · 본신 모두. 본신의 크기는 1(언제나 분명하다).
+`signal.strength = 1 − (1 − SIGNAL.baseStrength)^rigStats.signalMul`(예신 — 곱 1 이면 0.6 · 곱이 커질수록 1 에 다가가되 잘리지 않는다 · 리뷰 수정: `clamp01(base × 곱)`은 곱 1.67 에서 1 로 잘려 숙련 2 · 3단계와 3단계 찌의 감도가 보이지 않았다). 본신의 크기는 1(언제나 분명하다).
 
 #### 5.4.5 크기 — `rollFish(rng, species, pct?)`
 
@@ -1289,6 +1291,8 @@ pct = normalCdf(z) ; tier = pct ≥ PRICE.legendPct ? 'legend' : pct ≥ PRICE.t
 | 포커스 잃음 · 탭 숨김 | 멈춤 + 일시정지 패널 | ○(숨으면 안 돈다) | 눌린 키 전부 놓음 |
 | 결과 패널 | 멈춤(`rig.phase === 'result'`) | ○ | ui(Space 어창 · KeyX 방생) |
 | 실패 알림 · 배너 · 안내 문구 | **멈추지 않는다**(비차단). 수명은 ui `dt`로 깎고 일시정지 · 패널 동안 멈춘다(§10.3) | ○ | 게임 입력 그대로 |
+
+- **충전 중 패널 · 포커스 잃음**(최종 게이트 추가): 사람 입력이고 `rig.phase === 'charging'`이면 app이 `PANEL_OPENED` · 포커스 잃음에서 `sim.cancelCharge()`를 부른다 — 캐스팅 없이 ready(미끼 · casts 그대로). 다시 던지려면 새로 누른다. 고정 상태(`?fixture`)와 봇은 부르지 않는다.
 
 ### 5.9 루프와 렌더 보간 (app — P9)
 
@@ -1436,7 +1440,7 @@ export class GameSim {
   /** @param {{bus:EventBus, seed:number, save?:SaveData|null, profile?:Profile,
    *           session?:{ignoreGates?:boolean, devSession?:boolean},
    *           start?:{scene?:SceneId, spotId?:SpotId, hour?:number, weather?:WeatherId}}} opts */
-  constructor(opts)       // 이벤트를 내지 않는다(레이어가 아직 없을 수 있다)
+  constructor(opts)       // 이벤트를 내지 않는다(레이어가 아직 없을 수 있다) · save 가 있으면 state.seed = save.seed · state.rng = {s: save.rng}(난수열을 잇는다 — 리뷰 수정)
   state                   // GameState
   ctx                     // SimCtx (테스트 · 봇이 읽는다)
   start()                 // SCENE_CHANGED{reason:'start'|'load'} · PLAYER_PLACED{spawn} · WEATHER_CHANGED 를 내고 플러시. start.spotId 면 그 자리에서 낚시 모드
@@ -1450,6 +1454,8 @@ export class GameSim {
 
   // 낚시 모드 전용
   exitFishing()           // §5.2 (걷기 모드면 {ok:false, reason:'notHere'})
+  cancelCharge()          // charging 만(그 밖 {reason:'notHere'}) — 캐스팅 없이 ready · power 0 · aimPreview null · 미끼 · stats.casts 소모 없음 · 이벤트 없음.
+                          //   app 이 사람 입력일 때 PANEL_OPENED · 포커스 잃음에서 부른다(fixture · 봇 제외 — §5.8). (최종 게이트 추가: 패널 동안 뗀 좌클릭이 닫힌 뒤 「놓음」으로 읽혀 원치 않은 캐스팅이 나갔다)
   keepCatch(opts = {})    // result 단계만. 어창이 차 있으면 opts.swapUid(어창 물고기 uid)가 있어야 한다 — 그것을 빼고(CATCH_RELEASED{catch: 뺀 것, swapped:true} · 경험치 · 도감 변화 없음) 새 것을 넣는다. 없으면 {reason:'holdFull'}
   releaseCatch()          // result 단계만
 
@@ -1596,6 +1602,7 @@ export function createSaveData(state, savedAt)       // → SaveData. rig.phase 
 export function serializeSave(save)                  // → string
 export function parseSave(text)                      // → {save:SaveData|null, error:'json'|'game'|'future'|'fields'|null} — 순서: JSON 파싱 → game 일치 → version > SAVE_VERSION 이면 'future'
                                                      //   → version < SAVE_VERSION 이면 migrateSave → 필수 필드 → sanitizeProfile. 던지지 않는다
+                                                     //   rng 는 선택 입력(uint32 로 정리 · 없거나 깨졌으면 derivedRngState(seed, day, tickInDay)) — 출력에는 늘 있다
 export function migrateSave(obj)                     // → SaveData|null (v1이 처음 — 미래 버전을 위한 자리)
 export function sanitizeSettings(raw)                // → Settings
 ```
@@ -1853,13 +1860,14 @@ export const WORLD = {
   walkSpeed: 3.2, backMul: 0.7, strafeMul: 0.85, accel: 16,   // m/s · 뒤 · 옆 배율 · m/s² (멈출 때도 같은 가속)
   eyeHeight: 1.65,                                            // 브리프 §5
   spotRadius: 1.4, interactFov: 1.22,                         // 자리 진입 반경(m) · 상호작용 시선 반각(rad, 70°)
+  interactDepthM: 0.5,                                        // 상호작용 물체의 깊이 — 시선 판정에 점 뒤(approach → 점 방향) 0.5m 도 쓴다(리뷰 수정)
   exitStepBack: 1.0,                                          // 낚시 자리에서 일어나면 facing 반대로 1m
   pitchMin: -1.40, pitchMax: 1.40,
 };
 ```
 
 - 걷기: 목표 속도 = `walkSpeed × (moveZ ≥ 0 ? 1 : backMul)` 방향 = yaw 기준 앞/옆(`strafeMul`), 대각선은 정규화. `accel`로 다가간다. 다음 위치가 `walk` 밖이면 x만 · z만 따로 시도해 벽을 따라 미끄러진다. 그 뒤 `obstacles` 원 안이면 원 둘레로 밀어낸다(중심 → 위치 방향).
-- `nearby`: 걷기 모드에서 `spotRadius` 안의 자리(가장 가까운 것)가 먼저, 없으면 `radius` 안이고 시선이 `interactFov` 안인 상호작용 점 중 가장 가까운 것.
+- `nearby`: 걷기 모드에서 `spotRadius` 안의 자리(가장 가까운 것)가 먼저, 없으면 `radius` 안이고 시선이 `interactFov` 안인 상호작용 점 중 가장 가까운 것. 시선은 점 **또는** 점 뒤 `interactDepthM`(approach → 점 방향) 지점 중 하나가 `interactFov` 안이면 된다(리뷰 수정 — 벽 위의 문에 몸을 붙이면 점이 옆 90°에 있어 프롬프트가 사라졌다).
 
 ### 7.3 어종 — `data/species/*.js`
 
@@ -2484,7 +2492,7 @@ export const QUALITY = {
   medium: { pixelRatio: 1.5, shadows: true,  shadowMap: 1024, waterReflect: 'sky',    fogParticles: 60,  rainDrops: 1500, terrainSeg: 160 },
   high:   { pixelRatio: 2.0, shadows: true,  shadowMap: 2048, waterReflect: 'planar', fogParticles: 140, rainDrops: 3000, terrainSeg: 256 },
 };
-export const MOUSE = { radPerPx: 0.0022, spikeClampPx: 120, keyYawRate: 1.2 };   // rad/px(× mouseSens) · 한 이벤트 이동량 상한(스파이크는 버리지 않고 자른다) · 낚시 모드 A/D 조준(rad/s — §11.3)
+export const MOUSE = { radPerPx: 0.0022, spikeClampPx: 120, keyYawRate: 1.2, closeGuardMs: 450 };   // rad/px(× mouseSens) · 한 이벤트 이동량 상한(스파이크는 버리지 않고 자른다) · 낚시 모드 A/D 조준(rad/s — §11.3) · 패널을 클릭으로 닫은 뒤의 클릭 가드 창(ms — 리뷰 수정 · §11.3)
 ```
 
 ### 7.12 측정 목표 산수 (브리프 §7)
@@ -2521,6 +2529,8 @@ export const MOUSE = { radPerPx: 0.0022, spikeClampPx: 120, keyYawRate: 1.2 };  
 | 데이터 완결성 | 36행 · 스테이지마다 12종(≥ 10) · 층 × 시간대마다 ≥ 1종(§12.2) | 테스트 | — |
 
 **밸런스 게이트 확정**(`npm run measure` 실측 — M1–M16 모두 ○ · `NOTES-BALANCE.md`): 바꾼 것은 넷 — `lake_gravel.snag.fromM` 31 → 33(§7.4.2) · 쓸림이 `maxAbrasion`에 닿은 채 미끄러지면 라인이 끊긴다(§5.3.2 10c · `FIGHT.frayCauseAt` 0.5) · 라인을 거두는 중이면 슬랙이 아니다(§5.3.2 10e) · 강 비판타지 11종 `xp` × 1.3(§7.3.3). 그 뒤의 값: M4 76.1% · 끊김 10.3% · 빠짐 2.3% / M5 조절 94.4 · 기본 73.0 · 무지성 61.1% → 33.3%p · 21.4%p · 대형 90.1 vs 고정 46.3% / M7 무지성 15.8% / M9 로드 찌 31.7% · 바닥 35.7%(하루 매출 평균 12.6만) / M10 순수입 중앙 111,705(reel_2 의 57.4%) / M11 1.27–1.32 · 1.23–1.28 · 5.63–6.13일 / M12 18.7–20.4일 / M16 11.3–13.0일 / M15 1.4배 · 랜딩 78.4% — 위 표의 설계 값과 거의 같다(설계 스크립트는 띠가 33m 근처라고 본 셈이다). 「보통 사람」 손(반응 0.5 ± 0.15초 · 성급 15% · 예고 반응 0.5초 · 드랙 손 15눈금/초 · 뜰채 반응 0.5초)으로도 M3 · M4 · M5 · M8 · M10 · M14 · M15 가 목표 안이다.
+
+**리뷰 수정 뒤 재측정**(최종 게이트 — `npm run measure` 실측 · M1–M16 모두 ○ · 「목표 밖: 없음」): 리뷰 수정(장애물 판정에 각도 · 봉돌 밀림 라인 상한 · 자리 봇의 ready 정지 · 무료 미끼)으로 바뀐 값만 적는다 — M4 76.3% · 끊김 11.2% · 빠짐 2.0% / M5 조절 93.1 · 기본 71.9 · 무지성 64.1% → 29.0%p · 21.3%p / M7 무지성 16.9% / M11 1.30 · 1.27 · 1.32 / 1.26 · 1.23 · 1.28 / 5.89 · 5.63 · 5.64일 / **M12 18.35 · 18.70 · 18.28일**(위 18.7–20.4는 자리 봇이 ready 에서 멈추던 때) / **M16 10.85 · 11.98 · 11.63일**(위 11.3–13.0).
 
 측정의 한계(봇이 쓰지 않는 수단): 마우스 조준(봇은 정면 yaw) · 흘림과 먼 곳의 `farMul` · 수심 미세 조정 · 파이팅 중 베일 · 시간 건너뛰기(측정은 매 시간대 낚시) · 뜰채 스킬 외 장비 선택의 최적화 — `NOTES-BALANCE.md`에 적는다. 하루 · 진행 산수는 걷기 · 판매 동선을 상수 시간으로 셌다(판매 25초 · 집 왕복 2시간).
 
@@ -2667,7 +2677,7 @@ export function buildCoastProps(args)
 |---|---|---|
 | 걷기(`idle`) | 숨김(빈손) | — |
 | `ready` | 35 | 찌 · 봉돌이 로드 끝에 매달려 흔들린다 |
-| `charging` | 35 → 110(머리 뒤, `power`로 ease) | 게이지는 ui. **`aimPreview` 고리**(P6 — `tackleRoot`의 수면 y 0.02 링 · 반경 0.6m × 찌 배율(7m 너머 `clamp(dist / 7, 1, 18)` — W1 확정: 28m 에서 세로 2px 미만이라 키우고 중심에 세로 핀을 더했다) · 중심 `rig.aimPreview`(x, z) · `power ≥ perfectFrom`이면 밝게) — 장애물 띠 표식과 같은 화면에서 착수점이 보인다 |
+| `charging` | 35 → 110(머리 뒤, `power`로 ease) | 게이지는 ui. **`aimPreview` 고리**(P6 — `tackleRoot`의 수면 y 0.02 링 · 반경 0.6m × 찌 배율(7m 너머 `clamp(dist / 7, 1, 18)` — W1 확정: 28m 에서 세로 2px 미만이라 키우고 중심에 세로 핀을 더했다) · 중심 `rig.aimPreview`(x, z) · `power ≥ perfectFrom`이면 밝게 · **`aimPreview.distM ≥ spot.snag.fromM`이면 붉게**(완벽보다 앞선다 — 최종 게이트: ui 게이지의 「장애물 띠」와 같은 판정) — 장애물 띠 표식과 같은 화면에서 착수점이 보인다 |
 | `casting` | 110 → 20을 0.18초에 휘두른 뒤 25 | 찌/봉돌이 로드 끝 → 착수점 포물선(`castT`, 꼭대기 = 0.25 × distM) |
 | `waiting` · `retrieving` · `bite` | 찌 25 · 바닥 30 | 라인: 로드 끝 → `bobber`(늘어짐 0.08 × dist) · 릴 손잡이는 `retrieving`에서 돈다 |
 | 찌 신호 | — | 찌 높이(보이는 크기 `scale` 적용 전 m): 예신 = `−strength × 0.5 × 안테나 길이(0.30m)` 0.25초 톡(안테나 절반까지 잠긴다) · 본신 sink = 완전히 잠김 / lift = 0.15초에 걸쳐 +0.12m 솟고 창이 끝날 때까지 누운 채 |
@@ -2711,13 +2721,13 @@ export function buildCoastProps(args)
 | 무엇 | 판정 | 보이는 것 | 허용 차 |
 |---|---|---|---|
 | 낚시 자리 상호작용 | `dist(player, stand) ≤ WORLD.spotRadius`(1.4m) | 바닥 고리 반경 1.2m + 깃대 | 0.2m |
-| NPC · 캠프 · PC · 침대 · 문 | `≤ point.radius`(1.2~2.0m) && 시선이 `WORLD.interactFov`(±70°) 안 | 물체 외곽이 반경 − 0.4m 안 | 0.4m |
+| NPC · 캠프 · PC · 침대 · 문 | `≤ point.radius`(1.2~2.0m) && 시선이 `WORLD.interactFov`(±70°) 안(점 또는 점 뒤 `interactDepthM`) | 물체 외곽이 반경 − 0.4m 안 | 0.4m |
 | 착수점 | `rig.bobber` | 찌 · 물보라의 중심 | 0 |
 | 조준 | `aimYaw = facing ± arc` | `aimPreview` 고리(충전 중 수면 — P6 TackleLayer) | 0 |
 | 찌 신호 | `signal`(예신 · 본신) | 찌 예신 침하 ≥ 6px @ 1280×720 · FOV 70 · `dist ≤ maxDriftM`(§9.7 `scale`) | — |
 | 물고기 위치 | `origin + fwd(bearing) × dist` · `−depth` | 그림자 · 점프 모델 중심 | 0 |
 | 뜰채 범위 | `dist ≤ netRangeM`(= `spot.edgeM` + 1.4m + 스킬) | 팔 0.4m + 손잡이(`netRangeM − 0.75`) + 테 0.35m = `netRangeM` · 물고기는 `edgeM + 0.5` 안으로 오지 않는다(땅 위에 그려지지 않는다) | ≤ 0.35m |
-| 장애물 띠 | `dist ≥ snag.fromM` | 수초 · 바위 · 나무 띠가 `fromM`부터 | 1m |
+| 장애물 띠 | `dist ≥ snag.fromM` && 방위가 `facing ± (arc + FIGHT.snagArcPad)` 안(리뷰 수정) | 수초 · 바위 · 나무 띠가 `fromM`부터 · `facing ± arc` 부채꼴 | 1m · 0.05rad |
 | 로드 휨 · 떨림 | `rodLoadRatio` · `rodStress` | §9.7 | — |
 | 텐션 | `fight.tension`(평활된 판정 값) | 게이지(`limitRatio`) · 로드 휨(`tension / rodMaxLoadKg`의 sqrt) · 라인 톤(`limitRatio`)이 **같은 tension**에서 나온다 | 0 |
 
@@ -2793,9 +2803,9 @@ export function buildCoastProps(args)
 | `confirm` | 다른 패널 · app — 위에 겹친다 | args `{titleKey, bodyKey, bodyParams, onYes, danger}` | — | Enter/Space는 포커스된 항목 실행 · Esc 아니오. 처음 포커스: 보통 「예」 · `danger`면 「아니오」(연타로 덮어쓰지 않는다) |
 
 - **사기 전 · 후 수치를 나란히**(QUALITY §3): 상점 · 채비의 장비 항목은 `ShopItem.previews`(세트별 — 공용 부위는 찌 · 바닥 둘 다) 또는 `previewEquip`의 RigStats에서 비거리 · 로드 상한 · 최대 드랙 · 회수 속도 · 라인 강도 · 스풀 · 감도를 `현재 → 바꾸면`으로 보이고, 오르는 값은 초록 · 내리는 값은 주황. 스킬은 `SkillPreview.before/after`. 라인 감기는 세트 × 라인마다 한 줄(그 세트 기준 비용).
-- 잠긴 항목도 보인다(사유 문구 `t('reason.' + reason, reasonParams)` — 「레벨 5가 필요하다」).
+- 잠긴 항목도 보인다(사유 문구 `t('reason.' + reason, reasonParams)` — 「레벨 5 필요」 · 「낚시 숙련 2단계 필요」 — 리뷰 수정: 조사 오류를 피하는 꼴). 세트를 바꿀 수 있는 장비 줄(세트 2개)에만 「(◀▶)」를 붙인다.
 - 결과 패널: 어종 이름 · `FishPreview` 회전 모델 · 길이 cm · 무게 kg · 등급 배지(트로피 ★ · 레전드 ★★) · 첫 포획/신기록 배지 · 추정가(흥정 반영) · 받을 경험치(어창 / 방생 둘 다) · 어창 n/12.
-- 도감 카드(PC와 Tab 공용 컴포넌트): 스테이지 탭 → 12장. 카드의 모델은 `FishPreview.snapshot` 이미지(안 잡음은 실루엣), 포커스된 카드 하나만 회전 캔버스(`show`). 안 잡음: 실루엣 · 이름 · 서식층 · (지식 1) 활동 시간대 막대 · (지식 2) 선호 미끼. 잡음: 컬러 모델 · 최대 길이 · 최대 무게 · 마릿수 · 첫 포획일 · 트로피 ★ / 레전드 ★★ · 트로피 문턱 무게. 판타지는 「전설」 표식(금테).
+- 도감 카드(PC와 Tab 공용 컴포넌트): 스테이지 탭 → 12장. 카드의 모델은 `FishPreview.snapshot` 이미지(안 잡음은 실루엣), 포커스된 카드 하나만 회전 캔버스(`show`). 안 잡음: 실루엣 · 이름 · 서식층 · (지식 1) 활동 시간대 막대 · (지식 2) 선호 미끼. 잡음: 컬러 모델 · 최대 길이 · 최대 무게 · 마릿수 · 첫 포획일 · 트로피 ★ / 레전드 ★★ · 트로피 문턱 무게. 판타지는 「전설」 표식(금테). **리뷰 수정**: 판타지 어종의 상세에는 처음부터 「출현 조건 — 시간대 · 날씨」(`species.fantasy.bands · weather`)를 보인다 · 모든 어종의 상세와 판매상 물고기 줄에 「단가 n원/kg」(`pricePerKg × mods.sellMul` — 브리프 §3.1).
 
 ### 10.3 HUD
 
@@ -2805,13 +2815,14 @@ export function buildCoastProps(args)
 | 우상단 | 어창 `n/12`(차면 주황) · 스테이지 이름 |
 | 하단 중앙(낚시 모드) | 채비 요약: 세트(찌/바닥) · 로드 이름 · 라인 kg · **라인 잔량 m**(물속에 있을 때 `lineM − dist < CAST.driftReserveM`이면 주황 — 걸면 질주를 버틸 여유가 적다) · 미끼 이름 × 개수 · (찌) 수심 m · 드랙 눈금 · 지금 층(표층/중층/바닥) |
 | 화면 중앙 아래 | 상호작용 프롬프트(「E 낚시 자리에 서기」 · 「E 판매상」 …) · 낚시 단계 안내(「좌클릭을 누르고 있다가 놓아 던진다」 — 첫 몇 번) · 포인터 락이 없고 드래그 대체도 아니면 `prompt.clickToLook`(「클릭해서 시점 고정」) |
-| 캐스팅 | 파워 게이지(가로 막대 · 완벽 띠 `perfectFrom..1` 강조 · 현재 `power`) |
-| 파이팅(우하단 · 대상을 가리지 않는 자리) | **텐션 게이지**(`fight.limitRatio` — 지금 묶인 한계 대비 %: < 60 녹 · 60–85 황 · ≥ 85 적 — 적에서 테두리만 점멸 · `limitBy === 'rod'`면 게이지 머리에 로드 아이콘) · **드랙 눈금**(릴 최대 대비 · 라인 유효 강도 위치에 빨간 눈금 · 로드 상한 위치에 주황 눈금) · 거리 m · 라인 잔량 m(30m 아래 주황) · 예고 아이콘(질주 · 점프 · 잠수 · 사라짐 — `telegraph`) · 장애물 경고(`inSnag`) · 「박힘」(`inCover ≥ 0.5`) · 로드 경고(`rodStress`) · (지식 3) 물고기 체력 바 · 「Space 뜰채」(canNet) |
+| 캐스팅 | 파워 게이지(가로 막대 · 완벽 띠 `perfectFrom..1` 강조 · 현재 `power`) · 착수 거리 `hud.castDist`. `aimPreview.distM ≥ spot.snag.fromM`이면 붉게 `hud.castDistSnag`(「장애물 띠 — 걸리면 라인이 쓸린다」 — 최종 게이트: 캐스팅 숙련으로 비거리가 늘면 완벽 캐스팅이 띠 안에 떨어진다. 조준은 늘 `facing ± arc` 안이라 거리 비교가 `inSnagAt`과 같다) |
+| 파이팅(우하단 · 대상을 가리지 않는 자리) | **텐션 게이지**(`fight.limitRatio` — 지금 묶인 한계 대비 %: < 60 녹 · 60–85 황 · ≥ 85 적 — 적에서 테두리만 점멸 · `limitBy === 'rod'`면 게이지 머리에 로드 아이콘) · **드랙 눈금**(릴 최대 대비 · 라인 유효 강도 위치에 빨간 눈금 · 로드 상한 위치에 주황 눈금) · 거리 m · 라인 잔량 m(30m 아래 주황) · 예고 아이콘(질주 · 점프 · 잠수 · 사라짐 — `telegraph` · `fighting` 단계만: 랜딩 중에는 fight 가 멈춰 마지막 예고가 남으므로 숨긴다 — 최종 게이트) · 장애물 경고(`inSnag`) · 「박힘」(`inCover ≥ 0.5`) · 로드 경고(`rodStress`) · (지식 3) 물고기 체력 바 · 「Space 뜰채」(canNet) |
 | 알림 | 실패(`FAIL` — 잃은 것 한 줄 + 바늘 빠짐 원인 한 줄 · 예비 로드 · 예비 스풀 · 낮춘 드랙) · 헛챔질/늦음 · 미끼 없음 · 라인 부족 · 어창 가득 · 어창이 찬 채 캐스팅 시작(그 낚시 진입에서 한 번 `reason.holdFullCast` 「어창이 가득 — 잡으면 바꾸거나 방생해야 한다」) · 무료 미끼 지급 · `RIG_BUSY` — 화면 위쪽 가운데 · 쌓이면 최대 3줄 |
 | 배너 | 트로피 · 레전드 · 첫 포획 · 신기록 · 레벨 업(「Tab → 스킬」 포함) · 새 스테이지 · 3단계 해금(`LEVEL_UP` · `SKILL_LEARNED`의 `unlocks`) — 화면 위 1/4 띠(대상 · 찌를 가리지 않는다) · 2.5초 |
 | 안내 문구(`HINT_IDS` 10종) | `start` 새 게임 첫 play 프레임(집: 「WASD 이동 · 마우스 둘러보기 · E 상호작용 — 문으로 나가 호수로 · PC: 상점 · 날씨 · 도감 · 스킬」) · `stage` 첫 야외 도착(「바닥의 흰 고리가 낚시 자리(E) · 판매상에게 판다 · 캠프: 다음 시간대로 건너뛰기 · 집으로」) · `controls` 첫 낚시 진입(낚시 조작 · A/D 조준 · Esc 일어나기) · `cast` 첫 캐스팅 · `bite` 첫 대기(`waiting` — W1 확정: 첫 입질이 오기 전에 뜻을 알아야 첫 챔질이 된다 · 챔질의 뜻) · `fight` 첫 파이팅(**드랙 · 텐션의 뜻**) · `net` 첫 뜰채 · `drift` 흐르는 자리 첫 찌 · `bottomRig` 첫 바닥 채비 · `holdFull` 어창이 처음 찼을 때 — 비차단 카드 6초 또는 클릭 · `sim.markHintSeen(id)` · `settings.hints`가 false면 없음 |
 
 - **알림 · 배너 · 안내 카드의 수명**은 `ui.update(state, dt)`의 `dt`로 깎고, `PAUSED{true}`이거나 `isBlocking()`인 동안 멈춘다(정지 화면 확인 · 패널 동안 사라지지 않는다). `FAIL` 알림은 `rig.phase === 'failed'`인 동안 보이고 그 뒤 0.3초 페이드.
+- **리뷰 수정**: 안내 카드는 상황이 끝나면 남은 수명과 무관하게 내린다(`ui/hints.js` `hintStale` — `net`은 파이팅 · 랜딩 밖, `fight`는 파이팅 · 랜딩 · 실패 밖, 낚시 안내는 낚시 모드 밖, `start`/`stage`는 씬). 새 게임(`SCENE_CHANGED{new}`)은 ui 가 이 실행에서 본 안내 · 지금 카드 · 알림 · 배너 대기열을 비운다(같은 탭에서 처음부터 다시 하면 안내가 다시 뜬다). 지속 알림 `ui.setSticky(key | null)`(수명이 줄지 않는다 — 컨텍스트 상실 대기). 충전 시작 때 조준이 자리의 캐스팅 호(`facing ± arc`) 밖이면 그 낚시 진입에서 한 번 `hud.notice.aimOut`(rig 는 호 끝으로 자른다). 파이팅 · 랜딩 중에는 채비 줄의 「스풀」을 숨긴다(파이팅 상자의 「라인 잔량」).
 
 ### 10.4 입력 포커스 규칙
 
@@ -2824,7 +2835,7 @@ export function buildCoastProps(args)
 
 ### 10.5 키보드만으로
 
-모든 패널: ↑↓(목록) · **Q/E = 언제나 탭 전환** · ←→ = 포커스된 항목이 값 조절형(수심 · 슬라이더 · 화질 3단계)이면 그 값(수심 ±0.25m · 슬라이더 ±5% · 단계 ±1), 아니면 탭 전환 · Enter/Space(실행) · Esc(닫기). 값 조절형 항목에는 「◀ ▶」 표식을 둔다. 포커스된 항목은 테두리 + 밝기로 보인다. 마우스 클릭도 된다.
+모든 패널: ↑↓(목록) · **Q/E = 언제나 탭 전환** · ←→ = 포커스된 항목이 값 조절형(수심 · 슬라이더 · 화질 3단계)이면 그 값(수심 ±0.25m · 슬라이더 ±5% · 단계 ±1), 아니면 탭 전환 · Enter/Space(실행) · Esc(닫기). **리뷰 수정**: 격자로 놓인 항목(도감 카드 · 지도 카드 — `PanelBase.setGrid(from, to)`) 안에서는 ←→ 가 이웃 항목(줄을 넘어 이어진다 · 끝에서 멈춘다 — 탭을 바꾸지 않는다) · ↑↓ 가 한 줄 위 · 아래(첫 줄의 ↑ = 격자 앞 항목). 채비 패널의 바닥글은 탭마다(`tackle.foot` · `tackle.footDex` · `tackle.footSkill`). 값 조절형 항목에는 「◀ ▶」 표식을 둔다. 포커스된 항목은 테두리 + 밝기로 보인다. 마우스 클릭도 된다.
 
 ### 10.6 문자열 — `data/strings.ko.js` (P8) · `ui/i18n.js`
 
@@ -2941,7 +2952,8 @@ export const WHEEL = { pxPerStep: 100, linePx: 33 };          // deltaY 100px = 
   3. `POINTER_LOCK.available`은 API가 없거나 **한 번도 성공한 적 없이** 첫 요청이 실패했을 때만 false다. 한 번이라도 성공했으면 이후 실패해도 `available:true · locked:false`이고 드래그 대체로 바꾸지 않는다. **W2 확정**(P9): 키(Enter/Space — 이어하기 · 새 게임 · 일시정지 「계속」 · `PANEL_CLOSED{by:'confirm'}`)로 연 요청은 **soft** — 실패해도 available 을 내리지 않는다(키보드 활성화를 락에 인정하지 않는 브라우저 · 합성 키에서 세션 전체가 드래그로 굳지 않게). 클릭(`mousedown`)으로 연 요청의 실패만 이 규칙을 적용한다.
   4. available이 false면 **드래그 대체**: 가운데 버튼 드래그는 언제나, 걷기 모드에서는 좌 · 우 드래그도 시선이 된다. 안내 문구는 「가운데 버튼을 누른 채 끌어 둘러보기」.
 - **낚시 모드의 키 조준**: `setMode('fish')`이면 KeyA/KeyD가 `look.yaw`를 `MOUSE.keyYawRate`(1.2 rad/s) × dt로 돌린다(락 유무와 무관 — 가운데 버튼이 없는 터치패드도 조준 · 파이팅 중 물고기 쪽 보기가 된다). sim은 지금처럼 `input.yaw`만 읽는다(낚시 모드의 `moveX` · `moveZ`는 sim이 쓰지 않는다).
-- 첫 사용자 제스처(`keydown` · `mousedown`)에서 `audio.unlock()` · `AUDIO_UNLOCKED`.
+- 첫 사용자 제스처(`keydown` · `mousedown`)에서 `audio.unlock()` · `AUDIO_UNLOCKED`. **리뷰 수정**: `mousedown`은 window 캡처 단계에서 본다(타이틀 · 일시정지 패널의 클릭도 제스처 — 캔버스만 보면 마우스로 「새 게임」을 눌러도 소리가 켜지지 않았다). 휠도 `ctrlKey` · `altKey` · `metaKey`면 건드리지 않는다(브라우저 확대 · 트랙패드 핀치).
+- **리뷰 수정 — 패널을 닫는 클릭의 더블클릭**: app 은 `PANEL_CLOSED{depth 0, by 'confirm' | 'pointer'}`에서 `input.armClickGuard()`를 부르고, 그 뒤 `CLOSE_CLICK_GUARD_MS`(= `MOUSE.closeGuardMs` 450ms — `data/settings.js`) 안의 캔버스 `mousedown`은 규칙 ②처럼 뗄 때까지 삼킨다(홀드 · 에지 없음). 닫은 클릭이 락을 다시 잡은 직후 두 번째 누름이 캐스팅으로 새지 않는다.
 - **W2 확정**(P9 — 마우스 버튼): 버튼은 캔버스의 `mousedown` · window 의 `mouseup`으로 읽는다. Pointer Events 는 버튼을 겹쳐 누르면(좌클릭을 누른 채 우클릭 = 릴링 + 펌핑) 두 번째 버튼의 `pointerdown`을 내지 않는다. `InputCollector`가 더 가진 것(app 내부): `keyHandler(e)`(true 면 게임 입력으로 새지 않는다 — 홀드는 추적) · `onGesture` · `onLockLost` · `lockGate` · `requestLock({soft})` · `releaseLock()` · `announceLock()` · `playing` · 순수 도우미 `wheelToSteps` · `applyMouseDelta`. `look`은 내부 객체 그대로(읽기 전용).
 
 ### 11.4 화면 크기 · 터치
@@ -2960,6 +2972,7 @@ export const WHEEL = { pxPerStep: 100, linePx: 33 };          // deltaY 100px = 
 - **백업**: `backupSave(raw = 지금 SAVE_KEY 값)`은 `${SAVE_BACKUP_KEY}.<ms>`에 쓰고 목록 `${SAVE_BACKUP_KEY}.index`(ms 배열)에 더한 뒤 최신 3개만 남긴다(앞의 정상 백업을 손상 원문이 덮지 않는다).
 - `localStorage`가 막혀 있으면(`canPersist() === false`) 타이틀에 `title.noStorage` · 저장 호출은 조용히 false.
 - 쓰기 실패(용량 등)는 한 번만 `toast('save.failed')`.
+- **리뷰 수정 — 여러 탭**(같은 localStorage): app 은 이 탭이 아는 `SAVE_KEY` 원문(부팅 때 읽은 것 · 마지막으로 쓴 것)을 들고, 쓸 때는 `storage.writeSaveChecked(save, expectRaw)`로 지금 원문이 그것과 같을 때만 쓴다. 다르거나 window `storage` 이벤트(`key === SAVE_KEY` · `null`)로 다른 탭의 쓰기를 알면 이 탭은 **stale** — 더 쓰지 않고(숨김 · 닫힘 포함) 타이틀로 가서 `title.staleSave` 안내와 그 세이브의 레벨 · 돈을 보인다. 그 타이틀의 이어하기(「최신 기록 불러오기」 `title.reload`)는 페이지를 다시 읽는다(GameSim 에 세이브를 제자리에서 다시 읽는 명령이 없다). 「새 게임」은 확인(있으면) 뒤 지금 세이브를 백업하고 이 탭이 주인이 된다. 세이브 없이 연 타이틀에서 그 사이 다른 탭이 세이브를 만들었으면 「새 게임」은 덮지 않고 타이틀을 최신으로 다시 연다. `storage.readSaveRaw()`(원문 · 던지지 않는다).
 - **설정**: app은 `persisted`(localStorage에서 읽은 값)와 `overrides`(쿼리 `?quality` · `?mute`)를 따로 들고, 레이어에 주는 `settings`는 `{...persisted, ...overrides}`를 같은 객체에 다시 채워 만든다. `applySettings(partial)`은 persisted를 고치고 `writeSettings(persisted)` — 쿼리 덮어쓰기가 영구 설정이 되지 않는다. 덮인 항목은 일시정지 설정 탭에 「이번 실행만」.
 
 ### 11.6 개발용 URL 쿼리 — `app/query.js`
@@ -3040,7 +3053,7 @@ export const WHEEL = { pxPerStep: 100, linePx: 33 };          // deltaY 100px = 
 | 상황 | 동작 |
 |---|---|
 | WebGL 생성 실패 | `ui.showFatal` 안내 · `markError('webgl')` · 루프 시작 안 함 |
-| `webglcontextlost` | 일시정지 + 알림(`hud.notice.contextLost` — W2 확정) · `webglcontextrestored`에서 루프 기준 시각을 다시 잡는다(알림은 수명대로 사라진다 · 일시정지 「계속하기」로 돌아간다) |
+| `webglcontextlost` | 일시정지 + 지속 알림(`ui.setSticky('hud.notice.contextLost')` — 리뷰 수정: 복구될 때까지 남는다 · 일시정지를 닫아도 sim · 소리는 멈춰 있다) · `webglcontextrestored`에서 지속 알림을 내리고 `hud.notice.contextRestored` 알림 · 루프 기준 시각을 다시 잡고, 패널이 막고 있지 않으면 일시정지를 다시 연다(파이팅이 예고 없이 이어지지 않는다 — 「계속하기」로 돌아간다) |
 | localStorage 막힘 | 타이틀 안내 · 저장 없이 플레이 |
 | 터치 기기 | 타이틀 안내 |
 | 탭 숨김 | 일시정지 · `audio.setPaused(true)`(suspend) |
@@ -3054,6 +3067,7 @@ export const WHEEL = { pxPerStep: 100, linePx: 33 };          // deltaY 100px = 
 
 - **사람처럼**: 매 틱 `InputFrame` 하나 + 필요하면 UI와 같은 명령 하나(§6.8). 보는 것도 사람이 보는 것만 — 찌/초리 신호(`rig.signal`) · 텐션 · 드랙 · 거리 · 라인 잔량 · 예고(`fight.telegraph`) · `canNet` · 장애물 경고 · (지식 3) 체력 바 · 데이터 표(PC에서 보는 정보: 수심 프로필 · 어종 활동 시간대 · 선호 미끼). **보지 않는 것**: `rig.bite` · `fight.speciesId` · `fight.k` · `fight.brain` · 지식 3 전의 `fight.stamina` · `biteInfo()`.
 - **반응 지연 · 실수**: 본신을 본 뒤 `BOT.react`(정규, 잘라서) 뒤에 Space · 입질마다 `BOT.earlyRate` 확률로 예신에 성급히 챔질 · 캐스팅은 게이지가 `castPower.target ± sd`를 올라가며 지날 때 뗀다 · 뜰채는 `canNet`을 본 뒤 `BOT.netReact`.
+- **자리 봇의 ready**(리뷰 수정): 손이 이미 좌클릭을 쥐고 있으면(충전 중 자리를 떠났다가 같은 손으로 돌아왔다) 한 틱 뗐다가 누른다 — 쥔 채로는 누름 에지가 나오지 않는다. 미끼가 없으면(`castBlock 'noBait'`) `PLAN.noBaitPokeS`(10초)마다 눌러 본다 — sim 이 무료 미끼를 주거나 `CAST_BLOCKED`로 알린다.
 - **손의 속도**: 드랙 눈금은 `BOT.dragEveryTicks`(2) 틱에 1눈금까지만 바꾼다 — `|dragSteps| ≤ 1`이고 연속 두 틱에 0이 아닌 값을 내지 않는다(사람의 휠 · Z/C로 낼 수 있는 속도). `bot.test`가 검사한다.
 - **파이팅 전략**(브리프 §7 · `bot/policy.js`):
   - `basic`: 드랙 = 라인 강도의 30%(가장 가까운 눈금) 고정 · `tension < 0.5 × lineEffKg`면 릴링 · 펌핑 · 베일 안 함.
@@ -3312,6 +3326,6 @@ export const WHEEL = { pxPerStep: 100, linePx: 33 };          // deltaY 100px = 
 | `hint.bottomRig.body` | 「바닥 채비는 초리(로드 끝)를 본다 — 떨리다가 쑥 숙여지고 방울이 울리면 Space」 |
 | `fatal.webglTitle` · `fatal.webglBody` · `title.noStorage` · `title.needInput` · `title.saveBroken` · `title.saveFuture` · `save.failed` | WebGL을 쓸 수 없다 · 브라우저의 하드웨어 가속을 켜고 다시 열어 주세요 · 저장할 수 없는 환경이다 — 진행이 남지 않는다 · 키보드와 마우스가 필요하다 · 세이브가 손상되어 백업하고 새로 시작한다 · 더 새 버전의 세이브다 — 백업하고 새로 시작한다 · 저장하지 못했다 |
 | `prompt.clickToLook` · `hud.levelMax` · `hud.skillPoints` · `banner.levelUp` · `banner.tier3` | 클릭해서 시점 고정 · MAX · 스킬 +{n} (Tab) · 레벨 {n}! Tab → 스킬 · 3단계 장비 해금 |
-| `hud.notice.contextLost` | 그래픽 장치가 초기화됐다 — 복구되면 「계속하기」로 돌아간다 (W2 확정 — §11.10) |
+| `hud.notice.contextLost` | 그래픽 장치를 다시 잡는 중 — 잠시 기다려 주세요(복구되면 일시정지로 돌아온다) (W2 확정 · 리뷰 수정 — §11.10) |
 | `confirm.newGame.title` · `confirm.newGame.body` · `result.swap` | 새 게임 · 기존 기록(레벨 {level} · 돈 {money}원)은 백업된다 · 어창의 {name}({price}원)과 바꾸기 |
 | `hud.*` · `panel.*` · `prompt.*` · `banner.*` | 그 밖은 P8이 정한다(키 이름은 `hud.tension` · `prompt.spot` · `banner.trophy`처럼 영역.이름) |

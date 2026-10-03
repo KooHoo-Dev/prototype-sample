@@ -160,6 +160,31 @@ test('상호작용: 반경 · 시선(interactFov) · 가장 가까운 것 · E �
   assert.equal(findNearby(f.state, home), null);
 });
 
+test('상호작용(리뷰 수정): 문 쪽 벽에 몸을 붙여도 「문」이 잡힌다(시선이 점 뒤 interactDepthM 을 향한다) · 등을 돌리면 없음', () => {
+  const home = getStage('home');
+  const door = home.points.find(p => p.id === 'door');
+  for (const x0 of [0.3, -0.5, 0.7]) {
+    const { state, ctx } = walker('home', x0, door.approach.z, Math.PI);   // +Z(문 쪽)를 보고 걷는다
+    let seen = false;
+    for (let i = 0; i < 90; i++) {
+      walk(ctx, 1, { moveZ: 1 });
+      const p = state.player;
+      if (Math.hypot(p.pos.x - door.x, p.pos.z - door.z) <= door.radius - 0.2) {
+        assert.equal(p.nearby?.id, 'door', `x0 ${x0}: (${p.pos.x.toFixed(3)}, ${p.pos.z.toFixed(3)})에서 문 프롬프트가 사라졌다`);
+        seen = true;
+      }
+    }
+    assert.ok(seen);
+    assert.ok(state.player.pos.z > door.z - 0.01, '벽에 붙었다');
+    ctx.events.length = 0;
+    updateWalk(ctx, makeInput({ yaw: Math.PI, interact: true }));
+    assert.deepEqual(ctx.events.filter(e => e.name === EV.INTERACT).map(e => e.payload), [{ kind: 'door', id: 'door' }]);
+    // 벽에 붙은 채 등을 돌리면(방 안을 본다) 잡히지 않는다
+    state.player.yaw = 0;
+    assert.equal(findNearby(state, home), null);
+  }
+});
+
 test('자리 진입: spotRadius 안의 자리가 먼저 · E 면 updateWalk 가 enterSpotId 를 돌려준다(INTERACT 없음)', () => {
   const spot = getSpot('lake_gravel');
   const { state, ctx } = walker('lake', spot.stand.x, spot.stand.z + 1.0, Math.PI);   // 자리를 등지고 있어도

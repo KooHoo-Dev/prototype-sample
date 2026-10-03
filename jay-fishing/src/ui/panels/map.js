@@ -10,6 +10,9 @@ class MapPanel extends PanelBase {
     super(ctx, 'map', { size: 'm' });
   }
 
+  /** 가로 카드 — ←→ 로 고른다(값 조절 항목이 없다) */
+  footKey() { return 'map.foot'; }
+
   build() {
     const sim = /** @type {any} */ (this.sim);
     const actions = /** @type {any} */ (this.ctx.actions);
@@ -18,6 +21,7 @@ class MapPanel extends PanelBase {
     try { list = sim.getTravel() || []; } catch (e) { void e; }
     const grid = el('div', 'map-grid');
     this.addInfo(grid);
+    const first = this.items.length;
     for (const d of list) {
       const card = el('div', 'map-card' + (d.ok ? '' : ' is-locked'));
       card.append(el('div', 'map-name', t('stage.' + d.id)));
@@ -40,6 +44,7 @@ class MapPanel extends PanelBase {
       }, grid);
     }
     if (!list.length) grid.append(el('div', 'empty', t('map.none')));
+    else this.setGrid(first, this.items.length - 1);   // 가로 카드 — ←→ 로 고른다(widgets)
     this.addInfo(el('div', 'row-note', t('map.note')));
   }
 }

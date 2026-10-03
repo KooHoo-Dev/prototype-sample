@@ -27,7 +27,13 @@ class TacklePanel extends PanelBase {
     this.dexStage = null;
   }
 
-  footKey() { return 'tackle.foot'; }
+  /** 탭마다 — 도감은 고르기만 · 스킬은 Enter 배우기(리뷰 수정: 세 탭 모두 「Enter 끼우기」였다) */
+  footKey() {
+    const tab = this.tabs ? this.tabs[this.tab] : '';
+    if (tab === 'tackle.tab.dex') return 'tackle.footDex';
+    if (tab === 'tackle.tab.skill') return 'tackle.footSkill';
+    return 'tackle.foot';
+  }
 
   onOpen() {
     const s = /** @type {any} */ (this.sim).state;

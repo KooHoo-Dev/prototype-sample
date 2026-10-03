@@ -256,3 +256,70 @@ test('루프 누산: 프레임당 8틱 · 탭 복귀 폭주 없음 · 패널이 
   assert.equal(runAccumulator(st, DT * 3, () => true, () => false), 0);
   assert.equal(st.acc, 0);
 });
+
+// ── 리뷰 수정(ui-app) 회귀
+
+test('리뷰: 패널을 닫은 직후의 캔버스 누름(더블클릭 두 번째)은 삼키고, 창이 지나면 정상', () => {
+  let now = 1000;
+  const win = new FakeTarget();
+  const doc = new FakeTarget();
+  doc.pointerLockElement = null;
+  doc.exitPointerLock = () => { doc.pointerLockElement = null; doc.fire('pointerlockchange'); };
+  const canvas = new FakeTarget();
+  canvas.requestPointerLock = () => { doc.pointerLockElement = canvas; doc.fire('pointerlockchange'); };
+  const input = new InputCollector({ canvas, settings: {}, bus: new EventBus(), win, doc, now: () => now });
+  canvas.fire('mousedown', { button: 0 });   // 락(삼킴)
+  win.fire('mouseup', { button: 0 });
+  assert.equal(input.pointerLocked, true);
+  // 결과 패널 → 클릭으로 닫힘(app 이 PANEL_CLOSED{confirm} 에서 armClickGuard) → 락이 다시 잡힌 채 두 번째 누름
+  input.setCapture(false);
+  input.setCapture(true);
+  input.armClickGuard();
+  now += 150;
+  canvas.fire('mousedown', { button: 0, detail: 2 });
+  let f = input.buildFrame();
+  assert.equal(f.primaryPressed, false, '두 번째 누름은 충전을 시작하지 않는다');
+  assert.equal(f.primary, false);
+  win.fire('mouseup', { button: 0, detail: 2 });
+  f = input.buildFrame();
+  assert.equal(f.primaryReleased, false, '삼킨 누름은 뗌도 없다(캐스팅 없음)');
+  assert.equal(input.buildFrame().primary, false);
+  // 우클릭도 같은 창 안이면 삼킨다
+  canvas.fire('mousedown', { button: 2 });
+  assert.equal(input.buildFrame().secondary, false);
+  win.fire('mouseup', { button: 2 });
+  // 창(CLOSE_CLICK_GUARD_MS)이 지나면 정상 클릭
+  now += 1000;
+  canvas.fire('mousedown', { button: 0 });
+  f = input.buildFrame();
+  assert.equal(f.primaryPressed, true);
+  win.fire('mouseup', { button: 0 });
+  assert.equal(input.buildFrame().primaryReleased, true);
+});
+
+test('리뷰: 캔버스 밖(패널) mousedown 도 첫 제스처다 — window 캡처 단계', () => {
+  const { win, canvas, input } = rig();
+  let g = 0;
+  input.onGesture = () => g++;
+  win.fire('mousedown', { button: 0 });   // 타이틀 패널의 「새 게임」 행 — 캔버스에 닿지 않는다
+  assert.equal(g, 1, '패널 클릭이 소리를 켠다');
+  const cap = (win.l.get('mousedown') || []).length;
+  assert.ok(cap >= 1);
+  canvas.fire('mousedown', { button: 0 });
+  assert.ok(g >= 2, '캔버스 클릭도(앱의 onGesture 는 한 번만 켠다)');
+});
+
+test('리뷰: Ctrl · Alt · Meta + 휠은 건드리지 않는다(브라우저 확대 · 핀치)', () => {
+  const { canvas, input } = rig();
+  let prevented = 0;
+  const wheel = (e) => { for (const fn of canvas.l.get('wheel')) fn({ cancelable: true, deltaMode: 0, preventDefault() { prevented++; }, ...e }); };
+  wheel({ deltaY: -100, ctrlKey: true });
+  wheel({ deltaY: 300, ctrlKey: true });
+  wheel({ deltaY: -100, metaKey: true });
+  wheel({ deltaY: -100, altKey: true });
+  assert.equal(prevented, 0, 'preventDefault 를 부르지 않는다');
+  assert.equal(input.buildFrame().dragSteps, 0, '드랙 눈금이 바뀌지 않는다');
+  wheel({ deltaY: -100 });
+  assert.equal(prevented, 1);
+  assert.equal(input.buildFrame().dragSteps, 1, '수정키 없는 휠은 그대로 조이기');
+});

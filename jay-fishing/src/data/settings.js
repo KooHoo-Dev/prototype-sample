@@ -8,4 +8,4 @@ export const QUALITY = {
   medium: { pixelRatio: 1.5, shadows: true,  shadowMap: 1024, waterReflect: 'sky',    fogParticles: 60,  rainDrops: 1500, terrainSeg: 160 },
   high:   { pixelRatio: 2.0, shadows: true,  shadowMap: 2048, waterReflect: 'planar', fogParticles: 140, rainDrops: 3000, terrainSeg: 256 },
 };
-export const MOUSE = { radPerPx: 0.0022, spikeClampPx: 120, keyYawRate: 1.2 };   // rad/px(× mouseSens) · 한 이벤트 이동량 상한(스파이크는 버리지 않고 자른다) · 낚시 모드 A/D 조준(rad/s — §11.3)
+export const MOUSE = { radPerPx: 0.0022, spikeClampPx: 120, keyYawRate: 1.2, closeGuardMs: 450 };   // rad/px(× mouseSens) · 한 이벤트 이동량 상한(스파이크는 버리지 않고 자른다) · 낚시 모드 A/D 조준(rad/s — §11.3) · 패널을 클릭으로 닫은 뒤 캔버스 누름을 삼키는 창(ms — 리뷰 수정 · OS 더블클릭 간격 ≤ 500ms 를 덮는다)

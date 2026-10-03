@@ -181,8 +181,25 @@ export function updateWalk(ctx, input) {
 }
 
 /**
+ * 시선이 상호작용 물체를 향하는가 — 점, 또는 점 뒤(approach → 점 방향) WORLD.interactDepthM 지점이 interactFov 안.
+ * 물체는 깊이가 있다: 벽 위의 점(문)에 몸을 붙이면 점은 옆(90°)이지만 벽을 보면 점 뒤는 앞에 있다(리뷰 수정).
+ * @param {number} yaw @param {number} dx 점 − 플레이어 @param {number} dz @param {any} q InteractPoint
+ */
+function lookingAt(yaw, dx, dz, q) {
+  if (Math.abs(angleDiff(yaw, yawOf(dx, dz))) <= WORLD.interactFov) return true;
+  const ap = q.approach;
+  if (!ap) return false;
+  const ax = q.x - ap.x;
+  const az = q.z - ap.z;
+  const al = Math.hypot(ax, az);
+  if (!(al > 1e-6)) return false;
+  const k = WORLD.interactDepthM / al;
+  return Math.abs(angleDiff(yaw, yawOf(dx + ax * k, dz + az * k))) <= WORLD.interactFov;
+}
+
+/**
  * 지금 E 를 누르면 상호작용할 대상 — 걷기 모드에서 spotRadius 안의 자리(가장 가까운 것)가 먼저,
- * 없으면 radius 안이고 시선이 interactFov 안인 상호작용 점 중 가장 가까운 것(§7.2b). 순수.
+ * 없으면 radius 안이고 시선이 interactFov 안(점 또는 점 뒤 interactDepthM — lookingAt)인 상호작용 점 중 가장 가까운 것(§7.2b). 순수.
  * @param {Object} state @param {StageDef} stage @returns {InteractTarget|null}
  */
 export function findNearby(state, stage) {
@@ -208,7 +225,7 @@ export function findNearby(state, stage) {
     const dz = q.z - z;
     const d = Math.hypot(dx, dz);
     if (d > q.radius || d >= bestD) continue;
-    if (d > 1e-6 && Math.abs(angleDiff(yaw, yawOf(dx, dz))) > WORLD.interactFov) continue;
+    if (d > 1e-6 && !lookingAt(yaw, dx, dz, q)) continue;
     pt = q;
     bestD = d;
   }

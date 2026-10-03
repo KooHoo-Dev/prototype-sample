@@ -6,11 +6,12 @@
 
 import './style.css';
 import { EV } from '../core/events.js';
-import { BITE } from '../data/bite.js';
+import { angleDiff } from '../core/math.js';
 import { HOLD } from '../data/economy.js';
 import { getSpot } from '../data/stages/index.js';
 import { t } from './i18n.js';
 import { createHud } from './hud.js';
+import { hintCandidate, hintStale } from './hints.js';
 import { PanelStack } from './stack.js';
 import { el, fmt, setHidden, setText, won } from './widgets.js';
 import { createTitlePanel } from './panels/title.js';
@@ -35,6 +36,8 @@ const BANNER_QUEUE_MAX = 6;
 const HINT_LIFE = 6;          // 안내 카드(§10.3)
 /** 입질 이후의 안내는 지금 카드를 밀어낸다(그 순간의 뜻이 더 급하다) */
 const URGENT_HINTS = ['bite', 'fight', 'net'];
+/** 조준이 자리의 캐스팅 호(facing ± arc)를 이만큼(rad) 넘으면 알린다 — 캐스팅은 호 끝으로 간다(리뷰 수정) */
+const AIM_OUT_MARGIN = 0.05;
 /** 그 대상 앞에서만 열리는 패널 → 상호작용 종류(§10.1 자가 동기화) */
 const PLACE_PANELS = { sell: 'npc', camp: 'camp', map: 'door', bed: 'bed', pc: 'pc' };
 const INTERACT_PANEL = { npc: 'sell', camp: 'camp', door: 'map', bed: 'bed', pc: 'pc' };
@@ -80,6 +83,9 @@ export class UIRoot {
     this._failNotice = null;
     this._busyPhase = '';
     this._holdFullCastShown = false;
+    this._aimOutShown = false;
+    /** @type {{node:HTMLElement, life:number, kind:string}|null} 복구될 때까지 남는 알림(setSticky) */
+    this._sticky = null;
     this._lastPhase = '';
     /** 장소 패널이 열린 때의 씬 · 대상 */
     this._place = { scene: '', kind: '' };
@@ -138,8 +144,9 @@ export class UIRoot {
       this._busyPhase = ph;
       this.toast('reason.busy');
     });
-    on(EV.FISHING_ENTER, () => { this._holdFullCastShown = false; this.hud.markDirty(); });
+    on(EV.FISHING_ENTER, () => { this._holdFullCastShown = false; this._aimOutShown = false; this.hud.markDirty(); });
     on(EV.CAST_START, () => {
+      this._checkAim();
       if (this._holdFullCastShown) return;
       if (this.sim.state.profile.hold.length >= HOLD.capacity) {
         this._holdFullCastShown = true;
@@ -185,7 +192,10 @@ export class UIRoot {
     on(EV.SET_CHANGED, () => this.hud.markDirty());
     on(EV.RIG_RESTORED, () => this.hud.markDirty());
     on(EV.HOOK_SET, () => this.hud.markDirty());
-    on(EV.SCENE_CHANGED, () => this.hud.markDirty());
+    on(EV.SCENE_CHANGED, (p) => {
+      if (p && p.reason === 'new') this._resetSession();
+      this.hud.markDirty();
+    });
     on(EV.CLOCK_BAND, (p) => this.toast('hud.notice.band', { band: t('band.' + p.band) }));
     on(EV.PAUSED, (p) => { this.paused = !!p.on; });
     on(EV.POINTER_LOCK, (p) => this.hud.setPointer(p.locked, p.available));
@@ -396,12 +406,59 @@ export class UIRoot {
     this._pushNotice({ node, life: NOTICE_LIFE, kind: 'toast' });
   }
 
+  /**
+   * 지울 때까지 남는 알림 한 줄(수명이 줄지 않는다 — 그래픽 장치 복구 대기 같은 지속 상태) · null 이면 내린다.
+   * @param {string|null} key @param {Object} [params]
+   */
+  setSticky(key, params = {}) {
+    if (this._sticky) {
+      const i = this.notices.indexOf(this._sticky);
+      if (i >= 0) this.notices.splice(i, 1);
+      this._sticky.node.remove();
+      this._sticky = null;
+    }
+    if (!key) return;
+    const n = { node: el('div', 'notice notice-sticky', t(key, params)), life: Infinity, kind: 'sticky' };
+    this._sticky = n;
+    this._pushNotice(n);
+  }
+
+  /** 새 게임(SCENE_CHANGED{new}) — 이 실행에서 본 안내 · 지금 카드 · 알림 · 배너 대기열을 비운다(첫 경험을 다시 본다 — 리뷰 수정) */
+  _resetSession() {
+    this._seenHints.clear();
+    this._hint.id = '';
+    this._hint.life = 0;
+    setHidden(this.hintEl, true);
+    for (const n of this.notices) if (n !== this._sticky) n.node.remove();
+    this.notices = this._sticky ? [this._sticky] : [];
+    this._failNotice = null;
+    this._failLoss = null;
+    this.bannerQueue.length = 0;
+    this._banner.life = 0;
+    setHidden(this.bannerEl, true);
+    this._holdFullCastShown = false;
+    this._aimOutShown = false;
+  }
+
+  /** 충전 시작 — 조준이 자리의 캐스팅 호 밖이면 한 번 알린다(rig 는 말없이 호 끝으로 자른다 · 그 낚시 진입에서 한 번) */
+  _checkAim() {
+    if (this._aimOutShown) return;
+    const s = this.sim.state;
+    if (!s || s.player.mode !== 'fish' || !s.player.spotId) return;
+    let sp = null;
+    try { sp = getSpot(s.player.spotId); } catch (e) { void e; }
+    if (!sp || !Number.isFinite(sp.facing) || !Number.isFinite(sp.arc) || !Number.isFinite(s.player.yaw)) return;
+    if (Math.abs(angleDiff(sp.facing, s.player.yaw)) <= sp.arc + AIM_OUT_MARGIN) return;
+    this._aimOutShown = true;
+    this.toast('hud.notice.aimOut');
+  }
+
   /** @param {{node:HTMLElement, life:number, kind:string}} n */
   _pushNotice(n) {
     this.notices.push(n);
     this.noticeEl.append(n.node);
     while (this.notices.length > NOTICE_MAX) {
-      const i = this.notices.findIndex(x => x !== this._failNotice);
+      const i = this.notices.findIndex(x => x !== this._failNotice && x !== this._sticky);
       const [old] = this.notices.splice(i < 0 ? 0 : i, 1);
       old.node.remove();
       if (old === this._failNotice) this._failNotice = null;
@@ -507,31 +564,9 @@ export class UIRoot {
     return this._seenHints.has(id) || !!(s.profile.flags && s.profile.flags.hints && s.profile.flags.hints[id]);
   }
 
-  /** 지금 보일 만한 안내(우선순위 순) @param {any} s @returns {string} */
+  /** 지금 보일 만한 안내(우선순위 순 — ./hints.js) @param {any} s @returns {string} */
   _hintCandidate(s) {
-    const fishing = s.player.mode === 'fish';
-    const rig = s.rig;
-    const ph = rig.phase;
-    /** @param {string} id @param {boolean} cond */
-    const ok = (id, cond) => cond && !this._hintSeen(id, s);
-    if (ok('net', !!s.fight && !!s.fight.canNet && ph === 'fighting')) return 'net';
-    if (ok('fight', ph === 'fighting')) return 'fight';
-    if (ok('bite', fishing && (ph === 'waiting' || ph === 'bite'))) return 'bite';
-    if (ok('start', s.scene === 'home' && !fishing)) return 'start';
-    if (ok('stage', s.scene !== 'home')) return 'stage';
-    if (ok('controls', fishing)) return 'controls';
-    if (ok('cast', fishing && (ph === 'ready' || ph === 'charging'))) return 'cast';
-    if (ok('bottomRig', fishing && rig.set === 'bottom')) return 'bottomRig';
-    if (fishing && rig.set === 'float' && !this._hintSeen('drift', s) && s.player.spotId) {
-      let flow = 0;
-      try {
-        const sp = getSpot(s.player.spotId);
-        flow = Math.hypot(sp.flow.x, sp.flow.z);
-      } catch (e) { void e; }
-      if (flow >= BITE.driftMinFlow) return 'drift';
-    }
-    if (ok('holdFull', s.profile.hold.length >= HOLD.capacity)) return 'holdFull';
-    return '';
+    return hintCandidate(s, (id) => this._hintSeen(id, s));
   }
 
   /** @param {any} s @param {number} dt @param {boolean} blocked */
@@ -539,9 +574,8 @@ export class UIRoot {
     const h = this._hint;
     if (h.id) {
       h.life -= dt;
-      // 씬에 묶인 안내는 씬이 바뀌면 내린다(W1 통합 — 집의 「문으로 나가 호수로」가 호수 도착 뒤 남은 수명만큼 다시 뜨지 않게)
-      const stale = (h.id === 'start' && s.scene !== 'home') || (h.id === 'stage' && s.scene === 'home');
-      if (h.life <= 0 || stale) {
+      // 상황이 끝난 안내는 내린다(./hints.js — 씬에 묶인 안내 · 결과 뒤의 뜰채 안내가 남은 수명만큼 다시 뜨지 않게)
+      if (h.life <= 0 || hintStale(h.id, s)) {
         h.id = '';
         setHidden(this.hintEl, true);
       }

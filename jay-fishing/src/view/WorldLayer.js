@@ -266,9 +266,13 @@ export class WorldLayer {
       this.sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
     }
+    // 그림자를 끄면 그림자 맵을 놓는다(다시 켜면 three 가 새로 만든다)
+    if (!Q.shadows && this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
     this.rain.setCount(Q.rainDrops);
     this.mist.setCount(Q.fogParticles);
     this.reflection.enabled = Q.waterReflect === 'planar' && !!(this.rc.renderer);
+    // 반사를 끄면 ½ 해상도 반사 버퍼를 놓는다(다시 켜면 PlanarReflection.render 가 키운다)
+    if (!this.reflection.enabled) this.reflection.release();
     const mode = Q.waterReflect === 'planar' ? (this.reflection.enabled ? 2 : 1) : Q.waterReflect === 'sky' ? 1 : 0;
     for (const id of Object.keys(this.scenes)) {
       const s = this.scenes[id];
@@ -389,6 +393,10 @@ export class WorldLayer {
       this._windowSun = this.sun.intensity / SUN_INTENSITY;
       this.sun.intensity = 0;
     }
+    // 세기 0인 실내에서는 그림자 패스를 건너뛴다(castShadow 는 그대로 — 빛 · 프로그램이 바뀌지 않는다). 야외는 매 프레임 갱신.
+    // 그림자 맵이 아직 없으면(집으로 바로 부팅 · 화질로 맵을 놓은 뒤) 한 번은 그린다 — castShadow 인 빛의 맵이 null 이면
+    // three 가 빈 깊이 텍스처를 묶어 그리기마다 GL_INVALID_OPERATION(샘플러 형식 불일치)이 나고 방이 검게 나온다(실측).
+    this.sun.shadow.autoUpdate = outdoor || !this.sun.shadow.map;
     this._ambient.copy(this.hemi.color).multiplyScalar(this.hemi.intensity * 0.55);
 
     // 헤드랜턴(야외 밤) — 카메라에 붙는다. 집에서는 같은 스포트가 창으로 드는 햇살(빛 개수 고정 — 재컴파일 없음)
