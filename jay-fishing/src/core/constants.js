@@ -32,4 +32,4 @@ export const FAIL_REASONS = ['lineBreak', 'spoolEmpty', 'rodBreak', 'hookOff', '
 export const RIG_PHASES = ['idle', 'ready', 'charging', 'casting', 'waiting', 'retrieving', 'bite', 'fighting', 'landing', 'result', 'failed'];
 export const INTERACT_KINDS = ['spot', 'npc', 'camp', 'pc', 'bed', 'door'];
 export const PANEL_IDS = ['title', 'pause', 'tackle', 'result', 'sell', 'pc', 'camp', 'map', 'bed', 'confirm'];
-export const HINT_IDS = ['start', 'stage', 'controls', 'cast', 'bite', 'fight', 'net', 'drift', 'bottomRig', 'holdFull'];
+export const HINT_IDS = ['start', 'stage', 'controls', 'cast', 'bite', 'fight', 'net', 'drift', 'bottomRig', 'holdFull', 'riverDrag'];

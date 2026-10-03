@@ -196,7 +196,7 @@ export const STRINGS = {
   'reason.wrongSet': '잘못된 선택',
   'reason.invalid': '잘못된 선택',
 
-  // ── 안내 문구(§10.3 — HINT_IDS 10종)
+  // ── 안내 문구(§10.3 — HINT_IDS 11종)
   'hint.start.title': '시작',
   'hint.stage.title': '스테이지',
   'hint.controls.title': '낚시 조작',
@@ -207,6 +207,7 @@ export const STRINGS = {
   'hint.drift.title': '흘림',
   'hint.bottomRig.title': '바닥 채비',
   'hint.holdFull.title': '어창',
+  'hint.riverDrag.title': '강의 흐름',
   'hint.start.body': 'WASD 이동 · 마우스 둘러보기 · E 상호작용. 문으로 나가 호수로 가자 — PC에서는 상점 · 날씨 · 도감 · 스킬',
   'hint.stage.body': '주황 깃발과 바닥의 흰 고리가 낚시 자리다(E). 판매상에게 물고기를 판다 · 캠프에서 다음 시간대로 건너뛰거나 집으로 간다',
   'hint.controls.body': '좌클릭 캐스팅 · 릴링 · 우클릭 펌핑 · A/D 조준 · Space 챔질 · Esc 일어나기',
@@ -216,6 +217,7 @@ export const STRINGS = {
   'hint.fight.body': '텐션이 라인 강도를 넘으면 끊어진다. 드랙(휠 · Z/C)은 릴이 미끄러지기 시작하는 힘 — 물고기가 달릴 땐 풀고 쉴 땐 조여라. 좌클릭 릴링 · 우클릭 펌핑(로드를 세운다 — 세운 채 너무 당기면 로드가 부러진다)',
   'hint.net.body': '지친 물고기가 가까이 오면 Space로 뜰채',
   'hint.drift.body': '흐르는 자리다 — R로 베일을 열면 찌가 흐름을 타고 멀리 흘러간다. 다시 R로 멈춘다',
+  'hint.riverDrag.body': '흐름이 줄을 당긴다 — 드랙을 라인 강도의 절반쯤으로 올려 두어라(휠 · Z/C). 그대로 두면 물고기와 흐름에 끝없이 풀려 나간다',
   'hint.bottomRig.body': '바닥 채비는 초리(로드 끝)를 본다 — 떨리다가 쑥 숙여지고 방울이 울리면 Space',
 
   // ── 부팅 · 타이틀 · 저장

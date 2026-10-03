@@ -27,7 +27,7 @@
 /** @typedef {'fusiform'|'compressed'|'eel'|'shark'|'benthic'} BodyTemplate  방추형 · 측편형 · 장형 · 상어형 · 저서형 */
 /** @typedef {'spot'|'npc'|'camp'|'pc'|'bed'|'door'} InteractKind */
 /** @typedef {'title'|'pause'|'tackle'|'result'|'sell'|'pc'|'camp'|'map'|'bed'|'confirm'} PanelId */
-/** @typedef {'start'|'stage'|'controls'|'cast'|'bite'|'fight'|'net'|'drift'|'bottomRig'|'holdFull'} HintId   §10.3 안내 문구 */
+/** @typedef {'start'|'stage'|'controls'|'cast'|'bite'|'fight'|'net'|'drift'|'bottomRig'|'holdFull'|'riverDrag'} HintId   §10.3 안내 문구 */
 /** @typedef {'slack'|'jump'|'shake'|'active'|'abrasion'|null} LossCause   바늘 빠짐의 원인 · 라인 끊김의 쓸림 원인('abrasion' — 밸런스 게이트)(그 밖의 실패는 null) — 실패 알림이 한 줄로 보인다 */
 
 // ── 3.2 입력 — `InputFrame`

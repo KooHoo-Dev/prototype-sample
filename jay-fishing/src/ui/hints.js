@@ -25,6 +25,8 @@ export function hintCandidate(s, seen) {
   if (ok('start', s.scene === 'home' && !fishing)) return 'start';
   if (ok('stage', s.scene !== 'home')) return 'stage';
   if (ok('controls', fishing)) return 'controls';
+  // 강 첫 낚시(Jay 결정 2026-10-03 — NOTES-BALANCE 7절 #1 (c)): 흐름 하중이 고정 드랙을 넘는다
+  if (ok('riverDrag', fishing && s.scene === 'river' && (ph === 'ready' || ph === 'charging' || ph === 'waiting'))) return 'riverDrag';
   if (ok('cast', fishing && (ph === 'ready' || ph === 'charging'))) return 'cast';
   if (ok('bottomRig', fishing && rig.set === 'bottom')) return 'bottomRig';
   if (fishing && rig.set === 'float' && !seen('drift') && s.player.spotId) {
@@ -58,7 +60,8 @@ export function hintStale(id, s) {
     case 'controls':
     case 'cast':
     case 'bottomRig':
-    case 'drift': return !fishing;
+    case 'drift':
+    case 'riverDrag': return !fishing;
     default: return false;
   }
 }

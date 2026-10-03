@@ -9,3 +9,4 @@
 | 2026-10-02 | 리뷰(중단) | 컨테이너 재시작으로 proto-review 중단 — 결함 탐색 4/5 완료(`_review-*.json` 4개) · 소스 변경 없음 | 같은 run `wf_bfd0a249-0c4`를 resumeFromRunId로 재개 |
 | 2026-10-02 | 리뷰 | 지적 28건 처리(NOTES-REVIEW §2) · 프로덕션 빌드 전체 루프 · build ok · test 390 pass 0 fail · check:dist ok | run `wf_bfd0a249-0c4`(재개) · Jay가 정할 것 6건(NOTES-REVIEW §7) |
 | 2026-10-03 | 마감 | boot.png · 정지 화면 4장 확인 · README 확인 · status playable · RETRO 추가 · 서버 · `_scratch` 정리 | 다음: Jay의 한 판 → `/proto-feedback jay-fishing` |
+| 2026-10-03 | 피드백 | Jay 결정 반영: 강 안내 카드 riverDrag(c) · 브리프 §3.2 문장 · 나머지 그대로 · CLAUDE.md 규칙 5(단계별 커밋 · push) · public true · test 391 pass · build-site ok | NOTES-FEEDBACK.md · 다음: Deploy gallery 실행 |

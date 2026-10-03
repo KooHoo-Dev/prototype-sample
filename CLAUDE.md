@@ -18,7 +18,7 @@
 2. **프로토타입끼리 코드를 공유하지 않는다.** 다른 프로토타입 폴더를 import하지 않는다(읽고 베끼는 것은 된다). `templates/`는 복사해 쓰는 원본이다. 한 폴더를 떼어 새 리포로 옮길 수 있어야 한다.
 3. **맡은 프로토타입 폴더 밖은 쓰지 않는다.** 임시 파일은 `<dir>/docs/_scratch/`에 만들고 끝나면 지운다. 예외: 오케스트레이터는 `prototypes.json`의 자기 항목 · `docs/RETRO.md`(덧붙이기만) · 갤러리 미리보기의 `_site/`를 쓴다.
 4. **운영 자산은 Jay가 시킬 때만 고친다** — `CLAUDE.md` · `docs/` · `.claude/` · `.github/` · `tools/` · `templates/`. 고칠 것이 보이면 `docs/RETRO.md`에 한 줄 남긴다.
-5. **git 쓰기는 Jay가 말할 때, 메인 세션만 한다.** 서브에이전트의 git은 읽기 명령뿐이다(훅). 커밋은 경로를 명시한다 — `git add -- <dir>/ prototypes.json`(같은 작업 트리를 여러 세션이 쓴다 · `-A` 금지). push는 따로 시킬 때만.
+5. **git 쓰기는 메인 세션만 한다 — 단계(`docs/PIPELINE.md`의 각 단계 · 웨이브 · 피드백 라운드)가 끝날 때마다 커밋하고 그 세션의 브랜치에 push한다**(로컬 · 클라우드 세션 모두 · Jay 결정 2026-10-03). 서브에이전트의 git은 읽기 명령뿐이다(훅). 커밋은 경로를 명시한다 — `git add -- <dir>/ prototypes.json`(같은 작업 트리를 여러 세션이 쓴다 · `-A` 금지). 워크플로가 도는 중에는 끝난 산출물만 커밋한다.
 6. **공개는 Jay만 정한다.** 갤러리(GitHub Pages)에는 `prototypes.json`에서 `public: true`인 것만 올라간다 — 에이전트는 `public`을 바꾸지 않고, 배포 워크플로를 실행하지 않는다.
 7. **외부 에셋과 추가 의존성은 브리프가 허락한 것만.** 기본은 외부 에셋 0(모델 · 텍스처 · 소리를 코드로 만든다) · 의존성은 `vite`와 (3D면) `three`.
 8. **돌려 보지 않은 것을 됐다고 쓰지 않는다.** 게이트는 실제로 실행하고, 이 환경에서 확인할 수 없는 것(실시간 재생 · 소리 · 포인터 락 · 게임패드)은 「사람이 확인할 것」으로 남긴다.
@@ -60,7 +60,7 @@ claude.ai/code의 원격 세션(`CLAUDE_CODE_REMOTE=true`)이면 위의 Windows 
 - **내장 브라우저가 없다** → 화면은 `npm run probe:screen -- "<주소?쿼리>" --step <n> --out docs/_scratch/<이름>.png`(헤드리스 · `pause` → `step` → 스크린샷 · `errors()`)로 찍어 Read로 본다. 미리 깔린 Chromium(`/opt/pw-browsers/chromium`)은 `scripts/boot-probe.mjs`가 찾고, root면 `--no-sandbox`를 붙인다.
 - 프로세스: `taskkill` · `netstat` · `ss`가 없다 → `ps -eo pid,args`에서 자기 `vite --port <port>`의 PID → `kill <pid>`. `npx`의 PID만 끄면 자식 vite가 남는다.
 - **Jay는 컨테이너의 dev 서버를 열 수 없다** → 화면은 스크린샷 파일로 보내고(SendUserFile), 한 판은 Jay가 로컬에서 그 브랜치를 받아 `npm.cmd --prefix <dir> run dev`로 한다.
-- git: 세션에 지정된 브랜치에서만 일한다. push는 Claude GitHub App이 이 리포에 연결돼 있어야 된다(안 되면 403 — https://claude.ai/connect-github).
+- git: 세션에 지정된 브랜치에서만 일한다(불변 규칙 5의 단계별 커밋 · push도 그 브랜치로 — stop 훅이 커밋하지 않은 변경을 막는 것과 맞물린다). push는 Claude GitHub App이 이 리포에 연결돼 있어야 된다(안 되면 403 — https://claude.ai/connect-github).
 
 ## 서브에이전트
 

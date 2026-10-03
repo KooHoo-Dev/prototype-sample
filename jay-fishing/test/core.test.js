@@ -26,7 +26,7 @@ test('constants: 시간 단위 · 저장 키 · 열거', () => {
   assert.ok(C.SAVE_BACKUP_KEY.startsWith(C.GAME_ID + ':'));
   assert.deepEqual(C.STAGE_IDS, C.SCENE_IDS.filter(s => s !== 'home'));
   assert.equal(C.RIG_PHASES.length, 11);
-  assert.equal(C.HINT_IDS.length, 10);
+  assert.equal(C.HINT_IDS.length, 11);
   assert.equal(C.SKILL_IDS.length, 10);
 });
 

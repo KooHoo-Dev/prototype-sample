@@ -256,3 +256,22 @@ test('랜딩(뜰채로 뜨는 중)에는 예고 칩을 숨긴다 — fight 가 �
   ui.update(s, 0.1);
   assert.equal(ui.hud.tele.hidden, true, '랜딩 중에는 숨긴다');
 });
+
+test('강 첫 낚시: 「강의 흐름」 안내가 뜨고(드랙을 라인의 절반쯤) · 호수에서는 뜨지 않고 · 낚시를 벗어나면 내린다(Jay 결정 2026-10-03)', () => {
+  const seenAllBut = (/** @type {string} */ keep) => (/** @type {string} */ id) => id !== keep;
+  /** @param {string} scene @param {string} phase */
+  const st = (scene, phase) => ({
+    scene,
+    player: { mode: 'fish', spotId: scene === 'river' ? 'river_trench' : 'lake_gravel' },
+    rig: { phase, set: 'bottom' },
+    fight: null,
+    profile: { hold: [] },
+  });
+  for (const ph of ['ready', 'charging', 'waiting']) assert.equal(hintCandidate(st('river', ph), seenAllBut('riverDrag')), 'riverDrag', ph);
+  assert.equal(hintCandidate(st('lake', 'ready'), seenAllBut('riverDrag')), '');
+  assert.equal(hintCandidate(st('river', 'ready'), () => true), '');
+  assert.equal(hintStale('riverDrag', { ...st('river', 'ready'), player: { mode: 'walk' } }), true);
+  assert.equal(hintStale('riverDrag', st('river', 'waiting')), false);
+  assert.ok(HINT_IDS.includes('riverDrag'));
+  assert.ok(t('hint.riverDrag.body').includes('절반'));
+});
