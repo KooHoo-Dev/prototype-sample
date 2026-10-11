@@ -1,0 +1,73 @@
+/* OWNER: P10 — 계약 §10.1 · §10.3 (공통 변수 · HUD · 공통 패널 틀) */
+/* STUB — W2 에서 P10 이 채운다. W0: 최소 HUD 한 줄 · 패널 틀 · 치명 안내 */
+
+:root {
+  --ui-bg: rgba(14, 12, 18, 0.88);
+  --ui-fg: #e8e4dc;
+  --ui-dim: #9a948a;
+  --ui-accent: #ffb060;
+  --ui-font: system-ui, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+}
+
+#ui-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--ui-font);
+  color: var(--ui-fg);
+}
+
+.hud-stub {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  padding: 6px 10px;
+  background: var(--ui-bg);
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.notice-stub {
+  position: absolute;
+  right: 16px;
+  top: 45%;
+  font-size: 14px;
+}
+
+.panel-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel {
+  pointer-events: auto;
+  min-width: 320px;
+  max-width: 1100px;
+  max-height: 640px;
+  overflow: auto;
+  padding: 16px 20px;
+  background: var(--ui-bg);
+  border: 1px solid #3a3440;
+  border-radius: 8px;
+}
+
+.panel-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--ui-accent);
+}
+
+.fatal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #0b0a0d;
+  pointer-events: auto;
+}
