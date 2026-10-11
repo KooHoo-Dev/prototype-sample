@@ -487,7 +487,7 @@
  * @property {PackState[]} packs
  * @property {Portal[]} portals
  * @property {number|null} guardianId
- * @property {{x:number, z:number, at:number}|null} guardianSpawn   출현 예고(at = 나타나는 틱)
+ * @property {{x:number, z:number, at:number}|null} guardianSpawn   출현 예고(at = 나타나는 틱 · W1 수정 4: 그 전에 플레이어가 쓰러져 부활로 떠나면 settleOnRespawn 이 수호자를 세우고(잠든 채) null)
  * @property {Vec2|null} returnPos      마을 포털로 돌아올 자리(귀환한 자리 · 사망이면 checkpoint)
  * @property {Vec2} checkpoint          안전 지점(§5.10)
  * @property {number} checkpointCalm    그 자리에서 조용했던 틱 수
@@ -497,7 +497,9 @@
  * @property {RunSummary|null} summary  완료 · 붕괴 때 만든 요약(패널이 읽는다)
  * @property {number|null} completeAt   요약 패널을 띄울 틱
  * @property {string} guardianType      채울 때 정한 수호자 ID(GUARDIANS 키)
- * @property {number|null} calmAt       사망 뒤 몬스터를 재울 틱(§5.10)
+ * @property {number|null} calmAt       사망 뒤 몬스터를 재울 틱(§5.10 · W1 수정: DEATH.calmSec 0 이면 사망한 틱에 재우고 늘 null)
+ * @property {Record<number, {x:number, z:number, facing:number}>} homes   W1 수정(NOTES-W1FIX · 계약 §3.7): 몬스터 ID → 처음 놓인 자리(`spawnMonster`가 쓴다 ·
+ *   부활로 균열을 떠날 때 잠든 몬스터가 돌아간다 §5.10 · 시각 아님 — shiftTicks 대상 아님 · 균열 진행은 저장하지 않는다)
  * @property {null} mods                로드맵 자리(균열 변형 옵션 — v0.1은 늘 null · §8.8)
  */
 /** @typedef {Object} RunStats
@@ -547,7 +549,8 @@
  * @property {number} flinchUntil @property {number} flinchImmuneUntil @property {number} knockImmuneUntil
  * @property {number} invulnUntil    보호막 속성 · 사라짐
  */
-/** @typedef {{id:number, kind:'normal'|'champion'|'elite'|'guardian', memberIds:number[], awake:boolean, nextHazardAt:number, fled:boolean, anchor:Vec2}} PackState */
+/** @typedef {{id:number, kind:'normal'|'champion'|'elite'|'guardian', memberIds:number[], awake:boolean, nextHazardAt:number, fled:boolean, anchor:Vec2, depth?:number}} PackState
+ *  W1 수정(NOTES-W1FIX · 계약 §3.7): `depth` = 팩 자리(`PackSlot.depth`)의 방 깊이 — `populateRift`만 세운다(디버그 · 고정 상태 · 수호자 팩은 없다 = 깊은 팩으로 본다 · §5.17-1 초반 경사) */
 /** @typedef {Object} Proj
  * @property {number} id @property {string} visual   §9.8의 투사체 연출 ID
  * @property {'player'|'mon'} owner @property {number} srcId

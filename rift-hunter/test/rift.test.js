@@ -16,7 +16,7 @@ import { RIFT } from '../src/data/rift.js';
 import { getMonster, removeMarked } from '../src/sim/entities.js';
 import { meterView, updateMeter } from '../src/sim/meter.js';
 import { unlockAfter } from '../src/sim/progression/progress.js';
-import { addGauge, killPlayer, openRecallPortal, requestReturnToRift, requestTravel, resolveDeaths, riftElapsedSec, updateRift } from '../src/sim/rift.js';
+import { addGauge, killPlayer, openRecallPortal, requestReturnToRift, requestTravel, resolveDeaths, riftElapsedSec, settleOnRespawn, updateRift } from '../src/sim/rift.js';
 import { isWalkable } from '../src/sim/world/nav.js';
 import { addTestMonster, assertFiniteDeep, countEvents, makeTestCtx, makeTestState } from './helpers.js';
 
@@ -132,7 +132,7 @@ test('해금: 완료 +1 · 무사망 완료 +2 · 붕괴는 그대로(P6 unlockA
   }
 });
 
-test('플레이어 사망: dead · killedBy · 생명 − 1(LIVES) · 적대 투사체 · 예고 지움 · 진정 · returnPos = checkpoint · SAVE · HINT death · PLAYER_DIED', () => {
+test('플레이어 사망: dead · killedBy · 생명 − 1(LIVES) · 적대 투사체 · 예고 지움 · 플레이어 투사체 · 효과 · 화상 · 감전 지움(W1 수정 3) · 진정 · returnPos = checkpoint · SAVE · HINT death · PLAYER_DIED', () => {
   const { state, ctx, p, rift } = setup();
   const m = addTestMonster(ctx, { typeId: 'charger', rank: 'elite', x: p.pos.x + 1, z: p.pos.z });
   m.name = ['elite.a.1', 'elite.b.2'];
@@ -140,6 +140,13 @@ test('플레이어 사망: dead · killedBy · 생명 − 1(LIVES) · 적대 투
   const mine = { ...hostile, id: 802, owner: 'player', srcId: -1, hitIds: [] };
   rift.projs.push(hostile, mine);
   rift.effects.push({ id: 803, kind: 'mortar', owner: 'mon', srcId: m.id, packId: -1, cancelOnSrcDeath: false, hostile: true, shape: circle(0, 0, 1.5), start: state.tick, hitAt: state.tick + 20, end: state.tick + 21, tickT: 0, nextTickAt: -1, resolved: false, spec: {}, tickSpec: null, from: null });
+  // W1 수정 3: 플레이어가 남긴 피해원 — 지속 효과(지진) · 몬스터의 화상 · 감전(잠든 몬스터에게도)
+  const quake = { ...rift.effects[0], id: 804, kind: 'earthquake', owner: 'player', srcId: -1, hostile: false, hitAt: state.tick - 5, end: state.tick + 60, tickT: 15, nextTickAt: state.tick + 10, resolved: true };
+  rift.effects.push(quake);
+  const sleeper = addTestMonster(ctx, { typeId: 'ghoul', x: p.pos.x + 6, z: p.pos.z, awake: false });
+  m.st.burn = { dps: 3, until: state.tick + 60, nextAt: state.tick + 5 };
+  sleeper.st.burn = { dps: 3, until: state.tick + 60, nextAt: state.tick + 5 };
+  sleeper.st.shockUntil = state.tick + 40;
   p.channel = { skillId: 'whirlwind', nextAt: state.tick + 3, startedAt: state.tick - 10 };
   ctx.hooks.onPlayerKilled(ctx, m);
   assert.equal(p.dead, true);
@@ -150,8 +157,14 @@ test('플레이어 사망: dead · killedBy · 생명 − 1(LIVES) · 적대 투
   assert.equal(rift.lives, RIFT.lives - 1);
   assert.equal(rift.deaths, 1);
   assert.equal(hostile.until, state.tick);
-  assert.equal(mine.until, state.tick + 30, '플레이어 투사체는 그대로');
+  assert.equal(mine.until, state.tick, 'W1 수정 3: 플레이어 투사체도 그 틱에 끝난다(복귀 뒤 잠든 몬스터를 맞히지 않게)');
   assert.equal(rift.effects[0].end, state.tick);
+  assert.equal(quake.end, state.tick, 'W1 수정 3: 플레이어 효과도');
+  assert.equal(m.st.burn, null);
+  assert.equal(sleeper.st.burn, null);
+  assert.ok(!(sleeper.st.shockUntil > state.tick));
+  assert.ok(ctx.events.some(e => e.name === EV.PROJ_END && e.payload.reason === 'cancel' && e.payload.id === 802));
+  assert.equal(ctx.events.filter(e => e.name === EV.MON_STATUS && e.payload.on === false && e.payload.id === sleeper.id).length, 2, '화상 · 감전 off');
   // W1 수정(NOTES-W1FIX): DEATH.calmSec 0 — 그 틱에 깨어 있는 몬스터를 그 자리에서 재운다(생명 그대로 · calmAt 은 비어 있다)
   assert.equal(DEATH.calmSec, 0);
   assert.equal(rift.calmAt, null);
@@ -175,6 +188,39 @@ test('플레이어 사망: dead · killedBy · 생명 − 1(LIVES) · 적대 투
   assert.equal(m.awake, false);
   assert.equal(m.hp, hp);
   assert.equal(rift.calmAt, null);
+});
+
+test('W1 수정 4: 수호자 출현 예고 중 사망 → 부활 commit(settleOnRespawn) — 수호자를 그때 세워 잠든 채 출현 자리 · 생명 가득 · 예고 효과 끝 · 원래 출현 시각에 다시 세우지 않는다', () => {
+  const { state, ctx, rift } = setup();
+  addGauge(ctx, 200);
+  const spawn = { ...rift.guardianSpawn };
+  const fx = rift.effects.find(e => e.kind === 'guardianSpawn');
+  state.tick += 20;
+  ctx.hooks.onPlayerKilled(ctx, null);
+  assert.equal(rift.guardianId, null, '예고 중 — 아직 없다');
+  state.tick += 9;
+  updateRift(ctx);
+  assert.equal(rift.guardianId, null);
+  settleOnRespawn(ctx);
+  const g = getMonster(ctx, rift.guardianId);
+  assert.ok(g && g.rank === 'guardian' && g.typeId === rift.guardianType, '부활 commit 에서 세웠다');
+  assert.equal(g.awake, false, '잠든 채(다른 수호자 단계 사망과 같다)');
+  assert.equal(g.hp, g.hpMax);
+  assert.deepEqual({ x: g.pos.x, z: g.pos.z }, { x: spawn.x, z: spawn.z });
+  assert.deepEqual({ x: rift.homes[g.id].x, z: rift.homes[g.id].z }, { x: spawn.x, z: spawn.z }, '집 = 출현 자리');
+  assert.ok(rift.packs.every(pk => !pk.awake));
+  assert.equal(rift.guardianSpawn, null);
+  assert.ok(fx.end <= state.tick && fx.resolved, '예고 효과도 끝');
+  assert.equal(countEvents(ctx.events, EV.GUARDIAN_APPEAR), 1);
+  // 원래 출현 시각을 지나도 다시 세우지 않는다 · 깨우지도 않는다
+  state.tick = spawn.at + 5;
+  updateRift(ctx);
+  assert.equal(countEvents(ctx.events, EV.GUARDIAN_APPEAR), 1);
+  assert.equal(rift.mons.filter(m => m.rank === 'guardian').length, 1);
+  assert.equal(g.awake, false);
+  // 예고가 이미 끝나 수호자가 있으면 아무것도 세우지 않는다(두 번 불러도)
+  settleOnRespawn(ctx);
+  assert.equal(rift.mons.filter(m => m.rank === 'guardian').length, 1);
 });
 
 test('생명 0 에서 사망 → 붕괴(요약 collapse · RIFT_COLLAPSE · 마을 포털 꺼짐) · complete 단계 사망은 생명을 깎지 않는다', () => {

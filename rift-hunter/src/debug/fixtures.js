@@ -763,11 +763,19 @@ function fxRiftDeath(seed) {
   st.rift.lives = 1;
   st.rift.deaths = 2;
   st.rift.returnPos = { ...st.rift.checkpoint };
-  st.rift.calmAt = st.tick + 18;
-  const pk = pack(fx, 'elite', p.pos.x + 3, p.pos.z - 3, true);
-  const e = mon(fx, 'charger', ...around(fx, PI * 0.8, 3), { rank: 'elite', affixes: ['fast', 'tough'], pk, name: ['elite.a.1', 'elite.b.2'] });
-  attack(fx, e, 'gore', 'recover', 6);
-  for (let k = 0; k < 3; k++) moving(fx, mon(fx, 'charger', ...around(fx, PI * 0.8 + (k - 1) * 0.5, 5), { rank: 'minion', affixes: ['fast', 'tough'], pk }));
+  // W1 수정(NOTES-W1FIX · 계약 §5.10): 사망한 틱에 진정 — 깨어 있던 떼는 그 자리에서 잠들어 서 있고(calmAt 없음 · 공격 · 이동은 쉬는 자세로),
+  // 부활로 떠날 때 처음 자리(rift.homes)로 돌아간다. 플레이어가 남긴 투사체 · 효과 · 화상 · 감전은 그 틱에 지워져 없다(W1 수정 3).
+  st.rift.calmAt = null;
+  const pk = pack(fx, 'elite', p.pos.x + 3, p.pos.z - 3, false);
+  const e = mon(fx, 'charger', ...around(fx, PI * 0.8, 3), { rank: 'elite', affixes: ['fast', 'tough'], pk, name: ['elite.a.1', 'elite.b.2'], awake: false });
+  for (let k = 0; k < 3; k++) mon(fx, 'charger', ...around(fx, PI * 0.8 + (k - 1) * 0.5, 5), { rank: 'minion', affixes: ['fast', 'tough'], pk, awake: false });
+  // 처음 자리 — 팩 자리(pk.anchor)에서 몰려왔다
+  const homes = /** @type {any} */ (st.rift).homes;
+  for (const m of st.rift.mons) {
+    if (m.packId !== pk.id) continue;
+    const h = place(map, pk.anchor.x + (m.pos.x - e.pos.x) * 0.5 + 4, pk.anchor.z + (m.pos.z - e.pos.z) * 0.5 - 4, Math.min(m.r, 0.9));
+    homes[m.id] = { x: h.x, z: h.z, facing: m.facing };
+  }
   return { state: st, map, riftMap: map };
 }
 

@@ -291,10 +291,11 @@ export function randomInputs(seed) {
  * W1 수정(밸런스 · NOTES-W1FIX) — 선택 `learn`: 레벨업마다 프리셋 A(`PRESETS[cls][0].order`)를 한 점씩 찍고 스킬 칸 1 도 3초마다 누른다(봇의 「스킬 순환」 근사 ·
  *   피하기 · 우선 대상 · 구슬 줍기는 없다). 끼임 풀기(늘): 3초 동안 1m 안 움직이고 처치 · 준 피해가 그대로면 1초 동안 둘레 4m 의 걷기 가능 점을 누른다
  *   (P4 findPath 가 빈 경로를 주는 자리 — NOTES-W1FIX). 결과에 측정 값(최저 생명 비율 · 게이지 100% 시각 · 균열 틱 · 끼임 수)을 더했다.
- * @param {any} sim GameSim @param {{maxTicks:number, untilComplete?:boolean, learn?:boolean}} opts
+ * W1 수정 3 — 선택 `stopOnDeath`: 쓰러진 틱에 멈춘다(부활하지 않는다 — 사망 · 부활 · 복귀를 검사가 직접 밟는다 · balance.test).
+ * @param {any} sim GameSim @param {{maxTicks:number, untilComplete?:boolean, learn?:boolean, stopOnDeath?:boolean}} opts
  * @returns {{ticks:number, gauge:number, phase:string|null, deaths:number, minLife:number, gaugeAt:number, riftTicks:number, stuck:number}}
  */
-export function scriptedClear(sim, { maxTicks, untilComplete = false, learn = false }) {
+export function scriptedClear(sim, { maxTicks, untilComplete = false, learn = false, stopOnDeath = false }) {
   let t = 0, lastTarget = -1, deaths = 0, wasDead = false;
   /** @type {{x:number, z:number}|null} */
   let waypoint = null;
@@ -321,6 +322,7 @@ export function scriptedClear(sim, { maxTicks, untilComplete = false, learn = fa
     if (st.player.dead) {
       if (!wasDead) { deaths++; wasDead = true; }
       minLife = 0;
+      if (stopOnDeath) break;
       sim.respawn();
       sim.step(makeInput({}));
       t++;

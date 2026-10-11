@@ -3,7 +3,7 @@
 // 완료 · 붕괴 · 진정 · 탐색 · 안전 지점. rift.js 는 player/* 를 import 하지 않는다(§2.2 — 플레이어를 옮기는 commit 은 GameSim).
 // 배열에서 빼지 않는다 — 몬스터는 dead · gone 표시, 투사체 · 효과는 until / end = tick(cleanup 이 뺀다 §5.14).
 
-import { CLASS_IDS, TICK_HZ, TILE } from '../core/constants.js';
+import { CLASS_IDS, TICK_HZ, TILE, TILE_FLOOR } from '../core/constants.js';
 import { EV } from '../core/events.js';
 import { yawOf } from '../core/math.js';
 import { circle } from '../core/shapes.js';
@@ -173,12 +173,51 @@ function clearHostiles(ctx) {
   }
 }
 
+/**
+ * W1 수정 3(NOTES-W1FIX §2.0b · §5.10) — 플레이어가 세상에 남긴 피해원을 지운다: 플레이어 투사체(until = tick · PROJ_END cancel) ·
+ * 플레이어 효과(end = tick — 표시만) · 몬스터에 건 화상 · 감전(MON_STATUS off). 사망한 틱(killPlayer)과 부활로 떠나는 순간(settleOnRespawn)에 부른다 —
+ * 남겨 두면 마을에서 멈춰 있던 투사체 · 효과 · 화상이 복귀 뒤 잠든 몬스터를 맞혀 팩째(연결로 이웃 팩까지) 깨웠다.
+ * @param {SimCtx} ctx
+ */
+function clearPlayerTraces(ctx) {
+  const st = ctx.state;
+  const rift = st.rift;
+  if (!rift) return;
+  const tick = st.tick;
+  for (let i = 0; i < rift.projs.length; i++) {
+    const pr = rift.projs[i];
+    if (pr.owner !== 'player' || pr.until <= tick) continue;
+    pr.until = tick;
+    ctx.emit(EV.PROJ_END, { id: pr.id, visual: pr.visual, x: pr.pos.x, z: pr.pos.z, reason: 'cancel' });
+  }
+  for (let i = 0; i < rift.effects.length; i++) {
+    const e = rift.effects[i];
+    if (e.owner !== 'player' || e.hostile || e.end <= tick) continue;
+    e.end = tick;
+    e.resolved = true;
+  }
+  for (let i = 0; i < rift.mons.length; i++) {
+    const m = rift.mons[i];
+    if (m.gone || m.dead) continue;
+    const s = m.st;
+    if (s.burn) {
+      s.burn = null;
+      ctx.emit(EV.MON_STATUS, { id: m.id, kind: 'burn', on: false });
+    }
+    if (s.shockUntil > tick) {
+      s.shockUntil = -1;
+      ctx.emit(EV.MON_STATUS, { id: m.id, kind: 'shock', on: false });
+    }
+  }
+}
+
 // ───────────────────────── 플레이어 사망 ─────────────────────────
 
 /**
  * §5.10 플레이어 사망 — ctx.hooks.onPlayerKilled 의 구현(combat 은 import 하지 않고 훅으로 부른다 · killer = MonsterState|null).
  * dead · act dead · killedBy · 경로/버퍼/채널/귀환 정리 · deaths + 1 · applyDeathPenalty(P6) · (active · guardian) 생명 − 1(LIVES) 또는 생명 0 이면 붕괴
- * (수호자가 이미 생명 ≤ 0 이면 붕괴하지 않고 생명도 깎지 않는다 — 완료가 우선) · 적대 투사체 · 예고 지움 · calmAt · returnPos = checkpoint ·
+ * (수호자가 이미 생명 ≤ 0 이면 붕괴하지 않고 생명도 깎지 않는다 — 완료가 우선) · 적대 투사체 · 예고 지움 · 플레이어 투사체 · 효과 · 화상 · 감전 지움(W1 수정 3) ·
+ * 진정(calmSec 0 이면 그 틱) · returnPos = checkpoint ·
  * SAVE_REQUEST{char, death} · HINT death · PLAYER_DIED
  * @param {SimCtx} ctx @param {MonsterState|null} killer
  */
@@ -233,6 +272,7 @@ export function killPlayer(ctx, killer) {
   }
   if (rift) {
     clearHostiles(ctx);
+    clearPlayerTraces(ctx);   // W1 수정 3: 플레이어 투사체 · 효과 · 화상 · 감전도 그 틱에(복귀 뒤 잠든 몬스터를 깨우지 않게)
     // W1 수정(NOTES-W1FIX): calmSec 0 이면 그 틱에 진정 — 1초 뒤(calmAt)로 미루면 1초 안에 부활할 때 진정이 복귀 뒤로 밀렸다(shiftTicks)
     if (DEATH.calmSec > 0) rift.calmAt = tick + ticks(DEATH.calmSec);
     else { rift.calmAt = null; calmMonsters(ctx); }
@@ -519,8 +559,7 @@ function updateCheckpoint(ctx) {
     }
     // W1 수정(NOTES-W1FIX): 잠든 몬스터의 시야(aggro + margin · 벽 시야) 안은 조용하지 않다 — 깨기 직전 자리가 안전 지점이 되지 않게
     if (!(margin >= 0) || !map) continue;
-    const R = getMonDef(m.typeId).aggro + margin;
-    if (d2 <= R * R && losClear(map, m.pos.x, m.pos.z, p.pos.x, p.pos.z)) {
+    if (sleeperSees(map, m, p.pos.x, p.pos.z, margin)) {
       rift.checkpointCalm = 0;
       return;
     }
@@ -532,30 +571,116 @@ function updateCheckpoint(ctx) {
   }
 }
 
+/** 잠든 몬스터 m 의 시야 — (x, z)가 aggro + margin 안이고 벽 시야가 트였다(§5.10 안전 지점 · 복귀 지점) @param {import('../types.js').MapData} map @param {MonsterState} m */
+function sleeperSees(map, m, x, z, margin) {
+  const R = getMonDef(m.typeId).aggro + margin;
+  const dx = m.pos.x - x, dz = m.pos.z - z;
+  return dx * dx + dz * dz <= R * R && losClear(map, m.pos.x, m.pos.z, x, z);
+}
+
+/** (x, z)를 보는 살아 있고 잠든 몬스터가 있다 @param {SimCtx} ctx @param {number} margin */
+function seenBySleeper(ctx, x, z, margin) {
+  const map = /** @type {import('../types.js').MapData} */ (ctx.map);
+  const mons = /** @type {import('../types.js').RiftState} */ (ctx.state.rift).mons;
+  for (let i = 0; i < mons.length; i++) {
+    const m = mons[i];
+    if (m.gone || m.dead || m.awake || !(m.hp > 0)) continue;
+    if (sleeperSees(map, m, x, z, margin)) return true;
+  }
+  return false;
+}
+
+/**
+ * W1 수정 3(§5.10) — 복귀 지점 다시 고르기: from 이 잠든 몬스터의 시야(aggro + checkpointSleepMargin · 벽 시야) 안이면 from 의 타일에서 바닥 타일을
+ * 너비 우선(4방향 · 이웃 순서 +x · −x · +z · −z — 결정적)으로 넓혀 가며 처음 만나는 「시야 밖이고 플레이어 몸이 들어가는」 타일 가운데. 없으면 from 그대로.
+ * (집으로 돌아간 수호자 — aggro 99 — 처럼 안전 지점을 정한 뒤에 생긴 · 돌아온 몬스터의 시야 안이 된 경우)
+ * @param {SimCtx} ctx @param {Vec2} from @returns {Vec2}
+ */
+function safeReturnPos(ctx, from) {
+  const map = ctx.map;
+  const margin = RIFT.checkpointSleepMargin;
+  if (!map || !(margin >= 0) || !seenBySleeper(ctx, from.x, from.z, margin)) return from;
+  const r = ctx.state.player.r > 0 ? ctx.state.player.r : 0;
+  const w = map.w, h = map.h;
+  const i0 = Math.floor(from.x / TILE), j0 = Math.floor(from.z / TILE);
+  if (i0 < 0 || j0 < 0 || i0 >= w || j0 >= h) return from;
+  const seen = new Uint8Array(w * h);
+  const queue = [j0 * w + i0];
+  seen[queue[0]] = 1;
+  for (let q = 0; q < queue.length; q++) {
+    const idx = queue[q];
+    const i = idx % w, j = (idx - i) / w;
+    if (q > 0) {
+      const x = (i + 0.5) * TILE, z = (j + 0.5) * TILE;
+      if (isWalkableR(map, x, z, r) && !seenBySleeper(ctx, x, z, margin)) return { x, z };
+    }
+    for (let k = 0; k < 4; k++) {
+      const ni = i + (k === 0 ? 1 : k === 1 ? -1 : 0), nj = j + (k === 2 ? 1 : k === 3 ? -1 : 0);
+      if (ni < 0 || nj < 0 || ni >= w || nj >= h) continue;
+      const n = nj * w + ni;
+      if (seen[n] || map.tiles[n] !== TILE_FLOOR) continue;
+      seen[n] = 1;
+      queue.push(n);
+    }
+  }
+  return from;
+}
+
 /**
  * W1 수정(NOTES-W1FIX · §5.10) — 부활로 균열을 떠날 때(GameSim 의 respawn commit): 깨어 있는 몬스터를 모두 재우고(남은 calmAt · 죽어 있는 동안 깬 팩),
- * 잠든 몬스터를 처음 놓인 자리(`rift.homes[id]`)로 되돌린다(생명 · 상태 이상은 그대로 · 화면은 전환 막 아래). 복귀한 플레이어가 같은 떼 앞에 서지 않는다.
+ * 플레이어가 남긴 피해원(투사체 · 효과 · 화상 · 감전 — W1 수정 3)을 지우고, 잠든 몬스터를 처음 놓인 자리(`rift.homes[id]`)로 되돌린다(생명은 그대로 ·
+ * 화면은 전환 막 아래). 마지막으로 복귀 지점이 잠든 몬스터의 시야 안이면 가장 가까운 시야 밖으로 옮긴다(W1 수정 3 — 수호자 단계).
+ * (W1 수정 4) 맨 앞: 수호자 출현 예고 중(guardianSpawn 있음 · guardianId null)이면 수호자를 지금 세운다 — 뒤의 진정 · 처음 자리 · 복귀 지점 규칙을 똑같이 받는다.
+ * 복귀한 플레이어가 같은 떼 · 같은 수호자 앞에 서지 않는다 — 싸움은 플레이어가 다가가면 다시 시작된다.
  * @param {SimCtx} ctx
  */
 export function settleOnRespawn(ctx) {
   const rift = ctx.state.rift;
   if (!rift) return;
-  // 남은 진정(calmAt)과 죽어 있는 동안 깬 팩(남은 플레이어 투사체 피격 등)을 함께 — 늘 진정한다(잠든 몬스터에는 아무것도 하지 않는다)
+  // W1 수정 4: 게이지가 찬 뒤 수호자 출현 예고(RIFT.guardianDelay) 안에 쓰러져 아직 나오지 않았으면 지금 세운다 — 아래의 진정 · 처음 자리 ·
+  // 복귀 지점 다시 고르기를 이미 나온 수호자와 똑같이 받는다(미뤄 두면 복귀 직후 깨어 있는 채로 나와 복귀 지점으로 걸어왔다 · 예고 효과도 여기서 끝)
+  if (rift.phase === 'guardian' && rift.guardianId === null && rift.guardianSpawn) {
+    spawnGuardianNow(ctx, rift.guardianSpawn.x, rift.guardianSpawn.z);
+    endGuardianTelegraph(ctx);
+  }
+  // 남은 진정(calmAt)과 죽어 있는 동안 깬 팩을 함께 — 늘 진정한다(잠든 몬스터에는 아무것도 하지 않는다)
   calmMonsters(ctx);
   rift.calmAt = null;
-  if (!rift.homes) return;
-  for (let i = 0; i < rift.mons.length; i++) {
-    const m = rift.mons[i];
-    const h = rift.homes[m.id];
-    if (!h || m.gone || m.dead || m.awake || !(m.hp > 0)) continue;
-    if (m.pos.x === h.x && m.pos.z === h.z) continue;
-    m.pos.x = h.x;
-    m.pos.z = h.z;
-    m.prevPos = { x: h.x, z: h.z };
-    m.facing = h.facing;
-    m.knock = null;
-    m.vel.x = 0;
-    m.vel.z = 0;
+  // 사망 틱(killPlayer)에 지웠어도 그 뒤(같은 틱의 처치 훅 등)에 생긴 것까지 — 떠나는 순간 플레이어의 것은 남지 않는다
+  clearPlayerTraces(ctx);
+  if (rift.homes) {
+    for (let i = 0; i < rift.mons.length; i++) {
+      const m = rift.mons[i];
+      const h = rift.homes[m.id];
+      if (!h || m.gone || m.dead || m.awake || !(m.hp > 0)) continue;
+      if (m.pos.x === h.x && m.pos.z === h.z) continue;
+      m.pos.x = h.x;
+      m.pos.z = h.z;
+      m.prevPos = { x: h.x, z: h.z };
+      m.facing = h.facing;
+      m.knock = null;
+      m.vel.x = 0;
+      m.vel.z = 0;
+    }
+  }
+  const from = rift.returnPos ?? rift.checkpoint;
+  const to = safeReturnPos(ctx, from);
+  if (to !== from) {
+    rift.returnPos = { x: to.x, z: to.z };
+    rift.checkpoint.x = to.x;
+    rift.checkpoint.z = to.z;
+  }
+}
+
+/** 수호자 출현 예고 효과(addGauge 의 env · guardianSpawn — 표시만)를 이 틱에 끝낸다 — 예고보다 먼저 세웠을 때(settleOnRespawn) @param {SimCtx} ctx */
+function endGuardianTelegraph(ctx) {
+  const rift = /** @type {import('../types.js').RiftState} */ (ctx.state.rift);
+  const tick = ctx.state.tick;
+  for (let i = 0; i < rift.effects.length; i++) {
+    const e = rift.effects[i];
+    if (e.owner !== 'env' || e.kind !== 'guardianSpawn' || e.end <= tick) continue;
+    e.end = tick;
+    e.resolved = true;
   }
 }
 

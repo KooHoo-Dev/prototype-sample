@@ -139,6 +139,16 @@ test('W1 수정 2(NOTES-W1FIX §2.0): 첫 판 피해 경사 — 균열 1~4 의 m
   for (const L of [0, -1, NaN, 99]) assert.equal(earlyDmgMul(L), 1);
 });
 
+test('W1 수정 3(NOTES-W1FIX §2.0): 첫 판 경사의 레벨 비 — 균열 L → L+1 의 어려움 √(생명 × 피해) 증가 ÷ 보상 증가(계약 §7.14 +9.4%/레벨)가 0.8~1.25', () => {
+  const REWARD = 1.094;   // 계약 §7.14 「보상(L)」 = √(powerScore × 골드/판) +9.4%/레벨
+  for (let L = 1; L <= RIFT.earlyDmg.length + 2; L++) {
+    const a = riftRow(L), b = riftRow(L + 1);
+    const hard = Math.sqrt((b.hpMul / a.hpMul) * ((b.dmgMul * earlyDmgMul(L + 1)) / (a.dmgMul * earlyDmgMul(L))));
+    const ratio = hard / REWARD;
+    assert.ok(ratio <= 1.25 && ratio >= 0.8, `L${L}→${L + 1}: ${ratio.toFixed(4)}`);   // 옛 표 [0.2, 0.3, 0.45, 0.67] 은 L1→2 1.2537
+  }
+});
+
 test('spawnMonster: 수치 · r 은 그대로(다시 곱하지 않는다) · reason 이 있을 때만 MON_SPAWNED · 깨어 나오면 행동 상태가 있다', () => {
   const { ctx } = setup();
   const a = spawnMonster(ctx, { typeId: 'charger', rank: 'elite', level: 1, x: 10, z: 10 });
