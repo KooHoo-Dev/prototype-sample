@@ -26,3 +26,9 @@ export const ELITE_PACK = {
   /** 팩 자리에서 구성원을 놓는 거리(m) */
   placeR: [2.5, 4.5],
 };
+
+/** (P3 W1) 일반 팩 · 하수인을 놓는 거리(m) · 자리 고르기 시도 수 · 구성원 사이 여유(m) — 정예 · 챔피언은 ELITE_PACK.placeR */
+export const PACK_PLACE = { normalR: [0.6, 4.5], minionR: [1.6, 3.4], tries: 10, gap: 0.15 };
+
+/** (P3 W1) 정예 이름 문자열 키 수 — strings.ko.js 의 elite.a.0..15 · elite.b.0..15(부록 B) */
+export const ELITE_NAMES = { a: 16, b: 16 };

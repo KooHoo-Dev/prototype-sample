@@ -3,7 +3,14 @@
 
 /** @typedef {import('../types.js').ClassDef} ClassDef */
 
-export const PLAYER = { turnRate: 18, repathSec: 0.2, repathDist: 0.75, arriveR: 0.15, attackRepathDist: 1.0, standConeDeg: 70, reachTolerance: 0.3, shoveMul: 0.6, pushSec: 0.15 };
+// §7.1 의 값 + (W1 P1 이 더한 것) recallSec 귀환 시전(§5.5) · noCursorDist 커서가 없을 때 목표 = facing 앞(§5.2-6) ·
+//   failGapSec 같은 SKILL_FAIL 간격(§4.2) · shakeSec 스킬 흔들림 길이 · combatSec 분노 없는 클래스의 전투 표시(combatUntil) ·
+//   shoveSide 앞을 막은 일반 몬스터를 옆으로 비키는 비율(밀고 빠져나가기 — §5.2-8)
+export const PLAYER = { turnRate: 18, repathSec: 0.2, repathDist: 0.75, arriveR: 0.15, attackRepathDist: 1.0, standConeDeg: 70, reachTolerance: 0.3, shoveMul: 0.6, pushSec: 0.15,
+  recallSec: 1.5, noCursorDist: 3, failGapSec: 0.5, shakeSec: 0.25, combatSec: 3, shoveSide: 0.6 };
+
+/** §5.2-8 — 플레이어가 밀고 지나가는 몬스터 등급 · 막는 태그(그 밖의 등급 champion · elite · guardian 도 막는다) */
+export const SHOVE = { ranks: ['normal', 'minion', 'split', 'spawn'], blockTags: ['structure'] };
 
 /** @type {ClassDef[]} */
 export const CLASSES = [

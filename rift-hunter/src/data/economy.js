@@ -16,3 +16,17 @@ export const XP = {
   base: 5, req: { a: 1100, g: 1.15 }, reqEarly: [200, 500, 900], completeBonus: 560,   // 🔒 §7.14
   diff: { penaltyFrom: 12, penaltyStep: 0.1, penaltyMin: 0.3, bonusStep: 0.1, bonusMax: 0.5 },
 };
+
+// ── P6 이 W1 에 더한 것(계약에 묶이지 않은 값 — P6 이 조정한다) ──
+
+/** 부분 수리(§6.11 repairAll)에서 먼저 고치는 칸 — 나머지는 EQUIP_SLOTS 순서 */
+export const REPAIR_ORDER = ['mainHand', 'chest', 'offhand'];
+
+/** 개발용 캐릭터(makeDevCharacter · ?rift)의 장비 등급 가중치 — 마법 60% · 희귀 40%(§6.11) */
+export const DEV = { gearRarity: { magic: 60, rare: 40 } };
+
+/**
+ * 파생 난수의 소금 — hash32(char.seed, …, 소금). stock = §6.11 재고(계약의 7) ·
+ * reroll = 재굴림 후보(아이템 · 재굴림 횟수에 묶여 「취소 → 다시 굴리기」로 새 후보를 공짜로 보지 못한다 · NOTES-P6) · dev = 개발용 캐릭터 장비
+ */
+export const SEED_SALT = { stock: 7, reroll: 11, dev: 13 };

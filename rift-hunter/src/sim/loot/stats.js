@@ -1,17 +1,28 @@
 // OWNER: P5 — 계약 §5.6 · §6.10 · §3.8
-// STUB — W0 에 완성으로 내는 것: computeStats · DRa · DRr · powerScore · weaponVisual(최소 부트 · 고정 상태 · 다른 패키지 테스트가 실제 시트를 쓴다)
-// 캐릭터 시트 · 감소 식. 아이템 옵션 · 패시브 stats · 세트 효과는 퍼센트 숫자 → PlayerStats 는 0..1(퍼센트 키는 /100 · 고정값 키는 그대로).
+// 캐릭터 시트(computeStats) · 감소 식(DRa · DRr) · powerScore · weaponVisual. 순수 — char 를 고치지 않는다.
+// 아이템 옵션 · 패시브 stats · 세트 효과는 퍼센트 숫자 → PlayerStats 는 0..1(퍼센트 키는 /100 · 고정값 키는 그대로 — §3.8 대응).
+// 내구도 0 아이템은 없는 것으로 친다(옵션 · 기본 값 · 전설 훅 · 세트 조각 수 모두). weapon.type = 그 클래스 기본 공격의 type(무기 기본형은 피해 종류가 없다).
+// 합치는 순서는 데이터 배열 순서(장착 칸 EQUIP_SLOTS · SETS · SKILL_NODES) — Object.keys 순서에 기대지 않는다.
 
 import { CLASS_IDS, DMG_TYPES, EQUIP_SLOTS } from '../../core/constants.js';
 import { COMBAT } from '../../data/combat.js';
-import { CLASSES_BY_ID, BASES_BY_ID, ITEM_AFFIXES_BY_ID, SETS_BY_ID, SKILL_NODES_BY_ID, getClass } from '../../data/index.js';
+import { CLASSES_BY_ID, BASES_BY_ID, ITEM_AFFIXES_BY_ID, getClass } from '../../data/index.js';
+import { SETS } from '../../data/legendaries.js';
 import { FIST } from '../../data/items.js';
 import { GROWTH } from '../../data/rift.js';
-import { BASIC_SKILLS } from '../../data/skills.js';
+import { BASIC_SKILLS, SKILL_NODES } from '../../data/skills.js';
 
 /** @typedef {import('../../types.js').PlayerStats} PlayerStats */
 /** @typedef {import('../../types.js').CharacterState} CharacterState */
 /** @typedef {import('../../types.js').Item} Item */
+
+/** 세트 효과가 켜지는 조각 수(bonus2 · bonus4 — §5.6) */
+const SET_BONUS_AT = [2, 4];
+
+/** 유한수면 그 값 · 아니면 d @param {any} v @param {number} d */
+function num(v, d) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : d;
+}
 
 /** 고정값 StatKey(합 그대로) — 나머지 퍼센트 키는 /100 */
 const FLAT_KEYS = new Set(['str', 'int', 'vit', 'lifeRegen', 'lifeOnHit', 'thorns', 'rageOnHit', 'armor', 'allRes', 'physRes', 'fireRes', 'coldRes', 'lightningRes', 'freezeAt']);
@@ -74,7 +85,7 @@ function condKey(stat) { return stat === 'allPct' ? 'dmgPct' : stat === 'freezeA
 export function computeStats(char, { riftLevel = null } = {}) {
   const cls = char && CLASSES_BY_ID[char.cls] ? char.cls : CLASS_IDS[0];
   const C = getClass(cls);
-  const level = Math.max(1, Math.floor(char?.level ?? 1));
+  const level = Math.max(1, Math.floor(num(char?.level, 1)));
   /** @type {Record<string, number>} */
   const sum = {};
   /** @type {Record<string, number>} */
@@ -91,6 +102,7 @@ export function computeStats(char, { riftLevel = null } = {}) {
 
   /** @param {string} stat @param {number} v @param {string} [param] */
   const addStat = (stat, v, param) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return;
     if (stat === 'str' || stat === 'int') {
       if (stat === C.mainStat) mainAdd += v;
       return;
@@ -106,7 +118,7 @@ export function computeStats(char, { riftLevel = null } = {}) {
     const item = equip[slot];
     if (!item) continue;
     if (!(item.dur > 0)) { broken.push(slot); continue; }
-    armorBase += item.base?.armor ?? 0;
+    armorBase += num(item.base?.armor, 0);
     for (const a of item.affixes ?? []) {
       const def = ITEM_AFFIXES_BY_ID[a.id];
       if (!def) continue;
@@ -117,12 +129,10 @@ export function computeStats(char, { riftLevel = null } = {}) {
     if (item.setId) setCounts[item.setId] = (setCounts[item.setId] ?? 0) + 1;
   }
 
-  for (const setId of Object.keys(setCounts)) {
-    const set = SETS_BY_ID[setId];
-    if (!set) continue;
-    const n = setCounts[setId];
-    if (n >= 2) for (const k of Object.keys(set.bonus2)) addStat(k, set.bonus2[k]);
-    if (n >= 4) for (const k of Object.keys(set.bonus4)) addStat(k, set.bonus4[k]);
+  for (const set of SETS) {
+    const n = setCounts[set.id] ?? 0;
+    if (n >= SET_BONUS_AT[0]) for (const k of Object.keys(set.bonus2)) addStat(k, set.bonus2[k]);
+    if (n >= SET_BONUS_AT[1]) for (const k of Object.keys(set.bonus4)) addStat(k, set.bonus4[k]);
   }
 
   /** @type {Record<string, number>} */
@@ -131,11 +141,10 @@ export function computeStats(char, { riftLevel = null } = {}) {
   const transforms = [];
   /** @type {Array<{cond:string, stats:Record<string, number>}>} */
   const conds = [];
-  for (const id of Object.keys(ranks)) {
-    const rank = ranks[id];
-    const node = SKILL_NODES_BY_ID[id];
-    if (!node || !(rank > 0)) continue;
-    if (node.kind === 'transform') transforms.push(id);
+  for (const node of SKILL_NODES) {
+    const rank = ranks[node.id];
+    if (!(rank > 0)) continue;
+    if (node.kind === 'transform') transforms.push(node.id);
     if (node.kind !== 'passive') continue;
     if (node.stats) for (const k of Object.keys(node.stats)) addStat(k, atRank(node.stats[k], rank));
     if (node.cond && node.condStats) {
@@ -157,7 +166,7 @@ export function computeStats(char, { riftLevel = null } = {}) {
   const lifeMax = C.life.base * C.life.growth ** (level - 1) * (1 + vit * COMBAT.vitLife + pct('lifePct'));
 
   const off = equip.offhand && equip.offhand.dur > 0 ? equip.offhand : null;
-  const resourceMax = C.resourceMax.base + C.resourceMax.perLevel * (level - 1) + (off?.base?.mana ?? 0);
+  const resourceMax = C.resourceMax.base + C.resourceMax.perLevel * (level - 1) + num(off?.base?.mana, 0);
   const manaRegenPct = pct('manaRegenPct');
   const resourceRegen = (C.regen.base + C.regen.perLevel * (level - 1)) * (1 + manaRegenPct);
 
@@ -165,13 +174,15 @@ export function computeStats(char, { riftLevel = null } = {}) {
   const mh = equip.mainHand && equip.mainHand.dur > 0 ? equip.mainHand : null;
   /** @type {PlayerStats['weapon']} */
   let weapon;
-  if (mh && mh.base?.dmg) {
+  const mhDmg = mh?.base?.dmg;
+  if (mh && Array.isArray(mhDmg) && Number.isFinite(mhDmg[0]) && Number.isFinite(mhDmg[1]) && num(mh.base.aps, 0) > 0) {
     let wdp = 0;
-    for (const a of mh.affixes ?? []) if (ITEM_AFFIXES_BY_ID[a.id]?.stat === 'weaponDmgPct') wdp += a.value;
+    for (const a of mh.affixes ?? []) if (ITEM_AFFIXES_BY_ID[a.id]?.stat === 'weaponDmgPct') wdp += num(a.value, 0);
     const k = 1 + wdp / 100;
-    const bonus = off?.base?.bonus ?? [0, 0];
+    const ob = off?.base?.bonus;
+    const b0 = Array.isArray(ob) ? num(ob[0], 0) : 0, b1 = Array.isArray(ob) ? num(ob[1], 0) : 0;
     const hands = /** @type {1|2} */ (BASES_BY_ID[mh.baseId]?.hands ?? 1);
-    weapon = { min: mh.base.dmg[0] * k + bonus[0], max: mh.base.dmg[1] * k + bonus[1], aps: mh.base.aps ?? 1, type: basicType, hands, baseId: mh.baseId, fist: false };
+    weapon = { min: mhDmg[0] * k + b0, max: mhDmg[1] * k + b1, aps: mh.base.aps, type: basicType, hands, baseId: mh.baseId, fist: false };
   } else {
     const f = FIST[cls];
     weapon = { min: f.dmg[0], max: f.dmg[1], aps: f.aps, type: basicType, hands: 1, baseId: null, fist: true };
@@ -190,12 +201,12 @@ export function computeStats(char, { riftLevel = null } = {}) {
   /** @type {Record<string, number>} */
   const res = {};
   for (const t of DMG_TYPES) res[t] = (flat('allRes') + flat(t + 'Res')) * (1 + pct('resPct'));
-  const block = off && off.base?.block ? off.base.block : 0;
+  const block = off ? Math.max(0, Math.min(1, num(off.base?.block, 0))) : 0;
   const moveSpeed = C.moveSpeed * (1 + Math.min(COMBAT.moveCap, pct('moveSpeed')));
   const dmgTakenReduce = Math.min(COMBAT.dmgTakenCap, pct('dmgTakenReduce'));
 
   const sheetDps = ((weapon.min + weapon.max) / 2) * aps * (1 + main / 100) * (1 + dmgPct[weapon.type]) * (1 + critChance * critDamage);
-  const L = Math.max(1, Math.floor(riftLevel ?? char?.riftUnlocked ?? 1));
+  const L = Math.max(1, Math.floor(num(riftLevel, num(char?.riftUnlocked, 1))));
   let drr = 0;
   for (const t of DMG_TYPES) drr += DRr(res[t], L);
   drr /= DMG_TYPES.length;

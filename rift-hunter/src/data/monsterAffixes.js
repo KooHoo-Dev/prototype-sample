@@ -21,11 +21,12 @@ export const MON_AFFIXES = [
   { id: 'fireEnchanted', hook: 'fireEnchanted', mods: { res: { fire: 0.3 } },
     params: { extraFire: 0.3, delay: 1.0, deathR: 3.0, deathMul: 1.2, escape: 2.5 },
     minionShare: true, hazard: true, excludeTags: [], excludeAffixes: [], minLevel: 1, weight: 90 },
-  // 하수인은 적중 감속만 받는다(노바는 팩의 대표만 — 하수인은 대표가 되지 않는다)
+  // 하수인은 적중 감속만 받는다(노바는 팩의 대표만 — 하수인은 대표가 되지 않는다) · range(P3 W1) = 플레이어가 이 거리 안일 때만 노바(화면 밖 표식 금지)
   { id: 'coldEnchanted', hook: 'coldEnchanted', mods: { res: { cold: 0.3 } },
-    params: { chillSec: 1.5, novaEvery: 8, novaFirst: 3, novaR: 4.0, delay: 1.3, novaMul: 0.8, novaChillSec: 2.0, escape: 3.5 },
+    params: { chillSec: 1.5, novaEvery: 8, novaFirst: 3, novaR: 4.0, delay: 1.3, novaMul: 0.8, novaChillSec: 2.0, escape: 3.5, range: 8 },
     minionShare: true, hazard: true, excludeTags: [], excludeAffixes: [], minLevel: 1, weight: 90 },
-  { id: 'vampiric', hook: 'vampiric', mods: {}, params: { leech: 0.5, regenPctPerSec: 0.01 },
+  // fxEvery(P3 W1) = AFFIX heal 을 내는 최소 간격(초)
+  { id: 'vampiric', hook: 'vampiric', mods: {}, params: { leech: 0.5, regenPctPerSec: 0.01, fxEvery: 1 },
     minionShare: true, hazard: false, excludeTags: [], excludeAffixes: [], minLevel: 1, weight: 80 },
   { id: 'shielding', hook: 'shielding', mods: {}, params: { every: 9, first: 4, warn: 0.5, dur: 3.0 },
     minionShare: false, hazard: false, excludeTags: [], excludeAffixes: ['tough'], minLevel: 3, weight: 70 },

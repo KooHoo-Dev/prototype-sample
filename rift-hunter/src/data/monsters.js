@@ -11,6 +11,11 @@ export const MON = {
   wakeCheckT: 6, maxAwake: 120, leash: 36, leashSec: 3, shieldFront: 0.5, frontDeg: 45,
   stopFrac: 0.8, sepPad: 0.1, sepMaxNeighbors: 6, targetingRange: 15, directChaseR: 3, linkRadius: 8,
   reachTolerance: 0.3, resCap: 0.5, threatRange: 11,
+  // (P3 W1 — 프레임워크 손잡이 · 계약 값은 위 그대로)
+  sepQueryPad: 0.6,     // 밀어내기 이웃 질의 반지름 = r + 이 값(§5.17-6)
+  sepMaxStep: 0.2,      // 한 틱 밀어내기 이동 상한(m) — 겹쳐 생긴 무리가 한 틱에 튀지 않게
+  moveEps: 0.002,       // 이만큼(m) 안 움직였으면 act idle(걷기 애니메이션이 떨리지 않게)
+  stuckFrac: 0.5,       // 뒷걸음이 계획의 이 비율 미만이면 「뒤가 막혔다」(궁수가 그 자리에서 쏜다)
 };
 
 /** 기절 면역 길이는 STATUS.stunImmune(§7.6) @type {RankDef[]} */
@@ -45,8 +50,9 @@ export const MONSTERS = [
     attacks: [
       { id: 'shamanFire', kind: 'projectile', windup: 0.50, recover: 0.50, cd: 2.8, range: 11, mul: 1.0, type: 'fire', telegraph: 'glow',
         proj: { speed: 9, r: 0.35, life: 1.6, visual: 'shamanFire' } },
+      // target = 되살리는 시체의 종류(같은 팩이 아니어도 된다 · 되살린 적 없는 것만)
       { id: 'revive', kind: 'cast', windup: 1.50, recover: 0.50, cd: 8, range: 8, mul: 0, type: 'phys', telegraph: 'glow',
-        params: { max: 3, hp: 0.6, window: 6 } },
+        params: { max: 3, hp: 0.6, window: 6, target: 'fallen' } },
     ],
     params: { keepMin: 7, keepMax: 10 }, look: { color: '#c26a3e', variant: 'shaman' } },
   { id: 'skeletonArcher', template: 'humanoid', tags: ['ranged'], behavior: 'archer', radius: 0.40, height: 1.8, speed: 3.2, turnRate: 8,
@@ -67,7 +73,8 @@ export const MONSTERS = [
     attacks: [
       { id: 'gore', kind: 'melee', windup: 0.60, recover: 0.60, cd: 0, reach: 1.0, coneDeg: 80, mul: 1.0, type: 'phys', telegraph: 'pose' },
       { id: 'charge', kind: 'charge', windup: 0.90, recover: 0.80, cd: 5, range: 11, minRange: 5, mul: 2.0, type: 'phys', telegraph: 'groundLine',
-        push: 2.0, escape: 1.0, params: { speed: 14, maxLen: 13, wallStun: 2.0 } },
+        // overshoot = 선 길이 min(maxLen, 거리 + overshoot) · blockFrac = 이번 틱 이동이 계획의 이 비율 미만이면 벽에 박았다(§8.1)
+        push: 2.0, escape: 1.0, params: { speed: 14, maxLen: 13, wallStun: 2.0, overshoot: 2, blockFrac: 0.5 } },
     ],
     params: {}, look: { color: '#6e5540', variant: 'charger' } },
   { id: 'bloater', template: 'blob', tags: ['melee'], behavior: 'bloater', radius: 0.55, height: 1.4, speed: 2.6, turnRate: 6,
@@ -81,7 +88,8 @@ export const MONSTERS = [
     hp: 6.0, dmg: 0, xp: 3.0, gauge: 3.0, res: res(), aggro: 16, eliteOk: false,
     attacks: [
       { id: 'spawn', kind: 'spawn', windup: 0.50, recover: 0, cd: 3.5, range: 11, mul: 0, type: 'phys', telegraph: 'glow',
-        params: { child: 'boneling', cap: 6 } },
+        // 새끼는 둥지 몸 가장자리에서 rMin..rMax(m)
+        params: { child: 'boneling', cap: 6, rMin: 1.0, rMax: 1.5 } },
     ],
     params: {}, look: { color: '#cdc2a6', variant: 'nest' } },
   { id: 'boneling', template: 'small', tags: ['melee', 'spawnling'], behavior: 'melee', radius: 0.30, height: 0.9, speed: 4.2, turnRate: 12,

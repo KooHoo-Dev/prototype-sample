@@ -15,6 +15,8 @@ export const ITEM = {
   slotValue: { mainHand1h: 20, mainHand2h: 30, offhand: 15, helm: 12, chest: 18, gloves: 10, boots: 10, belt: 8, amulet: 20, ring: 15 },
   /** 세트 옵션 수 범위(§5.13) */
   setAffixes: [3, 4],
+  /** (P5 W1) 희귀 이름 조각 수 — strings.ko.js 의 rare.a.0..23 · rare.b.0..23(§5.13-4 「rng.int(0, 23)」) */
+  rareNames: 24,
 };
 
 export const BASE_TIERS = [

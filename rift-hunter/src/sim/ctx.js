@@ -1,6 +1,6 @@
 // OWNER: P2 — 계약 §6.8 · §3.10 · §2.2
-// STUB — W0 에 완성으로 낸다(§3.10 그대로 · stats = computeStats · hooks 는 실제 함수 import — 스텁이면 no-op). W1 에서 P2 가 이어 쓴다.
-// SimCtx 만들기 · refreshStats. ctx.hooks 는 sim 패키지 사이 역방향 호출(아래 → 위)의 유일한 통로다.
+// SimCtx 만들기 · refreshStats. ctx.hooks 는 sim 패키지 사이 역방향 호출(아래 → 위)의 유일한 통로다(§3.10 의 여덟이 정본).
+// ctx 는 상태가 아니다 — 맵 · 흐름장 · 공간 해시 · 시트 · 난수 래퍼를 담는다(같은 state 로 다시 만들 수 있다).
 
 import { EV } from '../core/events.js';
 import { makeRng } from '../core/rng.js';
@@ -43,13 +43,14 @@ export function createCtx(state, { map = null, riftMap = null } = {}) {
     emit: (name, payload = {}) => { state.events.push({ name, payload }); },
     nextId: () => state.nextId++,
     newItemId: () => 'i' + state.account.nextItemId++,
+    // stats = computeStats(char) · player.lifeMax/resourceMax 갱신(비율 유지 아님 — 현재 값은 max 로 자르기만) · STATS_CHANGED
     refreshStats: () => {
       const s = computeStats(state.char);
       ctx.stats = s;
       const p = state.player;
       if (state.char) {
-        p.lifeMax = s.lifeMax;
-        p.resourceMax = s.resourceMax;
+        if (Number.isFinite(s.lifeMax) && s.lifeMax > 0) p.lifeMax = s.lifeMax;
+        if (Number.isFinite(s.resourceMax) && s.resourceMax > 0) p.resourceMax = s.resourceMax;
         if (p.life > p.lifeMax) p.life = p.lifeMax;
         if (p.resource > p.resourceMax) p.resource = p.resourceMax;
       }

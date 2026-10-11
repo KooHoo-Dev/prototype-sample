@@ -10,6 +10,9 @@ const res = (o = {}) => ({ phys: 0, fire: 0, cold: 0, lightning: 0, ...o });
 /** 수호자 종류를 고르는 가중치(1:1) */
 export const GUARDIAN_WEIGHTS = { boneGiant: 1, ashWitch: 1 };
 
+/** (P3 W1) 출현 자리(findGuardianSpot) — 플레이어에서 min..max(m) · 걷기 가능 · 시야 · 둘레를 steps 방향으로(플레이어가 보는 쪽부터) */
+export const GUARDIAN_SPOT = { min: 8, mid: 9, max: 10, steps: 16 };
+
 /** @type {GuardianDef[]} */
 export const GUARDIANS = [
   { id: 'boneGiant', template: 'humanoid', tags: ['melee'], behavior: 'guardian', radius: 1.30, height: 4.6, speed: 3.2, turnRate: 2.5,
@@ -21,7 +24,8 @@ export const GUARDIANS = [
       { id: 'spikes', kind: 'cast', windup: 1.4, recover: 0.8, cd: 10, range: 11, mul: 1.8, type: 'phys', telegraph: 'groundLine', escape: 3.9,
         params: { shape: 'line', n: 5, spreadDeg: 50, stepDeg: 25, len: 12, width: 1.4, count: 5 } },
     ],
-    params: {}, look: { color: '#d8cfb8', variant: 'boneGiant' } },
+    // (P3 W1) 나타난 뒤 첫 대지 분쇄 · 뼈 가시까지(초 — init 이 readyAt 에 둔다)
+    params: { slamFirst: 2.0, spikesFirst: 3.5 }, look: { color: '#d8cfb8', variant: 'boneGiant' } },
   { id: 'ashWitch', template: 'humanoid', tags: ['ranged'], behavior: 'guardian', radius: 0.55, height: 2.2, speed: 4.0, turnRate: 6,
     hp: 0.9, dmg: 1.0, xp: 1, gauge: 0, res: res({ fire: 0.15 }), aggro: 99, eliteOk: false,
     attacks: [

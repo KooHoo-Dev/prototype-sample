@@ -15,7 +15,8 @@ import { DEFAULT_ROOM, mapFromAscii } from '../src/debug/fixtureMap.js';
 import { addMonster } from '../src/sim/entities.js';
 import { makeItem } from '../src/sim/loot/rollItem.js';
 import { createGameState, createMonStatus, createRiftState, emptyArray, emptyEquip } from '../src/sim/state.js';
-import { createFlow } from '../src/sim/world/flow.js';
+import { createFlow, flowDist } from '../src/sim/world/flow.js';
+import { findPath } from '../src/sim/world/path.js';
 
 /** @typedef {import('../src/types.js').GameState} GameState */
 /** @typedef {import('../src/types.js').SimCtx} SimCtx */
@@ -281,13 +282,18 @@ export function randomInputs(seed) {
 }
 
 /**
- * W1 통합 게이트용 간이 자동 입력(봇 아님) — 가장 가까운 살아 있는 몬스터를 누르고 있고 스킬 칸 0 을 반복 · 게이지 100% 까지.
- * pendingTravel 이 서면 commitTravel · 사망하면 respawn → commit → returnToRift → commit.
- * @param {any} sim GameSim @param {{maxTicks:number}} opts
+ * W1 통합 게이트용 간이 자동 입력(봇 아님) — 닿는 살아 있는 몬스터(흐름장 걸음 수가 가장 작은 것 · 깬 것 먼저)를 누르고 있고 스킬 칸 0 을 반복 ·
+ * 생명 40% 아래면 포션 · 흐름장 안에 대상이 없으면 가장 가까운 몬스터(없으면 수호자 자리)까지의 경로를 8m 씩 클릭한다 · 게이지 100% 까지
+ * (untilComplete 면 수호자를 잡아 완료(또는 붕괴)까지). pendingTravel 이 서면 commitTravel · 사망하면 respawn → commit → returnToRift → commit.
+ * W1 확정(통합 게이트): 직선 거리로 고르던 것을 흐름장으로 — 벽 너머 직선 16m · 경로 120m 의 몬스터를 붙잡고 15분 서 있던 결함.
+ * @param {any} sim GameSim @param {{maxTicks:number, untilComplete?:boolean}} opts
  * @returns {{ticks:number, gauge:number, phase:string|null, deaths:number}}
  */
-export function scriptedClear(sim, { maxTicks }) {
+export function scriptedClear(sim, { maxTicks, untilComplete = false }) {
   let t = 0, lastTarget = -1, deaths = 0, wasDead = false;
+  /** @type {{x:number, z:number}|null} */
+  let waypoint = null;
+  let wpAt = -1e9;
   while (t < maxTicks) {
     const st = sim.state;
     if (st.pendingTravel) { sim.commitTravel(); continue; }
@@ -300,7 +306,8 @@ export function scriptedClear(sim, { maxTicks }) {
       if (!rift) break;
       continue;
     }
-    if (!rift || rift.gauge >= 100 || rift.phase !== 'active') break;
+    if (!rift) break;
+    if (untilComplete ? (rift.phase === 'complete' || rift.phase === 'collapsed') : (rift.gauge >= 100 || rift.phase !== 'active')) break;
     if (st.player.dead) {
       if (!wasDead) { deaths++; wasDead = true; }
       sim.respawn();
@@ -309,22 +316,49 @@ export function scriptedClear(sim, { maxTicks }) {
       continue;
     }
     wasDead = false;
-    const p = st.player.pos;
+    const p = st.player;
+    const potionDown = p.life < p.lifeMax * 0.4 && (st.char?.potions ?? 0) > 0 && st.tick >= (p.potionReadyAt ?? 0);
+    const ctx = sim.ctx;
     let best = null, bestD = Infinity;
     for (const m of rift.mons) {
       if (m.dead || m.gone || m.hp <= 0) continue;
-      const d = Math.hypot(m.pos.x - p.x, m.pos.z - p.z);
+      let d = ctx.flow ? flowDist(ctx.flow, ctx.map, m.pos.x, m.pos.z) : Math.hypot(m.pos.x - p.pos.x, m.pos.z - p.pos.z);
+      if (!Number.isFinite(d)) continue;
+      if (!m.awake) d += 6;
       if (d < bestD) { bestD = d; best = m; }
     }
-    if (!best) break;
-    const fresh = best.id !== lastTarget;
-    lastTarget = best.id;
-    sim.step(makeInput({
-      cursor: { x: best.pos.x, z: best.pos.z },
-      hover: { kind: 'monster', id: best.id, src: 'pick' },
-      lmb: true, lmbDown: fresh || t % 15 === 0,
-      slot: [t % 20 < 10, false, false, false, false], slotDown: [t % 20 === 0, false, false, false, false],
-    }));
+    if (best) {
+      const fresh = best.id !== lastTarget;
+      lastTarget = best.id;
+      sim.step(makeInput({
+        cursor: { x: best.pos.x, z: best.pos.z },
+        hover: { kind: 'monster', id: best.id, src: 'pick' },
+        lmb: true, lmbDown: fresh || t % 15 === 0,
+        slot: [t % 20 < 10, false, false, false, false], slotDown: [t % 20 === 0, false, false, false, false],
+        potionDown,
+      }));
+      t++;
+      continue;
+    }
+    // 흐름장 밖 — 가장 가까운 몬스터(없으면 수호자 자리)까지 경로를 8m 씩
+    if (!waypoint || st.tick - wpAt > 30 || Math.hypot(p.pos.x - waypoint.x, p.pos.z - waypoint.z) < 1) {
+      let goal = null, gd = Infinity;
+      for (const m of rift.mons) {
+        if (m.dead || m.gone) continue;
+        const d = Math.hypot(m.pos.x - p.pos.x, m.pos.z - p.pos.z);
+        if (d < gd) { gd = d; goal = m.pos; }
+      }
+      goal = goal ?? rift.guardianSpawn;
+      waypoint = null;
+      if (goal) {
+        const path = findPath(ctx.map, p.pos, goal, { r: p.r, maxNodes: 200000 });
+        let acc = 0, prev = p.pos;
+        waypoint = path.at(-1) ?? null;
+        for (const q of path) { acc += Math.hypot(q.x - prev.x, q.z - prev.z); prev = q; if (acc > 8) { waypoint = q; break; } }
+      }
+      wpAt = st.tick;
+    }
+    sim.step(waypoint ? makeInput({ cursor: { ...waypoint }, lmb: true, lmbDown: st.tick === wpAt, potionDown }) : makeInput({ potionDown }));
     t++;
   }
   const r = sim.state.rift;

@@ -1,4 +1,4 @@
-// OWNER: P2 — 계약 §7.3 (시드 — P0 이 W0 에 계약 값으로 채웠다 · 🔒 값은 혼자 바꾸지 않는다)
+// OWNER: P2 — 계약 §7.3 (시드 — P0 이 W0 에 계약 값으로 채웠다 · 🔒 값은 혼자 바꾸지 않는다 · 「P2 W1」 값은 P2 가 더했다)
 // 균열 레벨 곡선. 아이템 가치 · 가격 · 골드 더미는 GROWTH.gold, 무기 피해 · 방어도 · pow 옵션 · 감소 식 분모는 GROWTH.item.
 
 /** @typedef {import('../types.js').RiftRow} RiftRow */
@@ -8,6 +8,14 @@ export const GROWTH = { item: 1.10, hp: 1.14, dmg: 1.10, gold: 1.14, xp: 1.12, l
 export const RIFT = {
   lives: 3, guardianDelay: 2.0, completeDelay: 1.5, unlockClear: 1, unlockNoDeath: 2, maxLevel: 99, exitPortalOffset: 3, exploreR: 14,
   portalR: 1.0, earlyGaugeTo: 2, earlyGaugeMul: 1.25,
+  // P2 W1 — 로직의 숫자를 데이터로(계약 §5.10 · §5.18 · §9.8 의 값)
+  guardianSpawnR: 2.0,       // 수호자 출현 예고 효과(guardianSpawn) 원 반지름(m — §9.8)
+  exitPortalTries: 8,        // 나가는 포털 자리 찾기 방향 수(수호자 자리 + exitPortalOffset 의 원 위)
+  exploreEvery: 0.2,         // 탐색 타일 갱신 간격(초)
+  checkpointEvery: 0.5,      // 안전 지점 검사 간격(초 — 15틱 · §5.10)
+  checkpointR: 15,           // 이 거리(m) 안에 깨어 있는 몬스터가 없으면 「조용하다」
+  checkpointCalm: 2.0,       // 조용한 시간이 이만큼(초 — 60틱) 쌓이면 checkpoint = 플레이어 자리
+  hintEvery: 0.2,            // 「정예」 안내 검사 간격(초)
 };
 
 /**

@@ -29,5 +29,7 @@ export const RARITY = {   // 🔒 §7.14
 export const GUARANTEE = { rare: 100, legendary: 3, set: 0.8 };   // 🔒 §7.14
 export const MF = { k: 2.0, scale: { magic: 1.0, rare: 0.8, legendary: 0.6, set: 0.6 } };   // 🔒 §7.14
 export const BLP = { rate: 0.004, capCount: 300, hard: 400 };   // 🔒 §7.14
-export const GOLD = { base: 3 };   // 🔒 §7.14
+export const GOLD = { base: 3,   // 🔒 §7.14
+  /** (P5 W1) 골드 더미 편차 — amount = max(1, round(base × goldMul × row.goldMul × rng.range(range[0], range[1]) × (1 + gf)))(§5.13-1 의 0.5 ~ 1.5) */
+  range: [0.5, 1.5] };
 export const MATERIAL_DROP = { scrap: 70, dust: 25, essence: 5 };
