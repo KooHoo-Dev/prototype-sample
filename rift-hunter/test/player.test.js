@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { EV } from '../src/core/events.js';
 import { makeInput } from '../src/core/inputFrame.js';
 import { ticks } from '../src/core/time.js';
-import { PLAYER } from '../src/data/classes.js';
+import { CLASSES, PLAYER } from '../src/data/classes.js';
 import { BUFFER, PICKUP, POTION } from '../src/data/combat.js';
 import { BASIC_SKILLS } from '../src/data/skills.js';
 import { townMapFromData } from '../src/debug/fixtureMap.js';
@@ -670,10 +670,13 @@ test('분노: 강타 적중 +onBasicHit · 피격 +onHitTaken(초당 상한) · 
   const m = addTestMonster(ctx, { x: p.pos.x + 1.5, z: p.pos.z, hp: BIG });
   const { actStart } = startBash(ctx, m);
   while (countEvents(ctx.events, EV.ACTION_HIT) < 1) step(ctx, onMon(m));
-  assert.equal(p.resource, 6);
+  // W1 수정(NOTES-W1FIX): onBasicHit 6 → 8 — 데이터 값으로 본다(계약 §7.1)
+  const onHit = CLASSES[0].rage.onBasicHit;
+  assert.equal(onHit, 8);
+  assert.equal(p.resource, onHit);
   assert.ok(st.tick - actStart >= 1);
   for (let i = 0; i < 10; i++) onPlayerDamaged(ctx, 3);
-  assert.equal(p.resource, 6 + 8, '피격 분노는 초당 8 까지');
+  assert.equal(p.resource, onHit + 8, '피격 분노는 초당 8 까지');
   const peak = p.resource;
   const until = p.combatUntil;
   while (st.tick < until - 1) step(ctx, onMon(m));

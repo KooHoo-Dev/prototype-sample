@@ -33,8 +33,9 @@ const mon = (typeId, rank, level, flags = {}) => ({ typeId, rank, level, flags: 
 
 // ───────────────────────── 경험치 ─────────────────────────
 
-test('xpReq: §7.11 표 그대로(reqEarly 200 · 500 · 900 → round(1100 × 1.15^(n−1))) · 누적 레벨 10 = 16,244 · 30 = 412,666 · 캡은 Infinity', () => {
-  const table = [200, 500, 900, 1673, 1924, 2212, 2544, 2926, 3365, 3870, 4450, 5118, 5885, 6768, 7783, 8951, 10293, 11837, 13613, 15655, 18003,
+// W1 수정(NOTES-W1FIX): reqEarly [200, 500, 900] → [60, 300, 700] — 누적 레벨 10 = 16,244 − 540 = 15,704 · 30 = 412,126(계약 §7.11)
+test('xpReq: §7.11 표 그대로(reqEarly 60 · 300 · 700 → round(1100 × 1.15^(n−1))) · 누적 레벨 10 = 15,704 · 30 = 412,126 · 캡은 Infinity', () => {
+  const table = [60, 300, 700, 1673, 1924, 2212, 2544, 2926, 3365, 3870, 4450, 5118, 5885, 6768, 7783, 8951, 10293, 11837, 13613, 15655, 18003,
     20704, 23809, 27381, 31488, 36211, 41642, 47889, 55072];
   assert.equal(table.length, LEVEL_CAP - 1);
   for (let n = 1; n < LEVEL_CAP; n++) assert.equal(xpReq(n), table[n - 1], `레벨 ${n}`);
@@ -43,9 +44,9 @@ test('xpReq: §7.11 표 그대로(reqEarly 200 · 500 · 900 → round(1100 × 1
   assert.equal(xpReq(0), table[0], '1 보다 작으면 1');
   let cum = 0;
   for (let n = 1; n < 10; n++) cum += xpReq(n);
-  assert.equal(cum, 16244);
+  assert.equal(cum, 15704);
   for (let n = 10; n < 30; n++) cum += xpReq(n);
-  assert.equal(cum, 412666);
+  assert.equal(cum, 412126);
 });
 
 test('xpForKill: round(5 × 종류 × 등급 × xpMul(몬스터 레벨) × 레벨 차 × (1 + xpPct)) · d > 12 감점(최소 0.3) · d < 0 가점(최대 1.5)', () => {
@@ -73,14 +74,17 @@ test('grantXp: 레벨업(여러 단계 한 번에) · refreshStats · 생명 · 
   const { ctx, ch, state, calls } = setup({ scene: 'rift' });
   state.player.life = 1;
   state.player.resource = 0;
-  let r = grantXp(ctx, 150, 'kill');
-  assert.deepEqual(r, { amount: 150, level: 1, xp: 150, toNext: 200, levels: 0 });
+  // W1 수정(NOTES-W1FIX): reqEarly 값에서 잡는다(60 · 300 · 700)
+  const [q1, q2, q3] = XP.reqEarly;
+  const a = q1 - 10;
+  let r = grantXp(ctx, a, 'kill');
+  assert.deepEqual(r, { amount: a, level: 1, xp: a, toNext: q1, levels: 0 });
   assert.equal(calls.refresh, 0);
   assert.equal(countEvents(ctx.events, EV.LEVEL_UP), 0);
-  assert.deepEqual(ctx.events.find(e => e.name === EV.XP).payload, { amount: 150, level: 1, xp: 150, toNext: 200 });
-  r = grantXp(ctx, 50 + 500 + 900 + 7, 'complete');
-  assert.deepEqual(r, { amount: 1457, level: 4, xp: 7, toNext: xpReq(4), levels: 3 });
-  assert.equal(ch.xpTotal, 1607);
+  assert.deepEqual(ctx.events.find(e => e.name === EV.XP).payload, { amount: a, level: 1, xp: a, toNext: q1 });
+  r = grantXp(ctx, 10 + q2 + q3 + 7, 'complete');
+  assert.deepEqual(r, { amount: 10 + q2 + q3 + 7, level: 4, xp: 7, toNext: xpReq(4), levels: 3 });
+  assert.equal(ch.xpTotal, q1 + q2 + q3 + 7);
   assert.equal(calls.refresh, 1);
   assert.equal(state.player.life, state.player.lifeMax);
   assert.equal(state.player.resource, state.player.resourceMax);

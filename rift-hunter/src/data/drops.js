@@ -3,10 +3,14 @@
 
 /** @typedef {import('../types.js').TreasureDef} TreasureDef */
 
-/** 🔒 §7.14 (전부) @type {TreasureDef[]} */
+/**
+ * 🔒 §7.14 (전부) · W1 수정(NOTES-W1FIX): normal · minion 의 globe ↔ none 맞교환(normal 25 → 80 · minion 80 → 150) — 시작 캐릭터의 유일한
+ * 처치 연동 회복. gold · potion · material · gear 가중치와 합(1000)은 그대로라 §7.14 의 드랍 · 골드 · 재료 산수는 바뀌지 않는다.
+ * @type {TreasureDef[]}
+ */
 export const TREASURE = [
-  { id: 'normal', picks: 1, goldMul: 1.0, w: { none: 787, gold: 90, potion: 5, globe: 25, material: 8, gear: 85 } },
-  { id: 'minion', picks: 1, goldMul: 1.2, w: { none: 520, gold: 150, potion: 30, globe: 80, material: 20, gear: 200 } },
+  { id: 'normal', picks: 1, goldMul: 1.0, w: { none: 732, gold: 90, potion: 5, globe: 80, material: 8, gear: 85 } },
+  { id: 'minion', picks: 1, goldMul: 1.2, w: { none: 450, gold: 150, potion: 30, globe: 150, material: 20, gear: 200 } },
   { id: 'champion', picks: 2, goldMul: 1.6, w: { none: 315, gold: 250, potion: 25, globe: 90, material: 45, gear: 275 } },
   { id: 'elite', picks: 4, goldMul: 2.2, w: { none: 150, gold: 300, potion: 50, globe: 60, material: 40, gear: 400 } },
   { id: 'guardian', picks: 8, goldMul: 4.0, w: { none: 0, gold: 400, potion: 50, globe: 0, material: 100, gear: 450 }, guaranteed: 2 },

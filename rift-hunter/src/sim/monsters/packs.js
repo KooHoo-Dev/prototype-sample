@@ -91,10 +91,11 @@ function placeMember(map, rng, cx, cz, rMin, rMax, r, placed) {
   return nearestWalkable(map, cx + Math.sin(placed.length) * rMin, cz + Math.cos(placed.length) * rMin, rMax) ?? nearestWalkable(map, cx, cz, rMax) ?? { x: cx, z: cz };
 }
 
-/** 팩 상태 하나를 rift.packs 에 @param {SimCtx} ctx @param {PackState['kind']} kind @param {number} x @param {number} z @returns {PackState} */
-function newPack(ctx, kind, x, z) {
+/** 팩 상태 하나를 rift.packs 에 @param {SimCtx} ctx @param {PackState['kind']} kind @param {number} x @param {number} z @param {number|null} [depth] @returns {PackState} */
+function newPack(ctx, kind, x, z, depth = null) {
   /** @type {PackState} */
   const pack = { id: ctx.nextId(), kind, memberIds: [], awake: false, nextHazardAt: -1, fled: false, anchor: { x, z } };
+  if (Number.isFinite(depth)) pack.depth = /** @type {number} */ (depth);   // W1 수정(NOTES-W1FIX): 팩 자리의 방 깊이(연결 깨우기 — MON.linkMinDepth)
   /** @type {import('../../types.js').RiftState} */ (ctx.state.rift).packs.push(pack);
   return pack;
 }
@@ -223,7 +224,7 @@ export function populateRift(ctx) {
     const slot = slots[i];
     const kind = kinds[i];
     const at = nearestWalkable(map, slot.x, slot.z, ELITE_PACK.placeR[1]) ?? { x: slot.x, z: slot.z };
-    const pack = newPack(ctx, kind, at.x, at.z);
+    const pack = newPack(ctx, kind, at.x, at.z, slot.depth);
     if (kind === 'normal') {
       const def = PACKS_BY_ID[/** @type {string} */ (rng.pick(weights))] ?? PACKS[0];
       placePack(ctx, map, rng, pack, level, normalMembers(rng, def));

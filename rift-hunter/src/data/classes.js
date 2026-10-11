@@ -18,7 +18,8 @@ export const CLASSES = [
     id: 'warrior', mainStat: 'str', resource: 'rage',
     life: { base: 120, growth: 1.09 },   // 🔒 §7.14
     resourceMax: { base: 100, perLevel: 1 }, regen: { base: 0, perLevel: 0 },
-    rage: { onBasicHit: 6, perExtraTarget: 1, extraCap: 3, onHitTaken: 2, takenCapPerSec: 8, decayDelay: 3, decayPerSec: 5 },
+    // W1 수정(NOTES-W1FIX): onBasicHit 6 → 8 — 분노 흐름(지면 강타 빈도 · 클래스 차)
+    rage: { onBasicHit: 8, perExtraTarget: 1, extraCap: 3, onHitTaken: 2, takenCapPerSec: 8, decayDelay: 3, decayPerSec: 5 },
     moveSpeed: 6, radius: 0.40, height: 1.8, basic: 'bash',
     startGear: [{ baseId: 'sword', tier: 0 }, { baseId: 'chest', tier: 0 }],
     mainHandBases: ['sword', 'axe', 'mace', 'greatsword', 'greataxe'], offhandBases: ['shield'],

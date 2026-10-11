@@ -10,8 +10,8 @@ import { EV } from '../src/core/events.js';
 import { deg2rad } from '../src/core/math.js';
 import { ticks } from '../src/core/time.js';
 import { getMonDef, getMonAffix } from '../src/data/index.js';
-import { MON } from '../src/data/monsters.js';
-import { riftRow } from '../src/data/rift.js';
+import { MON, RANKS } from '../src/data/monsters.js';
+import { RIFT, earlyDmgMul, riftRow } from '../src/data/rift.js';
 import { rebuildSpace } from '../src/sim/entities.js';
 import {
   chaseStop, monsterStats, onMonDamaged, onMonDeath, onMonHitPlayer, onMonSpawn, spawnMonster, startAttack, updateMonsters, wakePack,
@@ -93,7 +93,7 @@ test('monsterStats(§5.6): 등급 · 레벨 · 속성 배율 · 저항 상한 0.
   const s = monsterStats('ghoul', 'champion', 5, ['tough', 'fast']);
   const row = riftRow(5);
   assert.ok(Math.abs(s.hpMax - 19 * 1.0 * 3.5 * row.hpMul * 1.5) < 1e-9);
-  assert.ok(Math.abs(s.dmg - 3.5 * 1.0 * 1.5 * row.dmgMul) < 1e-9);
+  assert.ok(Math.abs(s.dmg - 3.5 * 1.0 * 1.5 * row.dmgMul) < 1e-9);   // 🔒 MON.dmgBase 3.5 · 균열 5 는 첫 판 경사 밖(earlyDmgMul 1 — W1 수정 2)
   assert.ok(Math.abs(row.hpMul - 1.14 ** 4) < 1e-9 && Math.abs(row.dmgMul - 1.1 ** 4) < 1e-9);
   assert.ok(Math.abs(s.speed - 2.6 * 1.3) < 1e-9);
   assert.ok(Math.abs(s.r - 0.45 * 1.15) < 1e-9 && Math.abs(s.height - 1.7 * 1.15) < 1e-9 && s.scale === 1.15);
@@ -106,7 +106,7 @@ test('monsterStats(§5.6): 등급 · 레벨 · 속성 배율 · 저항 상한 0.
   const g = monsterStats('boneGiant', 'guardian', 3, ['fireEnchanted', 'coldEnchanted', 'tough']);
   assert.equal(g.res.fire, 0);
   assert.equal(g.res.cold, 0.15);
-  assert.ok(Math.abs(g.hpMax - 19 * 1.1 * 35 * riftRow(3).hpMul * 1.5) < 1e-9);
+  assert.ok(Math.abs(g.hpMax - 19 * 1.1 * 28 * riftRow(3).hpMul * 1.5) < 1e-9);   // 🔒 RANKS.guardian.hp 28(W1 수정 · NOTES-W1FIX)
   assert.ok(Math.abs(g.r - 1.3) < 1e-9 && Math.abs(g.height - 4.6) < 1e-9);
   // 수호자 경험치 배율이 유한(getMonDef)
   assert.ok(Number.isFinite(getMonDef('boneGiant').xp) && Number.isFinite(getMonDef('ashWitch').xp));
@@ -115,6 +115,28 @@ test('monsterStats(§5.6): 등급 · 레벨 · 속성 배율 · 저항 상한 0.
     const x = monsterStats('charger', 'elite', L, ['vampiric']);
     assert.ok(Number.isFinite(x.hpMax) && x.hpMax > 0 && Number.isFinite(x.dmg), `L${L}`);
   }
+});
+
+test('W1 수정 2(NOTES-W1FIX §2.0): 첫 판 피해 경사 — 균열 1~4 의 mon.dmg 는 × RIFT.earlyDmg[L − 1](오르는 쪽) · 균열 5 이상은 × 1(🔒 dmgBase · GROWTH 그대로)', () => {
+  const t = RIFT.earlyDmg;
+  assert.ok(Array.isArray(t) && t.length >= 1);
+  for (let i = 0; i < t.length; i++) {
+    assert.ok(t[i] > 0 && t[i] < 1, `earlyDmg[${i}]`);
+    if (i > 0) assert.ok(t[i] > t[i - 1], '레벨이 오를수록 커진다');
+  }
+  for (let L = 1; L <= t.length + 3; L++) {
+    const want = L <= t.length ? t[L - 1] : 1;
+    assert.equal(earlyDmgMul(L), want, `L${L}`);
+    for (const [typeId, rank] of [['ghoul', 'normal'], ['skeletonArcher', 'champion'], ['boneGiant', 'guardian']]) {
+      const x = monsterStats(typeId, /** @type {any} */ (rank), L, []);
+      const base = MON.dmgBase * getMonDef(typeId).dmg * RANKS.find(r => r.id === rank).dmg * riftRow(L).dmgMul;
+      assert.ok(Math.abs(x.dmg - base * want) < 1e-9, `${typeId} L${L}`);
+    }
+  }
+  // 균열 5 이상에는 완화가 없다(계약 §7.3 — 첫 수정의 전역 완화가 균열 5 이상의 위협을 지웠던 것의 회귀 · NOTES-W1FIX §2.0)
+  for (const L of [5, 8, 10, 20, 30]) assert.equal(earlyDmgMul(L), 1, `L${L}`);
+  // 잘못된 값 · 표 밖은 1(NaN · 0 이 몬스터 피해로 새지 않는다)
+  for (const L of [0, -1, NaN, 99]) assert.equal(earlyDmgMul(L), 1);
 });
 
 test('spawnMonster: 수치 · r 은 그대로(다시 곱하지 않는다) · reason 이 있을 때만 MON_SPAWNED · 깨어 나오면 행동 상태가 있다', () => {
@@ -152,11 +174,13 @@ test('잠: (tick + id) % 6 틱에만 검사 · aggro 안 · 시야(벽 뒤는 �
   assert.equal(far.mons[0].awake, false);
 });
 
-test('피격이 그 팩을 깨운다 · 팩 연결은 linkRadius(8m) 안의 다른 잠든 팩을 한 단계만', () => {
+test('피격이 그 팩을 깨운다 · 팩 연결은 linkRadius 안의 다른 잠든 팩을 한 단계만', () => {
   const { ctx } = setup();
-  const A = pack(ctx, 'normal', [{ x: 30, z: 36 }, { x: 31, z: 36 }]);
-  const B = pack(ctx, 'normal', [{ x: 38, z: 36 }]);     // A 구성원에서 7m
-  const C = pack(ctx, 'normal', [{ x: 38, z: 29 }]);     // B 에서 7m · A 에서 8m 넘게
+  // W1 수정(NOTES-W1FIX): linkRadius 8 → 11 — 자리를 반지름에서 잡는다(값이 바뀌어도 같은 뜻)
+  const L = MON.linkRadius - 1;
+  const A = pack(ctx, 'normal', [{ x: 8, z: 36 }, { x: 9, z: 36 }]);
+  const B = pack(ctx, 'normal', [{ x: 9 + L, z: 36 }]);      // A 구성원에서 linkRadius − 1
+  const C = pack(ctx, 'normal', [{ x: 9 + L, z: 36 - L }]);  // B 에서 linkRadius − 1 · A 에서 linkRadius 넘게
   onMonDamaged(ctx, A.mons[0], { monId: A.mons[0].id, dmg: 3, crit: false, killed: false, immune: false, blocked: false }, { skillId: 'bash' });
   assert.ok(A.mons.every(m => m.awake));
   assert.equal(B.mons[0].awake, true, '연결');
@@ -169,6 +193,30 @@ test('피격이 그 팩을 깨운다 · 팩 연결은 linkRadius(8m) 안의 다�
   onMonDamaged(ctx, D.mons[0], { monId: D.mons[0].id, dmg: 99, crit: false, killed: true, immune: false, blocked: false }, {});
   assert.equal(D.mons[0].awake, false);
   assert.equal(D.mons[1].awake, true);
+});
+
+test('W1 수정(NOTES-W1FIX) 초반 경사: 깊이 < MON.linkMinDepth 인 팩은 연결로 깨우지도 깨지도 않는다(깊이가 없는 팩은 깊은 팩)', () => {
+  const { ctx } = setup();
+  assert.equal(MON.linkMinDepth, 2);
+  const hit = (m) => onMonDamaged(ctx, m, { monId: m.id, dmg: 1, crit: false, killed: false, immune: false, blocked: false }, {});
+  const L = MON.linkRadius - 1;
+  const A = pack(ctx, 'normal', [{ x: 8, z: 36 }]);
+  const B = pack(ctx, 'normal', [{ x: 8 + L, z: 36 }]);
+  const C = pack(ctx, 'normal', [{ x: 8 + L, z: 36 - L }]);
+  const D = pack(ctx, 'normal', [{ x: 8 + 2 * L, z: 36 }]);
+  A.pk.depth = 1; B.pk.depth = 3; C.pk.depth = 1; D.pk.depth = 2;
+  hit(A.mons[0]);
+  assert.equal(A.mons[0].awake, true);
+  assert.equal(B.mons[0].awake, false, '얕은 팩(1)은 이웃을 연결로 깨우지 않는다');
+  hit(B.mons[0]);
+  assert.equal(B.mons[0].awake, true);
+  assert.equal(C.mons[0].awake, false, '깊은 팩이 깨도 얕은 팩(1)은 연결로 깨지 않는다');
+  assert.equal(D.mons[0].awake, true, '깊은 팩끼리(3 → 2)는 지금처럼 연결');
+  // 깊이가 없는 팩(디버그 · 고정 상태 · 수호자)은 깊은 팩으로 본다
+  const E = pack(ctx, 'normal', [{ x: 8, z: 6 }]);
+  const F = pack(ctx, 'normal', [{ x: 8 + L, z: 6 }]);
+  hit(E.mons[0]);
+  assert.equal(F.mons[0].awake, true);
 });
 
 test('깨어 있는 수 상한 MON.maxAwake(120) — 시야로는 새로 깨지 않고 피격은 예외', () => {

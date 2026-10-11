@@ -152,6 +152,8 @@ export function createRiftState({ level, seed, tileset, mapId, map, tick = 0 }) 
     guardianType: GUARDIANS[0].id,
     calmAt: null,
     mods: null,
+    // W1 수정(NOTES-W1FIX · §3.7): 몬스터 ID → 처음 놓인 자리 {x, z, facing}(spawnMonster 가 쓴다 · 부활로 떠날 때 잠든 몬스터가 돌아간다)
+    homes: {},
   };
 }
 

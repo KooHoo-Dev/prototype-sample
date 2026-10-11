@@ -28,7 +28,7 @@ import * as inv from './progression/inventory.js';
 import * as prog from './progression/progress.js';
 import * as shops from './progression/shops.js';
 import { updateProjectiles } from './projectiles.js';
-import { closePortals, closeRift, finishRift, markExplored, requestReturnToRift, requestTravel, resolveDeaths, spawnGuardianNow, updateRift } from './rift.js';
+import { closePortals, closeRift, finishRift, markExplored, requestReturnToRift, requestTravel, resolveDeaths, settleOnRespawn, spawnGuardianNow, updateRift } from './rift.js';
 import { createGameState, createMeter, createPlayerState, createRiftState, createTownState, emptyArray } from './state.js';
 import { updateStatus } from './status.js';
 import { emitHint, syncTown, updateTown } from './town.js';
@@ -283,6 +283,8 @@ export class GameSim {
     const ctx = this.ctx;
     const p = st.player;
     const fromRift = st.scene === 'rift';
+    // W1 수정(NOTES-W1FIX · §5.10): 부활로 떠날 때 남은 진정 · 잠든 몬스터를 처음 자리로(전환 막 아래)
+    if (t.reason === 'respawn' && st.rift) settleOnRespawn(ctx);
     st.scene = 'town';
     ctx.map = this.townMap;
     ctx.flow = null;

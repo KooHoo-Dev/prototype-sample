@@ -25,8 +25,9 @@ export const MON_AFFIXES = [
   { id: 'coldEnchanted', hook: 'coldEnchanted', mods: { res: { cold: 0.3 } },
     params: { chillSec: 1.5, novaEvery: 8, novaFirst: 3, novaR: 4.0, delay: 1.3, novaMul: 0.8, novaChillSec: 2.0, escape: 3.5, range: 8 },
     minionShare: true, hazard: true, excludeTags: [], excludeAffixes: [], minLevel: 1, weight: 90 },
-  // fxEvery(P3 W1) = AFFIX heal 을 내는 최소 간격(초)
-  { id: 'vampiric', hook: 'vampiric', mods: {}, params: { leech: 0.5, regenPctPerSec: 0.01, fxEvery: 1 },
+  // fxEvery(P3 W1) = AFFIX heal 을 내는 최소 간격(초) · W1 수정(NOTES-W1FIX): regenPctPerSec 0.01 → 0.003 — 수호자(생명 × 28)에게 초당 1%는
+  //   시작 캐릭터 DPS 를 거의 지워 수호자 싸움이 4~5분이 됐다(브리프 §3.5 의 흡혈은 「준 피해의 일부 회복」 — 재생은 덧붙임)
+  { id: 'vampiric', hook: 'vampiric', mods: {}, params: { leech: 0.5, regenPctPerSec: 0.003, fxEvery: 1 },
     minionShare: true, hazard: false, excludeTags: [], excludeAffixes: [], minLevel: 1, weight: 80 },
   { id: 'shielding', hook: 'shielding', mods: {}, params: { every: 9, first: 4, warn: 0.5, dur: 3.0 },
     minionShare: false, hazard: false, excludeTags: [], excludeAffixes: ['tough'], minLevel: 3, weight: 70 },

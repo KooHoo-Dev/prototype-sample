@@ -28,7 +28,9 @@ export const PICKUP = {
   dropPickR: 0.45, dropPickH: 0.6,
 };
 
-export const DEATH = { corpseSec: 6, calmSec: 1.0, protectSec: 1.5, panelDelay: 0.3 };
+// W1 수정(NOTES-W1FIX · §5.10): calmSec 1.0 → 0 — 사망한 그 틱에 깨어 있는 몬스터를 재운다(1초 뒤로 미루면 빠른 부활에서 진정이 복귀 뒤로 밀렸다).
+//   부활로 균열을 떠날 때 잠든 몬스터는 처음 놓인 자리(rift.homes)로 돌아간다(rift.settleOnRespawn — 같은 떼가 안전 지점 앞에서 다시 깨지 않게).
+export const DEATH = { corpseSec: 6, calmSec: 0, protectSec: 1.5, panelDelay: 0.3 };
 export const METER = { window: 150, killCap: 300, swarmOn: 25, swarmOff: 15 };
 export const HAZARD = { packGap: 1.2, afterRoot: 0.8, nearR: 3.0, countR: 4.0, maxNear: 6, react: 0.25, slowSpeed: 3.6 };
 export const BUFFER = { sec: 0.5, tail: 0.1 };

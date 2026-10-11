@@ -44,7 +44,8 @@ export const BASIC_SKILLS = {
 export const SKILL_NODES = [
   // ── 전사 · 0 분쇄 ──
   { id: 'groundStomp', cls: 'warrior', branch: 0, tier: 1, kind: 'active', maxRank: 5,
-    skill: { behavior: 'cone', targeting: 'direction', type: 'phys', tags: ['aoe', 'melee'], cost: 20, cd: 0,
+    // W1 수정(NOTES-W1FIX): cost 20 → 14 — 첫 범위 스킬을 더 자주(분노 흐름 · 전사 판 길이)
+    skill: { behavior: 'cone', targeting: 'direction', type: 'phys', tags: ['aoe', 'melee'], cost: 14, cd: 0,
       action: 0.60, scaled: true, hitFrac: 0.50, radius: 4.0, angleDeg: 120, coef: ranks(1.40, 0.15),
       status: { stun: [0.8, 0.9, 1.0, 1.1, 1.2] }, params: { shake: 0.25, fxAftershock: 'stomp', fxShockwave: 'shockwave' } } },
   { id: 'weaponMastery', cls: 'warrior', branch: 0, tier: 1, kind: 'passive', maxRank: 5,

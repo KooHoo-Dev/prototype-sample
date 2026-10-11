@@ -11,6 +11,7 @@ import { EV } from '../src/core/events.js';
 import { circle } from '../src/core/shapes.js';
 import { ticks } from '../src/core/time.js';
 import { DEATH, METER } from '../src/data/combat.js';
+import { getMonDef } from '../src/data/index.js';
 import { RIFT } from '../src/data/rift.js';
 import { getMonster, removeMarked } from '../src/sim/entities.js';
 import { meterView, updateMeter } from '../src/sim/meter.js';
@@ -151,7 +152,10 @@ test('플레이어 사망: dead · killedBy · 생명 − 1(LIVES) · 적대 투
   assert.equal(hostile.until, state.tick);
   assert.equal(mine.until, state.tick + 30, '플레이어 투사체는 그대로');
   assert.equal(rift.effects[0].end, state.tick);
-  assert.equal(rift.calmAt, state.tick + ticks(DEATH.calmSec));
+  // W1 수정(NOTES-W1FIX): DEATH.calmSec 0 — 그 틱에 깨어 있는 몬스터를 그 자리에서 재운다(생명 그대로 · calmAt 은 비어 있다)
+  assert.equal(DEATH.calmSec, 0);
+  assert.equal(rift.calmAt, null);
+  assert.equal(m.awake, false, '사망한 틱에 진정');
   assert.deepEqual(rift.returnPos, rift.checkpoint);
   assert.ok(ctx.events.some(e => e.name === EV.PROJ_END && e.payload.reason === 'cancel' && e.payload.id === 801));
   assert.ok(ctx.events.some(e => e.name === EV.LIVES && e.payload.lives === RIFT.lives - 1));
@@ -164,9 +168,9 @@ test('플레이어 사망: dead · killedBy · 생명 − 1(LIVES) · 적대 투
   // 두 번 부르면 아무 일도 없다
   ctx.hooks.onPlayerKilled(ctx, m);
   assert.equal(rift.deaths, 1);
-  // 진정: calmAt 틱에 깨어 있는 몬스터를 그 자리에서 재운다(생명 그대로)
+  // 진정은 생명을 바꾸지 않는다 · 뒤의 updateRift 도 아무것도 하지 않는다
   const hp = m.hp;
-  state.tick = rift.calmAt;
+  state.tick += 1;
   updateRift(ctx);
   assert.equal(m.awake, false);
   assert.equal(m.hp, hp);
@@ -295,6 +299,11 @@ test('안전 지점: 15틱마다 15m 안에 깨어 있는 몬스터가 없으면
   assert.deepEqual(rift.checkpoint, { x: 30, z: 30 });
   assert.equal(rift.checkpointCalm, 0);
   m.awake = false;
+  // W1 수정(NOTES-W1FIX): 잠든 몬스터의 aggro + checkpointSleepMargin 안이고 시야가 트이면 조용하지 않다
+  for (let i = 0; i < 4; i++) { state.tick += step; updateRift(ctx); }
+  assert.deepEqual(rift.checkpoint, { x: 30, z: 30 }, '잠든 몬스터의 시야 안');
+  assert.equal(rift.checkpointCalm, 0);
+  m.pos = { x: 12 + getMonDef('ghoul').aggro + RIFT.checkpointSleepMargin + 0.5, z: 12 };
   for (let i = 0; i < 4; i++) { state.tick += step; updateRift(ctx); }
   assert.deepEqual(rift.checkpoint, { x: 12, z: 12 });
 });

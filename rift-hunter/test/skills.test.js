@@ -517,7 +517,7 @@ test('describeSkill: 계수 · 피해(무기 × coef × (1 + 주/100) × (1 + �
   const g = describeSkill({ ...s, costReduce: 0.2, aoePct: 0.1 }, 'groundStomp', 3);
   assert.ok(Math.abs(g.coefPct - 170) < 1e-9);
   assert.ok(Math.abs(g.dmgMin - 3 * 1.7 * 1.1 * 1.1) < 1e-9);
-  assert.ok(Math.abs(g.cost - 16) < 1e-9);
+  assert.ok(Math.abs(g.cost - 14 * 0.8) < 1e-9);   // 지면 강타 비용 14(W1 수정 · NOTES-W1FIX — 계약 §7.2) × (1 − 0.2)
   assert.equal(g.radius, 4.0);
   assert.equal(g.extra.stun, 1.0, '랭크 3 기절');
   const t = describeSkill({ ...makeTestStats({ cls: 'mage' }), cdr: 0.1 }, 'teleport', 3);

@@ -412,7 +412,7 @@ test('전설 · 세트: 기본형 · 클래스 · 패치형(대상 노드 · §8
 test('경제 · 경험치 · 화질 · 설정 · 키 · 봇: 값 · 키', () => {
   for (const o of [ECON, PRICES, GAMBLE, REROLL, CRAFT, SHOP, START, XP]) assert.ok(o && typeof o === 'object');
   for (const r of RARITIES) assert.ok(SALVAGE[r], `SALVAGE.${r}`);
-  assert.deepEqual(XP.reqEarly, [200, 500, 900]);
+  assert.deepEqual(XP.reqEarly, [60, 300, 700]);   // W1 수정(NOTES-W1FIX — 계약 §7.11)
   assert.deepEqual(Object.keys(QUALITY).sort(), ['high', 'low', 'medium']);
   for (const k of Object.keys(DEFAULT_SETTINGS)) assert.ok(SETTINGS_SCHEMA[k], `SETTINGS_SCHEMA.${k}`);
   for (const k of Object.keys(SETTINGS_SCHEMA)) assert.ok(k in DEFAULT_SETTINGS, `DEFAULT_SETTINGS.${k}`);

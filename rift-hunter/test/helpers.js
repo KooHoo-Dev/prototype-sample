@@ -10,12 +10,14 @@ import { CLASSES } from '../src/data/classes.js';
 import { START } from '../src/data/economy.js';
 import { getMonDef, getRank } from '../src/data/index.js';
 import { MON } from '../src/data/monsters.js';
-import { riftRow } from '../src/data/rift.js';
+import { PRESETS } from '../src/data/presets.js';
+import { earlyDmgMul, riftRow } from '../src/data/rift.js';
 import { DEFAULT_ROOM, mapFromAscii } from '../src/debug/fixtureMap.js';
 import { addMonster } from '../src/sim/entities.js';
 import { makeItem } from '../src/sim/loot/rollItem.js';
 import { createGameState, createMonStatus, createRiftState, emptyArray, emptyEquip } from '../src/sim/state.js';
 import { createFlow, flowDist } from '../src/sim/world/flow.js';
+import { isWalkableR } from '../src/sim/world/nav.js';
 import { findPath } from '../src/sim/world/path.js';
 
 /** @typedef {import('../src/types.js').GameState} GameState */
@@ -194,7 +196,7 @@ export function addTestMonster(ctx, { typeId = 'ghoul', rank = 'normal', x, z, a
     id: ctx.nextId(), typeId, rank, packId: -1, level, affixes: [], name: null,
     pos: { x, z }, prevPos: { x, z }, facing: 0, vel: { x: 0, z: 0 },
     r: def.radius * rk.scale, height: def.height * rk.scale, scale: rk.scale,
-    hp: hp ?? hpMax, hpMax, dmg: MON.dmgBase * def.dmg * rk.dmg * row.dmgMul, speed: def.speed,
+    hp: hp ?? hpMax, hpMax, dmg: MON.dmgBase * def.dmg * rk.dmg * row.dmgMul * earlyDmgMul(level), speed: def.speed,   // × 첫 판 경사(W1 수정 2 · monsterStats 와 같은 식)
     res: /** @type {any} */ (res),
     awake, targeting: false,
     act: 'idle', actId: null, actStart: 0, actHit: 0, actEnd: 0,
@@ -286,14 +288,21 @@ export function randomInputs(seed) {
  * 생명 40% 아래면 포션 · 흐름장 안에 대상이 없으면 가장 가까운 몬스터(없으면 수호자 자리)까지의 경로를 8m 씩 클릭한다 · 게이지 100% 까지
  * (untilComplete 면 수호자를 잡아 완료(또는 붕괴)까지). pendingTravel 이 서면 commitTravel · 사망하면 respawn → commit → returnToRift → commit.
  * W1 확정(통합 게이트): 직선 거리로 고르던 것을 흐름장으로 — 벽 너머 직선 16m · 경로 120m 의 몬스터를 붙잡고 15분 서 있던 결함.
- * @param {any} sim GameSim @param {{maxTicks:number, untilComplete?:boolean}} opts
- * @returns {{ticks:number, gauge:number, phase:string|null, deaths:number}}
+ * W1 수정(밸런스 · NOTES-W1FIX) — 선택 `learn`: 레벨업마다 프리셋 A(`PRESETS[cls][0].order`)를 한 점씩 찍고 스킬 칸 1 도 3초마다 누른다(봇의 「스킬 순환」 근사 ·
+ *   피하기 · 우선 대상 · 구슬 줍기는 없다). 끼임 풀기(늘): 3초 동안 1m 안 움직이고 처치 · 준 피해가 그대로면 1초 동안 둘레 4m 의 걷기 가능 점을 누른다
+ *   (P4 findPath 가 빈 경로를 주는 자리 — NOTES-W1FIX). 결과에 측정 값(최저 생명 비율 · 게이지 100% 시각 · 균열 틱 · 끼임 수)을 더했다.
+ * @param {any} sim GameSim @param {{maxTicks:number, untilComplete?:boolean, learn?:boolean}} opts
+ * @returns {{ticks:number, gauge:number, phase:string|null, deaths:number, minLife:number, gaugeAt:number, riftTicks:number, stuck:number}}
  */
-export function scriptedClear(sim, { maxTicks, untilComplete = false }) {
+export function scriptedClear(sim, { maxTicks, untilComplete = false, learn = false }) {
   let t = 0, lastTarget = -1, deaths = 0, wasDead = false;
   /** @type {{x:number, z:number}|null} */
   let waypoint = null;
   let wpAt = -1e9;
+  let minLife = 1, gaugeAt = -1, learned = 0, stuck = 0, unstickUntil = -1;
+  /** @type {{x:number, z:number}|null} */
+  let unstickTo = null;
+  let ref = { x: NaN, z: NaN, at: -1, work: -1 };
   while (t < maxTicks) {
     const st = sim.state;
     if (st.pendingTravel) { sim.commitTravel(); continue; }
@@ -307,9 +316,11 @@ export function scriptedClear(sim, { maxTicks, untilComplete = false }) {
       continue;
     }
     if (!rift) break;
+    if (gaugeAt < 0 && rift.gauge >= 100) gaugeAt = rift.ticksIn;
     if (untilComplete ? (rift.phase === 'complete' || rift.phase === 'collapsed') : (rift.gauge >= 100 || rift.phase !== 'active')) break;
     if (st.player.dead) {
       if (!wasDead) { deaths++; wasDead = true; }
+      minLife = 0;
       sim.respawn();
       sim.step(makeInput({}));
       t++;
@@ -317,8 +328,36 @@ export function scriptedClear(sim, { maxTicks, untilComplete = false }) {
     }
     wasDead = false;
     const p = st.player;
-    const potionDown = p.life < p.lifeMax * 0.4 && (st.char?.potions ?? 0) > 0 && st.tick >= (p.potionReadyAt ?? 0);
+    if (p.lifeMax > 0) minLife = Math.min(minLife, p.life / p.lifeMax);
+    const ch = st.char;
+    if (learn && ch) {
+      const order = PRESETS[ch.cls]?.[0]?.order ?? [];
+      while (learned < order.length && learned < ch.level - 1) {
+        sim.learnSkill(order[learned]);
+        learned++;
+      }
+    }
+    const potionDown = p.life < p.lifeMax * 0.4 && (ch?.potions ?? 0) > 0 && st.tick >= (p.potionReadyAt ?? 0);
     const ctx = sim.ctx;
+    // 끼임 풀기 — 3초 동안 1m 안 · 처치 · 준 피해 그대로
+    const work = rift.stats.dmgDealt;
+    if (ref.at < 0 || Math.hypot(p.pos.x - ref.x, p.pos.z - ref.z) > 1 || work !== ref.work) ref = { x: p.pos.x, z: p.pos.z, at: st.tick, work };
+    else if (st.tick - ref.at >= 90 && unstickUntil < st.tick) {
+      stuck++;
+      unstickUntil = st.tick + 30;
+      unstickTo = null;
+      for (let k = 0; k < 12 && !unstickTo; k++) {
+        const a = (st.tick * 0.7 + k * 2.4) % (Math.PI * 2);
+        const q = { x: p.pos.x + Math.sin(a) * 4, z: p.pos.z + Math.cos(a) * 4 };
+        if (ctx.map && isWalkableR(ctx.map, q.x, q.z, p.r)) unstickTo = q;
+      }
+      ref = { x: p.pos.x, z: p.pos.z, at: st.tick, work };
+    }
+    if (unstickTo && st.tick <= unstickUntil) {
+      sim.step(makeInput({ cursor: { ...unstickTo }, lmb: true, lmbDown: st.tick === unstickUntil - 30, potionDown }));
+      t++;
+      continue;
+    }
     let best = null, bestD = Infinity;
     for (const m of rift.mons) {
       if (m.dead || m.gone || m.hp <= 0) continue;
@@ -330,11 +369,12 @@ export function scriptedClear(sim, { maxTicks, untilComplete = false }) {
     if (best) {
       const fresh = best.id !== lastTarget;
       lastTarget = best.id;
+      const s1 = learn && t % 90 === 45;
       sim.step(makeInput({
         cursor: { x: best.pos.x, z: best.pos.z },
         hover: { kind: 'monster', id: best.id, src: 'pick' },
         lmb: true, lmbDown: fresh || t % 15 === 0,
-        slot: [t % 20 < 10, false, false, false, false], slotDown: [t % 20 === 0, false, false, false, false],
+        slot: [t % 20 < 10, s1, false, false, false], slotDown: [t % 20 === 0, s1, false, false, false],
         potionDown,
       }));
       t++;
@@ -362,7 +402,7 @@ export function scriptedClear(sim, { maxTicks, untilComplete = false }) {
     t++;
   }
   const r = sim.state.rift;
-  return { ticks: t, gauge: r?.gauge ?? 0, phase: r?.phase ?? null, deaths };
+  return { ticks: t, gauge: r?.gauge ?? 0, phase: r?.phase ?? null, deaths, minLife, gaugeAt, riftTicks: r?.ticksIn ?? 0, stuck };
 }
 
 // 빈 칸 길이 참고(테스트가 쓰면 된다)

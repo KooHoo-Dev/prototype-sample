@@ -384,11 +384,15 @@ export function wakePack(ctx, packId, why) {
 function linkWake(ctx, pack) {
   const rift = ctx.state.rift;
   if (!rift) return;
+  // W1 수정(NOTES-W1FIX · 초반 경사): 깊이 < MON.linkMinDepth 인 팩(시작 방 · 그 이웃)은 연결로 깨우지도 깨지도 않는다(depth 가 없으면 깊은 팩)
+  const minDepth = MON.linkMinDepth > 0 ? MON.linkMinDepth : 0;
+  if (minDepth > 0 && (pack.depth ?? minDepth) < minDepth) return;
   const r2 = MON.linkRadius * MON.linkRadius;
   const packs = rift.packs;
   for (let i = 0; i < packs.length; i++) {
     const q = packs[i];
     if (q === pack || q.awake) continue;
+    if (minDepth > 0 && (q.depth ?? minDepth) < minDepth) continue;
     let near = false;
     for (let a = 0; a < q.memberIds.length && !near; a++) {
       const qm = getMonster(ctx, q.memberIds[a]);

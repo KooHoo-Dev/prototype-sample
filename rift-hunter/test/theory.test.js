@@ -216,8 +216,9 @@ test('시드 표가 계약 §7.7 · §7.8 · §7.9 그대로(양손 무기 피�
   close(mageOne, 7.7, 1e-9, '마법봉 + 마법구');
   assert.equal(ITEM_AFFIXES.length, 32);
   assert.deepEqual(AFFIX_TIERS, { minIlvl: [1, 6, 12, 18, 24], weight: [100, 70, 45, 25, 12] });
+  // W1 수정(NOTES-W1FIX): normal · minion 의 globe ↔ none 맞교환(normal 25 → 80 · minion 80 → 150 — 합 1000 · 나머지 그대로 · 계약 §7.8)
   assert.deepEqual(TREASURE.map(t => [t.id, t.picks, t.goldMul, t.w.none, t.w.gold, t.w.potion, t.w.globe, t.w.material, t.w.gear, t.guaranteed ?? 0]), [
-    ['normal', 1, 1.0, 787, 90, 5, 25, 8, 85, 0], ['minion', 1, 1.2, 520, 150, 30, 80, 20, 200, 0], ['champion', 2, 1.6, 315, 250, 25, 90, 45, 275, 0],
+    ['normal', 1, 1.0, 732, 90, 5, 80, 8, 85, 0], ['minion', 1, 1.2, 450, 150, 30, 150, 20, 200, 0], ['champion', 2, 1.6, 315, 250, 25, 90, 45, 275, 0],
     ['elite', 4, 2.2, 150, 300, 50, 60, 40, 400, 0], ['guardian', 8, 4.0, 0, 400, 50, 0, 100, 450, 2], ['split', 1, 0.5, 900, 60, 0, 40, 0, 0, 0],
   ]);
   assert.deepEqual(RARITY.base, { normal: 1000, magic: 640, rare: 95, legendary: 6.5, set: 1.8 });

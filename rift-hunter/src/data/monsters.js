@@ -7,15 +7,20 @@
 /** @typedef {import('../types.js').RankDef} RankDef */
 
 export const MON = {
-  hpBase: 19, dmgBase: 3.5,   // 🔒 §7.14
+  // 🔒 §7.14 — dmgBase 는 W1 값 3.5 그대로다. 첫 판(균열 1~4)의 완화는 RIFT.earlyDmg 경사(data/rift.js · monsterStats)로 —
+  //   W1 수정이 이 값을 0.9 로 낮췄다가 균열 5 이상의 위협이 사라져 되돌렸다(NOTES-W1FIX §2.0)
+  hpBase: 19, dmgBase: 3.5,
   wakeCheckT: 6, maxAwake: 120, leash: 36, leashSec: 3, shieldFront: 0.5, frontDeg: 45,
-  stopFrac: 0.8, sepPad: 0.1, sepMaxNeighbors: 6, targetingRange: 15, directChaseR: 3, linkRadius: 8,
+  // W1 수정(NOTES-W1FIX): linkRadius 8 → 11 — 깊은 방(depth ≥ linkMinDepth)의 파도를 크게(25마리 이상 순간) · 초반 방은 linkMinDepth 가 막는다
+  stopFrac: 0.8, sepPad: 0.1, sepMaxNeighbors: 6, targetingRange: 15, directChaseR: 3, linkRadius: 11,
   reachTolerance: 0.3, resCap: 0.5, threatRange: 11,
   // (P3 W1 — 프레임워크 손잡이 · 계약 값은 위 그대로)
   sepQueryPad: 0.6,     // 밀어내기 이웃 질의 반지름 = r + 이 값(§5.17-6)
   sepMaxStep: 0.2,      // 한 틱 밀어내기 이동 상한(m) — 겹쳐 생긴 무리가 한 틱에 튀지 않게
   moveEps: 0.002,       // 이만큼(m) 안 움직였으면 act idle(걷기 애니메이션이 떨리지 않게)
   stuckFrac: 0.5,       // 뒷걸음이 계획의 이 비율 미만이면 「뒤가 막혔다」(궁수가 그 자리에서 쏜다)
+  // (W1 수정 — NOTES-W1FIX) 초반 경사: 방 깊이가 이 값보다 얕은 팩(시작 방 · 그 이웃)은 팩 연결로 깨우지도 깨지도 않는다(0 = 끔)
+  linkMinDepth: 2,
 };
 
 /** 기절 면역 길이는 STATUS.stunImmune(§7.6) @type {RankDef[]} */
@@ -24,7 +29,8 @@ export const RANKS = [
   { id: 'champion', hp: 3.5, dmg: 1.5, xp: 4, gauge: 1.0, tc: 'champion', scale: 1.15, stunMul: 0.6, freezeMul: 0.7, knockMul: 0.5, flinchFrac: 0.30 },   // hp 🔒
   { id: 'elite', hp: 7, dmg: 1.7, xp: 12, gauge: 3.0, tc: 'elite', scale: 1.30, stunMul: 0.4, freezeMul: 0.5, knockMul: 0, flinchFrac: null },          // hp 🔒
   { id: 'minion', hp: 2, dmg: 1.2, xp: 2, gauge: 0.5, tc: 'minion', scale: 1.05, stunMul: 0.7, freezeMul: 0.8, knockMul: 0.5, flinchFrac: 0.25 },
-  { id: 'guardian', hp: 35, dmg: 2.0, xp: 60, gauge: 0, tc: 'guardian', scale: 1.00, stunMul: 0.25, freezeMul: 0.3, knockMul: 0, flinchFrac: null },    // hp 🔒
+  // hp 🔒 · W1 수정(NOTES-W1FIX): hp 35 → 28 — 시작 장비 균열 1 수호자 싸움(강인함 63%)이 35 에서 ~95초 · 사망이 그 싸움에 몰린다(§2.0 · §3.5)
+  { id: 'guardian', hp: 28, dmg: 2.0, xp: 60, gauge: 0, tc: 'guardian', scale: 1.00, stunMul: 0.25, freezeMul: 0.3, knockMul: 0, flinchFrac: null },
   { id: 'split', hp: 0.6, dmg: 0.5, xp: 0.25, gauge: 0.1, tc: 'split', scale: 0.60, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
   { id: 'spawn', hp: 1, dmg: 1, xp: 0, gauge: 0, tc: null, scale: 1.00, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
 ];
@@ -54,14 +60,16 @@ export const MONSTERS = [
       { id: 'revive', kind: 'cast', windup: 1.50, recover: 0.50, cd: 8, range: 8, mul: 0, type: 'phys', telegraph: 'glow',
         params: { max: 3, hp: 0.6, window: 6, target: 'fallen' } },
     ],
-    params: { keepMin: 7, keepMax: 10 }, look: { color: '#c26a3e', variant: 'shaman' } },
+    // W1 수정(NOTES-W1FIX): backoff 4 · backoffMul 0.3 — 4m 안 뒷걸음을 느리게(근접 클래스가 「우선 처치」할 수 있게 · 궁수와 같은 규칙)
+    params: { keepMin: 7, keepMax: 10, backoff: 4, backoffMul: 0.3 }, look: { color: '#c26a3e', variant: 'shaman' } },
+  // W1 수정(NOTES-W1FIX): backoffMul 0.8 → 0.3(파고들기가 통하게 — 브리프 §3.4 「파고들기 · 옆으로」) · dmg 는 0.8 그대로(첫 판 완화는 RIFT.earlyDmg)
   { id: 'skeletonArcher', template: 'humanoid', tags: ['ranged'], behavior: 'archer', radius: 0.40, height: 1.8, speed: 3.2, turnRate: 8,
     hp: 0.8, dmg: 0.8, xp: 1.0, gauge: 1.0, res: res({ cold: 0.25 }), aggro: 14, eliteOk: true,
     attacks: [
       { id: 'arrow', kind: 'projectile', windup: 0.60, recover: 0.40, cd: 1.8, range: 11, mul: 1.0, type: 'phys', telegraph: 'aimLine', aimLock: 0.2,
         proj: { speed: 16, r: 0.2, life: 1.2, visual: 'arrow' } },
     ],
-    params: { keepMin: 7, keepMax: 10, backoff: 4, backoffMul: 0.8 }, look: { color: '#ddd6c2', variant: 'archer' } },
+    params: { keepMin: 7, keepMax: 10, backoff: 4, backoffMul: 0.3 }, look: { color: '#ddd6c2', variant: 'archer' } },
   { id: 'shieldSkeleton', template: 'humanoid', tags: ['melee'], behavior: 'shield', radius: 0.45, height: 1.85, speed: 3.0, turnRate: 3.0,
     hp: 1.2, dmg: 0.9, xp: 1.3, gauge: 1.3, res: res({ cold: 0.25 }), aggro: 12, eliteOk: true,
     attacks: [

@@ -20,7 +20,7 @@ import { findGuardianSpot, spawnGuardian, spawnMonster } from './monsters/monste
 import { applyDeathPenalty } from './progression/inventory.js';
 import { completeRun, grantXp, recordRun, unlockAfter, xpForKill } from './progression/progress.js';
 import { emitHint, syncTown } from './town.js';
-import { isWalkable, isWalkableR, nearestWalkable } from './world/nav.js';
+import { isWalkable, isWalkableR, losClear, nearestWalkable } from './world/nav.js';
 
 /** @typedef {import('../types.js').SimCtx} SimCtx */
 /** @typedef {import('../types.js').Travel} Travel */
@@ -233,7 +233,9 @@ export function killPlayer(ctx, killer) {
   }
   if (rift) {
     clearHostiles(ctx);
-    rift.calmAt = tick + ticks(DEATH.calmSec);
+    // W1 수정(NOTES-W1FIX): calmSec 0 이면 그 틱에 진정 — 1초 뒤(calmAt)로 미루면 1초 안에 부활할 때 진정이 복귀 뒤로 밀렸다(shiftTicks)
+    if (DEATH.calmSec > 0) rift.calmAt = tick + ticks(DEATH.calmSec);
+    else { rift.calmAt = null; calmMonsters(ctx); }
     rift.returnPos = { x: rift.checkpoint.x, z: rift.checkpoint.z };
   }
   ctx.emit(EV.SAVE_REQUEST, { scope: 'char', reason: 'death' });
@@ -500,25 +502,64 @@ function updateCheckpoint(ctx) {
     return;
   }
   const r2 = RIFT.checkpointR * RIFT.checkpointR;
+  const margin = RIFT.checkpointSleepMargin;
+  const map = ctx.map;
   const mons = rift.mons;
   for (let i = 0; i < mons.length; i++) {
     const m = mons[i];
-    if (m.gone || m.dead || !m.awake || !(m.hp > 0)) continue;
+    if (m.gone || m.dead || !(m.hp > 0)) continue;
     const dx = m.pos.x - p.pos.x, dz = m.pos.z - p.pos.z;
-    if (dx * dx + dz * dz <= r2) {
+    const d2 = dx * dx + dz * dz;
+    if (m.awake) {
+      if (d2 <= r2) {
+        rift.checkpointCalm = 0;
+        return;
+      }
+      continue;
+    }
+    // W1 수정(NOTES-W1FIX): 잠든 몬스터의 시야(aggro + margin · 벽 시야) 안은 조용하지 않다 — 깨기 직전 자리가 안전 지점이 되지 않게
+    if (!(margin >= 0) || !map) continue;
+    const R = getMonDef(m.typeId).aggro + margin;
+    if (d2 <= R * R && losClear(map, m.pos.x, m.pos.z, p.pos.x, p.pos.z)) {
       rift.checkpointCalm = 0;
       return;
     }
   }
   rift.checkpointCalm += Math.max(1, ticks(RIFT.checkpointEvery));
-  const map = ctx.map;
   if (rift.checkpointCalm >= ticks(RIFT.checkpointCalm) && (!map || isWalkable(map, p.pos.x, p.pos.z))) {
     rift.checkpoint.x = p.pos.x;
     rift.checkpoint.z = p.pos.z;
   }
 }
 
-/** 진정(사망 뒤 calmAt) — 깨어 있는 몬스터를 그 자리에서 재운다(생명 그대로) · 팩도 @param {SimCtx} ctx */
+/**
+ * W1 수정(NOTES-W1FIX · §5.10) — 부활로 균열을 떠날 때(GameSim 의 respawn commit): 깨어 있는 몬스터를 모두 재우고(남은 calmAt · 죽어 있는 동안 깬 팩),
+ * 잠든 몬스터를 처음 놓인 자리(`rift.homes[id]`)로 되돌린다(생명 · 상태 이상은 그대로 · 화면은 전환 막 아래). 복귀한 플레이어가 같은 떼 앞에 서지 않는다.
+ * @param {SimCtx} ctx
+ */
+export function settleOnRespawn(ctx) {
+  const rift = ctx.state.rift;
+  if (!rift) return;
+  // 남은 진정(calmAt)과 죽어 있는 동안 깬 팩(남은 플레이어 투사체 피격 등)을 함께 — 늘 진정한다(잠든 몬스터에는 아무것도 하지 않는다)
+  calmMonsters(ctx);
+  rift.calmAt = null;
+  if (!rift.homes) return;
+  for (let i = 0; i < rift.mons.length; i++) {
+    const m = rift.mons[i];
+    const h = rift.homes[m.id];
+    if (!h || m.gone || m.dead || m.awake || !(m.hp > 0)) continue;
+    if (m.pos.x === h.x && m.pos.z === h.z) continue;
+    m.pos.x = h.x;
+    m.pos.z = h.z;
+    m.prevPos = { x: h.x, z: h.z };
+    m.facing = h.facing;
+    m.knock = null;
+    m.vel.x = 0;
+    m.vel.z = 0;
+  }
+}
+
+/** 진정(사망 — §5.10) — 깨어 있는 몬스터를 그 자리에서 재운다(생명 그대로) · 팩도 @param {SimCtx} ctx */
 function calmMonsters(ctx) {
   const rift = /** @type {import('../types.js').RiftState} */ (ctx.state.rift);
   for (let i = 0; i < rift.mons.length; i++) {
