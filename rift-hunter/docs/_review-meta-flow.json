@@ -1,0 +1,55 @@
+{
+  "summary": "진행 · 경제 · 저장 · 화면 흐름 리뷰. 경제 순환(도박 · 제작 · 상점 사기 → 팔기 · 분해)은 PL 1~30 두 클래스 모두 기댓값 회수율 8% 이하라 순환이 없다. 개발 세션은 localStorage 를 쓰지 않는다(브라우저 확인). 고쳐 쓴 세이브 8종도 throw · NaN 0 이다. 재현된 결함은 5건이다. major 2: ① 보통 세션에서 분석 패널로 봇을 켜면 실제 세이브의 가방 전설 · 세트를 팔고 아껴 둔 스킬 포인트를 찍는다. 봇 측정 3판 뒤에는 되사기에서도 사라져 영구 손실이다. ② 수호자를 쓰러뜨린 뒤 완료 마무리(1.5초 · 게임 시간) 전에 「타이틀로」(확인 없음)를 고르거나 탭을 닫으면 그 판의 해금 · 완료 경험치 · 최고 기록 · 판 기록이 조용히 사라진다. 일시정지가 시간을 멈추므로 Esc 를 그 창 안에 누르기만 하면 된다. minor 3: 완료 · 붕괴 패널의 해금 배지가 이미 열린 해금을 새로 열림 · 잃음으로 보인다 / 개발 · 저장 막힘 세션에서 「타이틀로」 뒤 「계속하기」가 캐릭터를 보이면서 「잘못된 요청이다」로 실패한다 / 완료 패널이 「T — 마을로」(무료)를 가르치지만 패널을 닫은 뒤의 T 는 두루마리 1개와 1.5초를 쓴다. 검증: Node 재현 스크립트(GameSim · Bot · storage + 가짜 localStorage)와 dev 서버 5403 의 헤드리스 probe(대기 시간을 늘린 스크래치 사본)로 확인했다. 스크래치는 지웠고 서버는 내가 띄운 PID 만 껐다.",
+  "findings": [
+    {
+      "severity": "major",
+      "area": "ui-app",
+      "file": "src/app/Game.js",
+      "line": 825,
+      "title": "보통 세션에서 봇을 켜면 실제 세이브의 전설 · 세트를 팔고 남은 스킬 포인트를 찍는다(경고 없음 · 영구 손실)",
+      "evidence": "브라우저(보통 세션 http://127.0.0.1:5403/ · dev 아님) 재현: actions.newChar → grant 전설 3 · 세트 3 + setLevel(6) → 저장된 rift-hunter:char:0 을 확인했다(bag 6개 · ranks {}). 그다음 분석 패널 봇 탭과 같은 길인 setBot(true)로 마을 정비 → 균열 진입까지 돌리고 다시 읽은 저장값: bag [] · equip 에 전설 2 · 세트 1 · buyback [legendary:i17, set:i18, set:i16] · ranks {groundStomp:3, warCry:1, weaponMastery:1}. 즉 끼지 않은 전설 · 세트 3개를 대장장이에 팔았고, 플레이어가 남겨 둔 5점을 프리셋대로 찍어 실제 세이브에 썼다. Node(GameSim + Bot · 마을 방문 3번)에서는 처음 준 전설 i16 · 세트 i17 이 가방 · 장착 · 되사기 어디에도 남지 않았다. 되사기는 10칸이고 봇은 방문마다 가방 전부(약 40개)를 sellMany 한다. 코드 경로는 _setBot(Game.js:825)이 dev · persist() 를 보지 않는 것과 bot/town.js:163(잠기지 않은 가방 전부 판매) · bot/build.js allocatePoints(남은 포인트 전부)다. 봇 탭 문면(analytics.bot.note)에는 판매 · 포인트 사용 경고가 없다.",
+      "playerImpact": "Jay가 자기 캐릭터로 분석 패널(`)의 「봇 자동 사냥」을 켜면, 모아 둔 전설 · 세트(잠그지 않은 것)가 팔리고 아껴 둔 스킬 포인트가 프리셋대로 찍혀 자동 저장된다. 판이 몇 번 돌면 되사기에서도 밀려나 되돌릴 길이 없다. 포인트를 되돌리려면 신비술사 초기화 골드가 든다.",
+      "suggestedFix": "persist() 세션에서 봇을 켜면 그 세션을 저장하지 않는 세션으로 바꾼다(loadFixture 처럼 dev = true + 「봇 관전 — 저장 안 됨」 알림). 또는 켜기 전에 「봇은 잠기지 않은 가방 아이템을 팔고 남은 스킬 포인트를 찍는다 · 저장된다」 확인을 받는다. 덧붙여 bot/town.js 의 판매 대상에서 전설 · 세트를 빼면 손실 폭이 준다(측정에 영향이 있으면 측정 하네스만 옵션으로)."
+    },
+    {
+      "severity": "major",
+      "area": "sim",
+      "file": "src/sim/rift.js",
+      "line": 115,
+      "title": "수호자 처치 뒤 1.5초(완료 마무리 전)에 「타이틀로」 · 탭 닫기를 하면 그 판의 해금 · 완료 경험치 · 기록이 사라진다",
+      "evidence": "Node(GameSim · 균열 1 · 수호자를 resolveDeaths 로 처치 → phase complete · completeAt = +1.5초): 0틱 · 20틱 뒤 unloadCharacter(app._quitToTitle 이 부르는 것) → riftUnlocked 1 · records 없음 · best {} · 처치 경험치만 +300. 46틱(1.5초) 기다린 경우는 riftUnlocked 3 · records complete@L1 · best 기록 · +860(완료 보너스 560 포함)이다. 브라우저 보통 세션에서도 같다: 새 캐릭터 → actions.openRift(1) → 게이지 99.99 + killAll → 수호자 출현 → killAll(phase complete) → Escape(일시정지 패널이 떴다) → actions.quitToTitle(pause.js:35 는 phase 가 active · guardian 일 때만 확인한다 — complete 라 확인 없음). 저장된 char:0 은 riftUnlocked 1 · records [] · best {} 였고 완료 패널은 끝내 뜨지 않았다. 원인: closeRift(rift.js:115)와 GameSim._detach(:347)는 phase 'complete' · summary 없음을 마무리하지 않는다. abandon 기록도 남기지 않는다. 같은 문제를 _enterTown(귀환 · 부활)에서는 이미 finishRift 로 막았다(GameSim.js 「밸런스 게이트」 주석). 일시정지는 step 을 멈추므로 1.5초 창은 게임 시간이다. 처치 직후 Esc 를 누르면 메뉴에서 얼마든지 오래 머물러도 보상이 없다. pagehide 저장도 finishRift 를 거치지 않으므로, 그 1.5초 안에 탭을 닫아도 같다.",
+      "playerImpact": "수호자를 잡고 「끝났다」며 바로 Esc → 타이틀로(또는 탭 닫기)를 하면 확인 없이 다음 레벨 해금(+1 · +2) · 완료 경험치 · 최고 기록이 저장되지 않는다. 다음에 들어오면 같은 균열을 다시 깨야 한다.",
+      "suggestedFix": "closeRift 맨 앞에 `if (rift.phase === 'complete' && !rift.summary && st.char) finishRift(ctx)`를 넣는다(_enterTown 과 같은 규칙 — quit · newRift · debug 모두 덮는다). 근본적으로는 completeGuardian 틱에 요약 · completeRun · SAVE{complete}(보상)을 끝내고, completeDelay 는 패널 · 나가는 포털 연출에만 쓰면 pagehide 경로도 막힌다."
+    },
+    {
+      "severity": "minor",
+      "area": "ui-app",
+      "file": "src/ui/panels/riftComplete.js",
+      "line": 93,
+      "title": "완료 패널이 새로 열린 것이 없는데 「균열 n 해금 · 무사망 +2」를, 붕괴 패널이 잃을 것이 없는데 「해금 +1」을 보인다",
+      "evidence": "Node(GameSim · debugCompleteRift)로 패널의 판정식(riftComplete.js:93 `unlockedTo >= level+1 && unlockedTo <= level + (noDeath?2:1)`)을 그대로 돌렸다. 해금 3에서 균열 1 무사망 재완료 → unlockedTo 3 · UNLOCK 이벤트 0 · 배지 표시 true. 해금 2 · 균열 1 사망 1 → true / 해금 7 · 균열 5 무사망 → true / 해금 6 · 균열 5 사망 1 → true. 처음 깬 판(해금 1 → 3)만 실제로 올랐다. unlockAfter 가 max(지금, L+gain)이라 「이미 열려 있음」이 범위 안에 들어온다. 브라우저 probe(?class=warrior&level=10&rift=2 · 해금 4 · 균열 2 무사망 완료)의 패널 텍스트는 「균열 2 완료 / 균열 4 해금 / 무사망 +2」였고, 스크린샷에서 초록 · 노랑 배지 둘을 직접 봤다. 붕괴 쪽 death.js:74 는 `n: deaths === 0 ? 2 : 1`만 보고 지금 해금을 보지 않는다. 붕괴는 늘 사망 4 이상이라, 해금 7에서 균열 5가 무너져도 「잃은 것: 수호자 보장 드랍 2 · 해금 +1」이라고 쓴다(실제 unlockAfter = max(7, 6) = 7 — 잃은 해금 없음).",
+      "playerImpact": "같은 레벨을 되풀이해 파밍할 때마다(적정 레벨 반복이 핵심 루프다) 완료 패널이 「새 해금 · 무사망 보너스」를 축하한다. 균열석에는 새 레벨이 없어 해금 규칙을 잘못 배우고, 「한 단계 위에 도전할 것인가」의 판단 근거가 흐려진다.",
+      "suggestedFix": "요약에 해금 전 값을 넣거나(makeSummary 에서 unlockedFrom = ch.riftUnlocked) 패널이 `s.unlockedTo > (완료 전 해금)`일 때만 배지를 띄운다. 붕괴 패널은 `min(maxLevel, level + 1) > ch.riftUnlocked`일 때만 「해금 +1」을 쓴다."
+    },
+    {
+      "severity": "minor",
+      "area": "ui-app",
+      "file": "src/app/Game.js",
+      "line": 721,
+      "title": "개발 · 저장 막힘 세션에서 「타이틀로」 뒤 「계속하기」가 캐릭터를 보이면서 「잘못된 요청이다」로 실패한다",
+      "evidence": "브라우저 ?fresh=1(README 의 「일회용 세션」): newChar(마법사 Fresh) → quitToTitle → 타이틀의 「계속하기」 줄은 「Fresh · 마법사 · 레벨 1 · 균열 1」로 켜져 있다. 그런데 actions.continueGame() · actions.selectChar(0) 둘 다 {ok:false, reason:'invalid'}였다. _selectChar(Game.js:721)가 `this.dev || !this.storageOk`면 무조건 invalid 를 돌려주기 때문이다. 캐릭터는 메모리(account.chars · 떼어 낸 char)에만 있어 이 세션에서 다시 붙일 길이 없다. 같은 조건(!storageOk)인 사생활 보호 모드의 보통 세션도 같은 길이다(코드 경로 — 저장소를 막은 브라우저로는 돌려 보지 않았다).",
+      "playerImpact": "저장이 막힌 브라우저에서 놀다가 「타이틀로」를 누르면, 화면에 보이는 자기 캐릭터로 돌아갈 수 없다(그 세션 안에서도). ?fresh=1 로 첫 경험을 시험하던 Jay도 같은 막다른 길을 만난다.",
+      "suggestedFix": "persist() 가 아닌 세션에서는 _quitToTitle 이 떼어 낸 캐릭터를 칸별로 메모리에 들고 있다가 _selectChar 가 그것을 loadCharacter 한다. 또는 그런 세션의 타이틀에서 「계속하기」 · 캐릭터 선택을 끄고 이유(저장 안 됨)를 보인다."
+    },
+    {
+      "severity": "minor",
+      "area": "sim",
+      "file": "src/sim/player/controller.js",
+      "line": 202,
+      "title": "완료 패널은 「T — 마을로」(무료)를 가르치지만, 패널을 닫은 뒤의 T 는 귀환 두루마리 1개와 1.5초 시전을 쓴다",
+      "evidence": "Node(GameSim · 균열 1 debugCompleteRift → phase complete · 나가는 포털 열림)에서 recallDown 입력 한 번 → RECALL start > done · 1.53초 뒤 전환 요청 · scrolls 3 → 2. 완료 패널의 T 는 sim.leaveRift(무료 · 즉시 — riftComplete.js toTown)이다. 패널을 Enter 「계속 줍기」로 닫으면 같은 키가 controller.js:202 의 귀환(두루마리 소모)으로 간다. 완료된 균열에서는 나가는 포털이 공짜인데도 그렇다.",
+      "playerImpact": "남은 전리품을 줍고 패널에서 배운 대로 T 를 누르면, 두루마리가 하나 줄고 1.5초를 서 있어야 마을에 간다. 두루마리가 0이면 「두루마리 없음」이 떠 나가는 포털까지 걸어가야 한다.",
+      "suggestedFix": "균열이 complete 이고 나가는 포털이 있으면, T 를 두루마리 귀환 대신 leaveRift(무료 · 즉시)로 처리한다. 또는 HUD 에 「T — 마을로(포털)」를 보이고 recall 을 막는다."
+    }
+  ]
+}

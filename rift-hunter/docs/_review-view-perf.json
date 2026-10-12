@@ -1,0 +1,45 @@
+{
+  "summary": "관점: 뷰 · 이펙트 · 오디오의 누수 · 성능 · 상태와 화면의 불일치(src/view · src/audio). 누수는 없었다. Node(실제 GameSim + 봇 + World/Actor/Fx/Camera 레이어, 렌더러 없음)에서 판 50회를 반복해 보니 장면 객체가 267→271(장비 부위 수만큼)에서 멈췄다. 버스 구독 28은 그대로였고, 판이 끝나면 몬스터 기록 0 · fx 순간 기록 0으로 돌아갔다. 장면에서 빠진 뒤 dispose되지 않은 지오메트리 · InstancedMesh · 재질도 0이었다(레이어가 끝까지 들고 있는 공유 quad 1개만 예외). 헤드리스 Chromium(dev 5404)에서는 새 시드로 판 10회를 돌렸다. renderer.info.memory.geometries는 마을 기준 170 → 175 → 175 → 178 → 180 → 182 → 183 → 183 → 183 → 183으로 늘다가 멈췄고, 장면 고유 지오메트리 194를 넘지 않았다. 텍스처 2 · 프로그램 28~30 · DOM 283~335 · 리스너 117도 그대로였다. 이 결과로 NOTES-W2의 「새 시드마다 +2~5」는 처음 화면에 나온 몬스터 부위 · 드랍 메시가 렌더러에 올라가는 것이고 누수가 아니라고 판단한다. 실제 AudioContext(running)에서는 소리 13개 정점 → 환경음 1개 · 노드 12~16으로 돌아갔다. Node에서 view만 잰 프레임 비용: actors 평균 1.7~1.9ms(p95 3.2ms, 근처 70~85마리) · fx 1.1~1.2ms · world 0.06ms. 브라우저 step(1)은 중앙값 5.7~8.3ms(소프트웨어 GL)였다. 자연 판 6개에서 32m 안 살아 있는 몬스터는 최대 111마리라 MAX_DRAWN 160을 넘지 않았다. 적대 표식 정점 예산은 정예 위협을 몰아넣어도 최대 35k/60k였다. 드러난 결함은 넷이다. ① 돌격 짐승 돌진: 바닥 선 끝 바깥 0.6~0.78m에 서 있어도 맞는다(sim · major). ② 플레이어 · 몬스터의 facing을 보간하지 않아 회전이 30Hz 계단으로 보인다. ③ 실행 중 devicePixelRatio가 바뀌어도 픽셀 비율이 따라가지 않는다. ④ high 화질을 떠난 뒤에도 점광원 그림자 맵(큐브 렌더 타깃)이 해제되지 않는다. 확인하지 못한 것: 실제 GPU의 프레임레이트, 실제 스피커로 듣는 소리, 회전 계단이 실제 모니터에서 얼마나 눈에 띄는가 — 사람이 확인할 것. 정리 보고: 내가 띄운 vite(5404)와 스크래치(docs/_scratch/view-perf · 루트에 생긴 alloc.heapprofile)는 끄고 지웠다. 다만 마지막 정리 때 이름이 「chromium」인 프로세스를 골라 끄는 명령을 실행해서, 그 순간 돌던 다른 작업자(browser-robustness — 5405/5406 서버는 그대로다)의 헤드리스 Chromium까지 꺼졌을 수 있다. 그 작업자의 브라우저 검사가 중간에 끊겼다면 이 때문이다.",
+  "findings": [
+    {
+      "severity": "major",
+      "area": "sim",
+      "file": "src/sim/monsters/behaviors.js",
+      "line": 316,
+      "title": "돌격 짐승 돌진이 바닥 예고 선(chargeLine) 끝에서 몸 반지름(0.6~0.78m)만큼 더 맞힌다 — 표식과 판정의 차이가 QUALITY §2의 0.35m를 넘는다",
+      "evidence": "코드 경로: think()에서 표식 길이는 shown = min(len, 벽까지 + mon.r)이다. 벽이 없으면 shown = len이어서 몸 중심이 멈추는 자리에서 선이 끝난다. 벽에 막힐 때만 + r(몸 앞)이 들어간다. 판정 chargeStep(282행)은 몸 중심의 경로 선분과 플레이어 중심 사이를 segPointDist ≤ mon.r + p.r로 본다. 그래서 끝에 반지름 mon.r인 반원 머리가 더 붙는다. 재현은 스크래치 charge-end.mjs(지움)로 했다. 실제 GameSim · 균열 5 · 시드 777, 플레이어 뒤 8m에 charger 하나를 두고 EFFECT_SPAWN{chargeLine}의 shape를 받는다. 예비 동안 플레이어를 선 끝 바깥, 몸 가장자리 기준 b m에 세워 두고 PLAYER_HIT{via:'charge'}가 오는지 셌다. 결과: 일반(r 0.6 · 선 7.78 × 1.2) — b = 0.05 · 0.2 · 0.35 · 0.5에서 맞음, 0.7 · 0.9에서 안 맞음. 정예(r 0.78 · 선 8.85 × 1.56) — b = 0.05 ~ 0.7에서 맞음, 0.9에서 안 맞음. 짐승은 선 끝(7.78 · 8.85)에서 멈췄다. 옆 방향은 폭 2r = 몸 + 몸으로 맞아서 끝 쪽만 어긋난다. NOTES · 비평 문서에 이 내용은 없다.",
+      "playerImpact": "돌진은 배율 6.0(예고된 공격 × 3) · 밀침 2m인 가장 센 일반 몬스터 공격이다. 붉은 선을 보고 선 끝 쪽(뒤로 물러남 · 대각선)으로 빠져 「밖에 섰다」고 읽은 플레이어가 맞고 2m 밀린다. 브리프 §5의 「예고를 보고 걸어서 피한다」와 QUALITY §2의 「판정은 보이는 것과 같다(차이 ≤ 0.35m)」를 어긴다.",
+      "suggestedFix": "표식과 판정을 같은 모양으로 맞춘다. 가장 작은 수정은 표식 길이를 몸 앞까지 늘리는 것이다: shown = min(len + mon.r, 벽까지 + mon.r)이고, canStartHazard에 넘기는 shape도 같은 것을 쓴다. 다른 길은 chargeStep의 판정을 그 선 모양에 대한 overlaps(line, p, p.r)로 바꾸고 이동은 len − r에서 멈추는 것이다. 회귀 테스트로 「선 끝 바깥 몸 가장자리 0.36m에 선 플레이어는 via charge로 맞지 않는다 · 0.05m 안쪽은 맞는다(일반 · 정예)」를 monsters/content 테스트에 넣는다."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/ActorLayer.js",
+      "line": 106,
+      "title": "facing을 보간하지 않는다 — 위치는 화면 주사율로 매끄럽게 움직이는데 몸의 방향은 30Hz 틱마다 최대 34°씩 끊겨 돈다(플레이어 · 몬스터)",
+      "evidence": "코드 경로: 위치는 lerp(prevPos, pos, alpha)로 그린다. 방향은 플레이어가 fkBiped(…, p.facing, …)(ActorLayer.js:106), 몬스터가 rt.fk(…, m.facing, …)(actors/monsters.js:455)로 틱 값을 그대로 쓴다. sim 상태에는 prevFacing이 없고 view도 이전 값을 기억하지 않는다. 측정은 스크래치 facing.mjs(지움)로 했다. 실제 GameSim + 봇 · 개발 캐릭터 L18 · 균열 10 · 4분이다. 틱마다 플레이어 facing 변화 분포: 전사 6,996틱 중 0° 4,735 · <5° 1,589 · 5~15° 67 · 15~30° 70 · 30~60° 485 · 60~120° 24 · >120° 26, 마법사 7,033틱 중 30~60° 274 · >60° 46. 깨어 있는 몬스터 틱 중 15~30° 점프가 5,818(전사 판) · 7,189(마법사 판)로 약 7~10%다. 30~60° 칸은 플레이어 turnRate 18 rad/s의 틱 상한(0.6 rad ≈ 34°) 그대로다 — 돌아서는 동안 틱마다 34°씩 순간 회전하고, 60Hz에서는 같은 방향이 두 프레임씩 유지된다.",
+      "playerImpact": "클릭 이동 · 공격으로 돌아설 때마다 캐릭터가 부드럽게 돌지 않고 계단처럼 「착착」 꺾인다. 주사율이 높은 모니터일수록 위치(매끄러움)와 방향(30Hz)의 차이가 커서 조작감이 거칠게 느껴진다. 떼의 몬스터도 같다.",
+      "suggestedFix": "view에서 엔티티마다 마지막 두 틱의 facing을 기억하고 alpha로 최단 호 보간한다. 플레이어는 PlayerPoser에, 몬스터는 MonsterInstancer의 rec에 {fPrev, fCur, tick}을 둔다. state.tick이 바뀔 때 fPrev = fCur · fCur = facing으로 넘기고, 그린 각도는 fPrev + wrap(fCur − fPrev) × alpha로 한다. 위치 점프(TELEPORT_SNAP) · PLAYER_SPAWNED · 새 기록이면 fPrev = fCur로 끊는다. sim 계약은 바꾸지 않아도 된다."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/renderer.js",
+      "line": 63,
+      "title": "실행 중 devicePixelRatio가 바뀌어도(창을 다른 배율의 모니터로 옮김 · 브라우저 확대) 픽셀 비율을 다시 계산하지 않는다 — 흐려지거나 픽셀을 2.25배 더 그린다",
+      "evidence": "코드 경로: 픽셀 비율은 setQuality(renderer.js:74~75)에서만 min(devicePixelRatio, Q.pixelRatio, 2)로 정한다. 창 resize 핸들러(Game.js:247 → rc.resize)는 setSize만 부르고 비율은 그대로 둔다. 측정은 스크래치 run2.mjs(지움) — 헤드리스 Chromium · dev 5404 · CDP Emulation.setDeviceMetricsOverride로 했다. ① DPR 1로 부팅(medium) 뒤 DPR 2로 바꾸면 canvas가 1280×720 · CSS 1280×720 · 비율 1.0에 머문다. medium 상한대로면 1.5여야 한다. ② DPR 2로 부팅하면 canvas 1920×1080(비율 1.5)이고, DPR 1로 바꾼 뒤에도 1920×1080 · 비율 1.5로 남는다. 의도한 1.0보다 픽셀이 2.25배다. 두 경우 모두 화질 설정을 다시 바꾸기 전까지 이어진다.",
+      "playerImpact": "노트북 화면(배율 150~200%)과 외부 모니터(100%) 사이로 창을 옮기거나 Ctrl +/−로 확대하면(게임이 Ctrl 조합을 건드리지 않는다), 화면이 뭉개져 흐리게 보인다. 반대 방향이면 GPU가 2.25배 픽셀을 칠해 프레임이 떨어진다. 화질 메뉴를 한 번 바꾸기 전까지 그대로다.",
+      "suggestedFix": "rc.resize(w, h)에서(또는 render 앞에서) 지금 값 want = min(devicePixelRatio, QUALITY[rc.quality].pixelRatio, 2)을 계산한다. renderer.getPixelRatio()와 다르면 setPixelRatio(want)를 부른다. 확대만 바꾸고 창 크기가 그대로인 경우도 잡으려면 matchMedia(`(resolution: ${devicePixelRatio}dppx)`)의 change에 resize를 다시 건다."
+    },
+    {
+      "severity": "minor",
+      "area": "view",
+      "file": "src/view/world/lights.js",
+      "line": 49,
+      "title": "high 화질에서 내려와도 플레이어 점광원의 그림자 맵(1024² 큐브 렌더 타깃 + 깊이 큐브)이 해제되지 않고 남는다",
+      "evidence": "코드 경로: setShadows(false)는 player.castShadow = false만 하고 player.shadow.map · depthTexture를 dispose하지 않는다. three r186의 WebGLShadowMap은 점광원마다 WebGLCubeRenderTarget(mapSize 1024) + CubeDepthTexture(UnsignedInt)를 만든다. 계산상 색 6 × 1024² × 4B ≈ 25MB + 깊이 ≈ 25MB다(이 값은 실측이 아니라 계산). 측정은 run2.mjs(지움) — 같은 균열 · 같은 떼에서 화질을 low → medium → high → medium으로 바꾸며 __game.memory().rc를 읽었다. textures 2 · 2 · 3 · 3으로, high를 떠난 뒤에도 3이 남았다. 드로콜은 124 → 460 → 125로 정상 복귀했고, programs는 32 → 49 → 49였다.",
+      "playerImpact": "high가 버거워 medium · low로 낮춘 플레이어의 GPU 메모리에 쓰지 않는 그림자 맵(계산상 약 50MB)이 세션이 끝날 때까지 남는다. 메모리가 적은 내장 GPU에서는 낮춘 효과가 그만큼 줄어든다.",
+      "suggestedFix": "setShadows(on)에서 on이 false면 player.shadow.map이 있을 때 player.shadow.dispose()를 부르고(three LightShadow.dispose — map · depthTexture를 해제한다) map을 null로 둔다. 다음에 high로 가면 three가 다시 만든다. renderer.js setQuality의 순서(shadowMap.enabled → setShadows)는 그대로 두면 된다."
+    }
+  ]
+}

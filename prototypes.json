@@ -25,6 +25,18 @@
       "created": "2026-10-02",
       "controls": "키보드 · 마우스",
       "notes": "갤러리 공개(Jay · 2026-10-03). 갯바위 · 강은 레벨 5 · 10에 열린다 — 바로 보려면 README 「바로 해 보기」의 ?scene · ?spot 쿼리."
+    },
+    {
+      "slug": "rift-hunter",
+      "dir": "rift-hunter",
+      "title": "RIFT HUNTER — 균열 사냥꾼",
+      "summary": "쿼터뷰 3D 핵앤슬래시 ARPG(시스템 분석용). 마을(대장장이 · 잡화상 · 도박꾼 · 신비술사 · 보관함 · 균열석)과 시드 생성 균열을 오가며 몬스터 떼와 속성 12종의 챔피언 · 정예를 쓸고, 확률 드랍 장비(10부위 · 5등급 · 옵션 티어 · 전설 12 · 세트 2)와 스킬 트리(3갈래 × 4단계)로 강해져 균열 레벨을 올린다. 전사 · 마법사. 분석 패널(드랍 시뮬레이터 이론값 대 시뮬값 · 표 보기 · 세션 기록 · 봇 관전)과 봇 측정 리포트(npm run measure).",
+      "port": 5400,
+      "status": "playable",
+      "public": true,
+      "created": "2026-10-11",
+      "controls": "키보드 · 마우스",
+      "notes": "갤러리 공개(Jay · 2026-10-12) — https://koohoo-dev.github.io/prototype-sample/rift-hunter/ . 균열 10 · 정예 속성 · 전설을 바로 보려면 README 「바로 해 보기」의 ?class · ?level · ?rift · ?fixture 쿼리. 균열 진행은 저장하지 않는다(새로 고치면 마을)."
     }
   ]
 }
