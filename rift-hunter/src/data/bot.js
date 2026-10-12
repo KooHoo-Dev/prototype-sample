@@ -74,7 +74,9 @@ export const BOT_MEASURE = {
   // 1 · 2단계 작업 기본값 — basic 세션 시간 · challenge · noDodge/해금 + 3 · 빌드 · 장비 판 수 · 속성 탐침 시드 수 · 균열 레벨 · 빌드 비교 캐릭터 · 장비 비교 균열
   // 밸런스 게이트: replayRuns 20 → 40 · gearRuns 10 → 20 · buildRuns 10 → 15(판마다 사망 0~4 로 흔들려 20판 비율이 측정마다 크게 달랐다)
   hours: 9, challengeRuns: 20, replayRuns: 40, buildRuns: 15, gearRuns: 20, probeSeeds: 8, probeLevel: 5,
-  buildChar: { level: 12, rift: 6 }, gearLevel: 8, gearPlus: 3, dropRolls: 100000, dropLevel: 5,
+  // 피드백 2: buildChar 레벨 12 · 균열 6 → 레벨 14 · 균열 5 — 입문 구간이 균열 6 에서 끝나 개발 장비(봇 장비의 절반 힘)로는 균열 6 에서 판이 무너져(완료 0~9/15)
+  //   빌드 비교가 「무너지기까지의 시간」을 쟀다. 봇 세션이 균열 5 를 도는 캐릭터 레벨(12~14)
+  buildChar: { level: 14, rift: 5 }, gearLevel: 8, gearPlus: 3, dropRolls: 100000, dropLevel: 5,
   // 판 하나의 상한 — 균열 시간(초) · 마을 등 균열 밖 여유(초) · 세션 끝 마을 정비 여유(초)
   maxRiftSec: 1200, townAllowSec: 900, tailTownSec: 60,
   // 정예 속성 탐침 — 팩 자리(플레이어에서 m · 방향 수 · 자리 몸 반지름) · 균열 시간 상한(초) · 캐릭터 레벨 = round(균열 × a + b)(NOTES-W1FIX 의 (5, 10) · (10, 18) · (15, 24))

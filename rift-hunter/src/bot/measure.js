@@ -11,10 +11,10 @@ import { makeRng, seedRng } from '../core/rng.js';
 import { BOT, BOT_MEASURE as M } from '../data/bot.js';
 import { CLASSES } from '../data/classes.js';
 import { getClass } from '../data/index.js';
-import { ITEM } from '../data/items.js';
+import { COMPARE, ITEM } from '../data/items.js';
 import { MON_AFFIXES } from '../data/monsterAffixes.js';
 import { MONSTERS } from '../data/monsters.js';
-import { earlyDmgMul, earlyHpMul, riftRow } from '../data/rift.js';
+import { RIFT, earlyDmgMul, earlyHpMul, riftRow } from '../data/rift.js';
 import { compareEquip } from '../sim/loot/compare.js';
 import { rollGear, rollRarity } from '../sim/loot/rollDrops.js';
 import { makeItem } from '../sim/loot/rollItem.js';
@@ -711,7 +711,7 @@ function formatReport(results, o) {
     L(`- 수리비/수입 = 「사망 1회 수리비(그 판 끝의 장착으로 계산)」/「그 판 골드 수입(줍기 + 판매)」. 상승 조건 = 완료 · 무사망 · ${BOT.upMaxSec}초 안(목표 40~60% — §7.14 평형). 보상(L) = √(업그레이드 드랍의 power 상승 비율 합/판 × 골드/판)(§7.14).`);
     L(`- 처치 시간 — 일반 몬스터 기본 공격 타수(기본 공격만으로 죽은 것) 중앙 ${f1(hitsMedian(s.runs).median)}방(${hitsMedian(s.runs).n}마리) · 챔피언 팩 중앙 ${f1(median(s.runs.flatMap((r) => r.packs.champion)))}초 · 정예 팩 중앙 ${f1(median(s.runs.flatMap((r) => r.packs.elite)))}초 · 수호자 중앙 ${f1(median(s.runs.map((r) => r.guardianSec).filter((x) => x >= 0)))}초.`);
     const over = s.runs.filter((r) => r.level > LEVEL_CAP && r.result !== 'abandon');
-    if (over.length) L(`- 균열 ${LEVEL_CAP} 초과 판 ${over.length}개: 업그레이드 판 ${pct(avg(over.map((r) => (r.upgrades > 0 ? 1 : 0))))} — 드랍의 요구 레벨(= 아이템 레벨)이 캐릭터 레벨 캡 ${LEVEL_CAP} 보다 높아 낄 수 없다(§3.5 reqLevel). 사망/판 ${f2(avg(over.map((r) => r.deaths)))}.`);
+    if (over.length) L(`- 균열 ${LEVEL_CAP} 초과 판 ${over.length}개: 업그레이드 판 ${pct(avg(over.map((r) => (r.upgrades > 0 ? 1 : 0))))} — 요구 레벨 = min(아이템 레벨, ${ITEM.reqLevelCap})(피드백 2 D2 — 캐릭터 레벨 캡 ${LEVEL_CAP} 에서도 낀다). 사망/판 ${f2(avg(over.map((r) => r.deaths)))}.`);
     L(`- 봇 행동(세션 합): 피하기 ${s.counters.dodges}(이동 스킬 ${s.counters.dodgeSkills}) · 카이팅 ${s.counters.kites} · 스킬 ${Object.entries(s.counters.casts).map(([k, v]) => `${k} ${v}`).join(' · ')} · 장착 ${s.counters.equips} · 판매 ${s.counters.sold}개 · 끼임 풀기 ${s.counters.stuck}.`);
     L('');
   }
@@ -909,12 +909,15 @@ function goalRows(results) {
   R('드랍/판 — 세트', '0.05~0.15', per((s) => f2(dR(s, 'set'))), verdictAll((s) => dR(s, 'set'), 0.05, 0.15));
   R('첫 전설', '2~5판(불운 보정 켬)', per((s) => (s.firstLegendaryRun !== null ? s.firstLegendaryRun + '판째' : '없음')), sessions.length && all((s) => s.firstLegendaryRun !== null && s.firstLegendaryRun >= 2 && s.firstLegendaryRun <= 5) ? '✓' : '✗');
   const upRate = (s, lo, hi) => { const rs = fit(s).filter((r) => r.level >= lo && r.level <= hi); return rs.length ? avg(rs.map((r) => (r.upgrades > 0 ? 1 : 0))) : NaN; };
-  R('한 번 다녀오면 바뀐다 — 균열 1~5 업그레이드 판 비율', '70~95%', per((s) => pct(upRate(s, 1, 5))), verdictAll((s) => upRate(s, 1, 5), 0.7, 0.95));
+  // 피드백 2 D5: 「업그레이드」 = 장착보다 장비 점수가 COMPARE.upgradeGain(3%) 넘게 높은 드랍(sim 이 rift.stats.upgrades 로 센다 — 완료 패널과 같은 문턱)
+  R(`한 번 다녀오면 바뀐다 — 균열 1~5 업그레이드 판 비율(장비 점수 +${Math.round(COMPARE.upgradeGain * 1000) / 10}% 넘게)`, '70~95%', per((s) => pct(upRate(s, 1, 5))), verdictAll((s) => upRate(s, 1, 5), 0.7, 0.95));
   R('한 번 다녀오면 바뀐다 — 균열 10 무렵(9~11)', '30~60%', per((s) => pct(upRate(s, 9, 11))), verdictAll((s) => upRate(s, 9, 11), 0.3, 0.6));
   R('한 번 다녀오면 바뀐다 — 균열 20 무렵(18~22)', '15~35%', per((s) => pct(upRate(s, 18, 22))), verdictAll((s) => upRate(s, 18, 22), 0.15, 0.35));
-  // 레벨 곡선 — 균열 1~20 판으로 log(보상) 과 log(어려움) 을 레벨에 대해 직선 맞춤 → 레벨당 증가 배율의 비(어려움 / 보상 · §7.14 정의)
+  // 레벨 곡선 — 균열 introTo+1 ~ 20 판으로 log(보상) 과 log(어려움) 을 레벨에 대해 직선 맞춤 → 레벨당 증가 배율의 비(어려움 / 보상 · §7.14 정의)
+  //   피드백 2 D1: 입문 구간(RIFT.earlyDmg · earlyHp 의 칸 — 균열 1~6)은 브리프 §7 의 예외라 맞춤에서 뺀다(그 구간은 시작 캐릭터를 받치려 피해를 낮췄다가 균열 7 에서 본 곡선에 닿는다)
+  const introTo = Math.max(RIFT.earlyDmg.length, RIFT.earlyHp.length);
   const curve = (s) => {
-    const pts = fit(s).filter((r) => r.level <= 20).map((r) => ({ L: r.level, rw: Math.sqrt(Math.max(0, r.upGain) * Math.max(0, income(r))) })).filter((p) => p.rw > 0);
+    const pts = fit(s).filter((r) => r.level > introTo && r.level <= 20).map((r) => ({ L: r.level, rw: Math.sqrt(Math.max(0, r.upGain) * Math.max(0, income(r))) })).filter((p) => p.rw > 0);
     if (pts.length < 4 || new Set(pts.map((p) => p.L)).size < 3) return { ratio: NaN, hard: NaN, rew: NaN, n: pts.length };
     const slope = (xs, ys) => { const mx = avg(xs), my = avg(ys); let a = 0, b = 0; for (let k = 0; k < xs.length; k++) { a += (xs[k] - mx) * (ys[k] - my); b += (xs[k] - mx) ** 2; } return b > 0 ? a / b : NaN; };
     const Ls = pts.map((p) => p.L);
@@ -924,7 +927,7 @@ function goalRows(results) {
     return { ratio: gh / gr, hard: gh - 1, rew: gr - 1, n: pts.length };
   };
   const ratio = (s) => curve(s).ratio;
-  R('레벨이 의미 있다 — 레벨당 어려움 / 보상 증가 배율의 비(균열 1~20 직선 맞춤)', '0.8~1.25', per((s) => { const c = curve(s); return Number.isFinite(c.ratio) ? `${f2(c.ratio)}(레벨당 어려움 ${spct(c.hard)} · 보상 ${spct(c.rew)} · ${c.n}판)` : '—'; }), verdictAll(ratio, 0.8, 1.25));
+  R(`레벨이 의미 있다 — 레벨당 어려움 / 보상 증가 배율의 비(균열 ${introTo + 1}~20 직선 맞춤 · 입문 구간 1~${introTo} 제외)`, '0.8~1.25', per((s) => { const c = curve(s); return Number.isFinite(c.ratio) ? `${f2(c.ratio)}(레벨당 어려움 ${spct(c.hard)} · 보상 ${spct(c.rew)} · ${c.n}판)` : '—'; }), verdictAll(ratio, 0.8, 1.25));
   const at = (s, key, n) => s[key][n];
   R('진행 속도 — 균열 5 해금', '30~60분', per((s) => hrs(at(s, 'unlockAt', 5))), verdictAll((s) => at(s, 'unlockAt', 5) ?? NaN, 1800, 3600));
   R('진행 속도 — 균열 10 해금', '1.5~3시간', per((s) => hrs(at(s, 'unlockAt', 10))), verdictAll((s) => at(s, 'unlockAt', 10) ?? NaN, 5400, 10800));

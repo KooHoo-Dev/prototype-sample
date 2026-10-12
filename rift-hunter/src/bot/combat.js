@@ -42,6 +42,7 @@ const TAU = Math.PI * 2;
  * @property {number} meleeNear   kiteFrom 안의 깨어 있는 근접 종 수
  * @property {number} kiteCount   BOT.kiteCount(순간이동 규칙의 문턱)
  * @property {((x:number, z:number) => boolean)|null} walkable   그 점에 설 수 있는가(순간이동 반대쪽 · null 이면 늘 참)
+ * @property {((x:number, z:number) => boolean)|null} [visible]  피드백 2 D8: 그 점이 플레이어 자리에서 벽(타일)에 가려지지 않는가(메테오 목표 · 없으면 늘 참)
  */
 
 /** (x, z)에서 R 안(몸 r 포함)의 몬스터 수 @param {Situation} s @param {number} x @param {number} z @param {number} R */
@@ -103,14 +104,16 @@ export function skillRule(beh, s, R, sk) {
     case 'fireball':
       return T && T.los && s.resource > sk.cost + R.fireball.reserve ? { x: T.x, z: T.z, hover: T.id } : null;
     case 'meteor': {
+      // 피드백 2 D8: 벽에 가려진 몬스터는 고르지 않는다(sim 이 목표를 이쪽 벽 앞에서 자른다 — 헛친다)
+      const seen = (x, z) => !s.visible || s.visible(x, z);
       let best = null, bn = 0;
       for (const m of s.mons) {
         if (Math.hypot(m.x - s.px, m.z - s.pz) > R.meteor.range) continue;
         const n = countWithin(s, m.x, m.z, R.meteor.cluster);
-        if (n > bn) { bn = n; best = m; }
+        if (n > bn && seen(m.x, m.z)) { bn = n; best = m; }
       }
       if (best && bn >= R.meteor.count) return { x: best.x, z: best.z, hover: null };
-      if (T && ELITE_RANKS.includes(T.rank) && T.d <= R.meteor.range) return { x: T.x, z: T.z, hover: T.id };
+      if (T && ELITE_RANKS.includes(T.rank) && T.d <= R.meteor.range && seen(T.x, T.z)) return { x: T.x, z: T.z, hover: T.id };
       return null;
     }
     case 'nova':

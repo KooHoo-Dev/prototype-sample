@@ -5,6 +5,7 @@
 import { EV } from '../core/events.js';
 import { GLOBE, PICKUP } from '../data/combat.js';
 import { ECON } from '../data/economy.js';
+import { COMPARE } from '../data/items.js';
 import { healPlayer } from './combat.js';
 import { addDrop, removeDrop } from './entities.js';
 import { isUpgrade } from './loot/compare.js';
@@ -59,7 +60,7 @@ function scatterPos(ctx, x, z) {
 }
 
 /**
- * DropRoll[] → 바닥 Drop(흩뿌림) · DROP_SPAWN · 장비면 rift.stats.drops[rarity] · 업그레이드 집계(isUpgrade) · HINT labels(첫 장비)
+ * DropRoll[] → 바닥 Drop(흩뿌림) · DROP_SPAWN · 장비면 rift.stats.drops[rarity] · 업그레이드 집계(isUpgrade · 문턱 COMPARE.upgradeGain — 피드백 2 D5) · HINT labels(첫 장비)
  * @param {SimCtx} ctx @param {DropRoll[]} rolls @param {number} x @param {number} z @returns {Drop[]}
  */
 export function spawnDrops(ctx, rolls, x, z) {
@@ -91,7 +92,8 @@ export function spawnDrops(ctx, rolls, x, z) {
     addDrop(ctx, d);
     if (item) {
       st.rift.stats.drops[item.rarity] = (st.rift.stats.drops[item.rarity] ?? 0) + 1;
-      if (st.char && isUpgrade(ctx.stats, st.char, item)) st.rift.stats.upgrades += 1;
+      // 피드백 2 D5: 「업그레이드」로 세는 문턱은 COMPARE.upgradeGain(3% — 완료 패널 「그중 더 나은 장비」 · 측정의 업그레이드 판 비율)
+      if (st.char && isUpgrade(ctx.stats, st.char, item, COMPARE.upgradeGain)) st.rift.stats.upgrades += 1;
       emitHint(ctx, 'labels');
     }
     ctx.emit(EV.DROP_SPAWN, { id: d.id, kind: d.kind, rarity: d.rarity, x: pos.x, z: pos.z, fromX: x, fromZ: z });

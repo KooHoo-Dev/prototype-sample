@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BAG_SIZE, SAVE_KEYS, SAVE_VERSION } from '../src/core/constants.js';
+import { BAG_SIZE, SAVE_KEYS, SAVE_VERSION, STASH_SIZE } from '../src/core/constants.js';
 import { DEFAULT_SETTINGS, SETTINGS_SCHEMA } from '../src/data/settings.js';
 import { createCharacter } from '../src/sim/progression/character.js';
 import { makeItem } from '../src/sim/loot/rollItem.js';
@@ -245,7 +245,9 @@ test('app.storage: 드랍 100개 → 캐릭터 저장(계정 함께) → 다시 
   const state = stateWithChar(0);
   const newId = newIdOf(state);
   const base = state.char.equip.chest.baseId;
-  for (let i = 0; i < 100; i++) {
+  // 피드백 2 D4: 가방 30칸 — 가방 + 보관함(60)에 다 들어가는 만큼(최대 100)
+  const N = Math.min(100, BAG_SIZE + STASH_SIZE);
+  for (let i = 0; i < N; i++) {
     const it = makeItem({ baseId: base, tier: 0, ilvl: 1, rarity: 'normal', id: newId() });
     if (i < BAG_SIZE) state.char.bag[i] = it;
     else state.account.stash[i - BAG_SIZE] = it;
@@ -263,7 +265,7 @@ test('app.storage: 드랍 100개 → 캐릭터 저장(계정 함께) → 다시 
   for (const it of ch.bag) if (it) have.add(it.id);
   for (const it of Object.values(ch.equip)) if (it) have.add(it.id);
   for (const it of acc.stash) if (it) have.add(it.id);
-  assert.equal(have.size, 100 + Object.values(ch.equip).filter(Boolean).length);
+  assert.equal(have.size, N + Object.values(ch.equip).filter(Boolean).length);
   for (let k = 0; k < 20; k++) assert.equal(have.has('i' + (acc.nextItemId + k)), false);
 });
 

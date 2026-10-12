@@ -2,11 +2,12 @@
 // 회귀: ① 시작 캐릭터 두 클래스가 균열 1 첫 판을 사망 ≤ 1 로 끝낸다(고정 시드 · scriptedClear 수준 — 피하기 · 우선 대상 없음)
 //       ② 사망 → 부활 → 복귀: 그 틱에 진정 · 부활로 떠날 때 처음 자리로 · 복귀 뒤 3초 동안 복귀 지점의 aggro 안에서 깨는 몬스터가 없다(NOTES-W1 §7-3).
 //       (W1 수정 3 · 4) 사망 → 부활 → 복귀를 강제 사망 · 자연 사망 · 수호자 단계 · 수호자 출현 예고 중 사망(W1 수정 4 — 부활 commit 에서 수호자를 잠든 채 세운다)으로.
-//       ③ W1 수정 2: 첫 판 완화(RIFT.earlyDmg)가 해금 최고 + 3 의 위협을 지우지 않는다 — 개발 캐릭터가 균열 8 에서 쓰러진다(밸런스 게이트: 경사는 균열 1~11 · §7.3).
+//       ③ W1 수정 2: 첫 판 완화(RIFT.earlyDmg)가 해금 최고 + 3 의 위협을 지우지 않는다 — 개발 캐릭터가 균열 8 에서 쓰러진다(밸런스 게이트: 경사는 균열 1~11 · 피드백 2: 1~6 · §7.3).
 //       ④ 밸런스 게이트: basic 봇(「보통 사람」)이 시작 캐릭터로 균열 1 첫 판을 사망 ≤ 1 · 9분 안에 완료한다(브리프 「처음 성공까지」).
 // 실제 GameSim 으로 돈다(봇은 W2 P15 — 봇의 밸런스 측정은 measure 가 다시 잰다).
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { EventBus, EV } from '../src/core/events.js';
 import { NEUTRAL_INPUT } from '../src/core/inputFrame.js';
@@ -163,7 +164,8 @@ function devDeath(cls, seed, level = 10) {
 test('W1 수정: 사망 → 부활 → 복귀(강제 사망) — 떼 한가운데에서 쓰러져도 그 틱에 진정 · 부활로 떠날 때 처음 자리(rift.homes)로 · 복귀 뒤 3초 동안 깨는 몬스터 0', () => {
   // 전사 5 · 마법사 3(떼 8): 옛 규칙(calmSec 1 · 집 없음 · 여유 없음)에서 실패하는 판(복귀 1틱 뒤 aggro 안에 11 · 17마리)
   // 마법사 7(떼 12 · W1 수정 3): 재검증의 「날아가던 마법 화살(번개)이 복귀 11틱 뒤 잠든 몬스터를 맞혀 팩 11마리를 깨운」 판
-  for (const [cls, seed, swarm, bolt] of /** @type {const} */ ([['warrior', 5, 8, false], ['mage', 3, 8, false], ['mage', 7, 12, true]])) {
+  //   피드백 2: 팩 밀도 · 일반 생명이 바뀌어 시드 7 은 떼 12 가 모이는 틱에 날아가는 화살이 없다 — 같은 장면(떼 12 + 날아가는 화살)인 시드 4 로
+  for (const [cls, seed, swarm, bolt] of /** @type {const} */ ([['warrior', 5, 8, false], ['mage', 3, 8, false], ['mage', 4, 12, true]])) {
     const why = `${cls} 시드 ${seed} 떼 ${swarm}`;
     const { sim, log } = firstRift(cls, seed);
     const st = sim.state;
@@ -205,14 +207,26 @@ test('W1 수정 3: 사망 → 부활 → 복귀(자연 사망 · 개발 캐릭�
 test('W1 수정 3: 수호자 단계 사망 → 복귀 — 집으로 돌아간 수호자의 시야 밖으로 돌아오고, 다가가면 싸움이 다시 시작된다(수호자 생명 그대로)', () => {
   // 마법사 시드 10: 처음 사망이 수호자 단계(옛 규칙이면 복귀 지점이 수호자 7.6m 앞 · 3틱 만에 다시 깼다)
   // 밸런스 게이트: 몬스터 수치가 바뀌어 레벨 10 개발 캐릭터는 수호자 전에 쓰러진다 — 레벨 14 · 시드 1(처음 사망이 수호자 단계 — 시드 1 · 3 · 13 · 27 · 40)
-  const { sim, log } = devDeath('mage', 1, 14);
+  // 피드백 2: 입문 구간이 균열 6 에서 끝나 개발 캐릭터는 균열 8 에서 늘 수호자 전에 쓰러진다(레벨 10~14 · 시드 1~30) — 수호자가 나타날 때까지 무적으로 간 뒤
+  //   무적을 끄고 처음 쓰러지는 장면(수호자 단계 · 수호자 살아 있음)을 만든다(W1 수정 4 검사와 같은 길)
+  const { sim, log } = newSim(1);
+  const ch = makeDevCharacter({ slot: 0, cls: 'mage', name: 'mage', level: 10, rift: 5, preset: 0, seed: 1, newId: sim.ctx.newItemId });
+  ch.riftUnlocked = 8;
+  assert.equal(sim.loadCharacter(0, ch).ok, true);
+  assert.equal(sim.openRift(8, 1).ok, true);
+  assert.equal(sim.commitTravel().ok, true);
   const st = sim.state;
   const rift = st.rift;
+  sim.debugSetInvincible(true);
+  for (let i = 0; i < 2000 && !(rift.phase === 'guardian' && rift.guardianId !== null); i++) scriptedClear(sim, { maxTicks: 30, learn: true });
+  sim.debugSetInvincible(false);
+  scriptedClear(sim, { maxTicks: MIN * 6, untilComplete: true, learn: true, stopOnDeath: true });
+  assert.equal(st.player.dead, true, '수호자 단계에서 쓰러진다');
   assert.equal(rift.phase, 'guardian');
   const g = rift.mons.find(m => m.id === rift.guardianId);
   assert.ok(g && alive(g));
   const hp = g.hp;
-  const { ret } = respawnAndReturn(sim, log, 'mage 시드 10 수호자 단계');
+  const { ret } = respawnAndReturn(sim, log, 'mage 시드 1 수호자 단계');
   assert.equal(g.awake, false);
   assert.equal(g.hp, hp, '수호자 생명은 그대로');
   assert.ok(dist(ret, rift.homes[g.id]) > getMonDef(g.typeId).aggro || !losClear(sim.ctx.map, g.pos.x, g.pos.z, ret.x, ret.z), '복귀 지점은 수호자 시야 밖');
@@ -260,7 +274,7 @@ test('W1 수정 4: 수호자 출현 예고(2초) 안에 쓰러져 그 안에 부
 
 // 시드는 W1 수정 2 의 실측(NOTES-W1FIX §3.3): 지금 값이면 붕괴(전사 4 · 3.7분 · 마법사 1 · 6.4분) · 첫 수정의 전역 완화(MON.dmgBase 0.9 · 궁수 0.5)면 사망 0 · 최저 생명 0.90 · 0.67.
 // W2 밸런스 게이트가 위협 수치를 다시 맞추면 시드를 다시 고른다(이 검사는 「완화가 전역으로 새지 않는다」만 본다).
-test('W1 수정 2 · 밸런스 게이트: 첫 판 완화(균열 1~11 경사)가 해금 최고 + 3 의 위협을 지우지 않는다 — 개발 캐릭터(L10 · 장비 ilvl 5 · 프리셋 A)가 균열 8(해금 최고 + 3)에서 피하기 없이 두 번 이상 쓰러진다', () => {
+test('W1 수정 2 · 밸런스 게이트: 첫 판 완화(균열 1~6 경사 — 피드백 2)가 해금 최고 + 3 의 위협을 지우지 않는다 — 개발 캐릭터(L10 · 장비 ilvl 5 · 프리셋 A)가 균열 8(해금 최고 + 3)에서 피하기 없이 두 번 이상 쓰러진다', () => {
   for (const [cls, seed] of /** @type {const} */ ([['warrior', 4], ['mage', 1]])) {
     const { sim } = newSim(seed);
     const ch = makeDevCharacter({ slot: 0, cls, name: cls, level: 10, rift: 5, preset: 0, seed, newId: sim.ctx.newItemId });
@@ -324,22 +338,31 @@ function hitsToKill(sim, skillId, typeId, trials) {
   return sum / trials;
 }
 
-test('피드백 1: 회전 베기 정타 처치 수 — 적정 레벨(개발 캐릭터) 일반 몬스터 중앙 2~3번 · 시작 장비 첫 판 2~3번(옛 지면 강타 ~3.1)', (t) => {
-  const dev = [];
-  // (균열 · 캐릭터 레벨) = 봇 basic 4시드 세션이 그 균열을 돌 때의 캐릭터 레벨(계약 §7.14 피드백 1 표)
-  for (const [rift, level] of [[3, 8], [5, 11], [10, 19], [15, 27]]) {
-    const sim = standAt({ cls: 'warrior', level, rift, seed: 1 });
-    const row = NORMAL_TYPES.map(t => hitsToKill(sim, 'groundStomp', t, 24));
-    const why = `균열 ${rift} · 레벨 ${level}: ${row.map(v => v.toFixed(2)).join(' · ')}`;
-    for (const v of row) assert.ok(v >= 1.2 && v <= 3.5, why);
-    dev.push(...row);
+// 피드백 2 D9(Jay 결정 2026-10-12): 「정타 2~3번」의 기준 = 그 레벨에서 봇이 모은 실제 장비 — test/fixtures/botGear.json(전사 basic 세션 시드 601 ·
+//   균열 3 · 5 · 7 · 9 · 11 을 처음 연 판의 시작 사본 — 장비 · 레벨 · 스킬 그대로). 옛 기준(개발 캐릭터 장비)은 봇 장비의 절반 힘이라 진단으로만 남긴다.
+//   첫 판(시작 장비)은 3~4번 안쪽(첫 판이 늘어지지 않게 — 9분 안은 위 basic 봇 검사).
+const BOT_GEAR = JSON.parse(readFileSync(new URL('./fixtures/botGear.json', import.meta.url), 'utf8'));
+
+test('피드백 2 D9: 회전 베기 정타 처치 수 — 봇이 모은 장비(그 균열을 처음 연 판) 일반 몬스터 중앙 2~3번 · 시작 장비 첫 판 평균 3~4번 안쪽', (t) => {
+  assert.ok(BOT_GEAR.rows.length >= 4, '봇 장비 표본');
+  const bot = [];
+  for (const row of BOT_GEAR.rows) {
+    const sim = standAt({ cls: 'warrior', rift: row.rift, seed: 1, char: JSON.parse(JSON.stringify(row.char)) });
+    const r = NORMAL_TYPES.map(tp => hitsToKill(sim, 'groundStomp', tp, 12));
+    const why = `균열 ${row.rift} · 레벨 ${row.char.level} · 랭크 ${row.char.skills.ranks.groundStomp}: ${r.map(v => v.toFixed(2)).join(' · ')}`;
+    for (const v of r) assert.ok(v >= 1.2 && v <= 4.5, why);   // 방패 해골은 앞을 막아(MON.shieldFront) 한 번 더 걸린다
+    t.diagnostic(why);
+    bot.push(...r);
   }
-  const sorted = [...dev].sort((a, b) => a - b);
+  const sorted = [...bot].sort((a, b) => a - b);
   const median = (sorted[(sorted.length >> 1) - 1] + sorted[sorted.length >> 1]) / 2;
-  const mean = dev.reduce((a, b) => a + b, 0) / dev.length;
-  t.diagnostic(`적정 레벨(개발 장비) 중앙 ${median.toFixed(2)} · 평균 ${mean.toFixed(2)}`);
-  assert.ok(median >= 1.9 && median <= 3, `적정 레벨 중앙 ${median.toFixed(2)}`);
-  assert.ok(mean >= 1.8 && mean <= 3, `적정 레벨 평균 ${mean.toFixed(2)}`);
+  t.diagnostic(`봇 장비 중앙 ${median.toFixed(2)} · 평균 ${(bot.reduce((a, b) => a + b, 0) / bot.length).toFixed(2)}`);
+  assert.ok(median >= 2 && median <= 3, `봇 장비 중앙 ${median.toFixed(2)}`);
+  // (진단) 개발 캐릭터 장비 — README 「바로 해 보기」 주소의 캐릭터(봇 장비보다 약하다)
+  for (const [rift, level] of [[5, 11], [10, 19]]) {
+    const sim = standAt({ cls: 'warrior', level, rift, seed: 1 });
+    t.diagnostic(`개발 장비 균열 ${rift} · 레벨 ${level}: ${NORMAL_TYPES.map(tp => hitsToKill(sim, 'groundStomp', tp, 8).toFixed(2)).join(' · ')}`);
+  }
   // 시작 장비 — 새 캐릭터(검 · 갑옷) · 첫 판에서 오르는 레벨 · 랭크(프리셋 A 의 순서)
   const first = [];
   for (const [rift, level, rank] of [[1, 2, 1], [1, 4, 2], [2, 6, 3]]) {
@@ -350,10 +373,9 @@ test('피드백 1: 회전 베기 정타 처치 수 — 적정 레벨(개발 캐�
     ch.skills.ranks = { groundStomp: rank };
     ch.skills.bar = ['groundStomp', null, null, null, null];
     const sim = standAt({ cls: 'warrior', rift, seed: 5, char: ch });
-    first.push(...NORMAL_TYPES.map(t => hitsToKill(sim, 'groundStomp', t, 24)));
+    first.push(...NORMAL_TYPES.map(tp => hitsToKill(sim, 'groundStomp', tp, 24)));
   }
   const fm = first.reduce((a, b) => a + b, 0) / first.length;
   t.diagnostic(`시작 장비 첫 판 평균 ${fm.toFixed(2)} — ${first.map(v => v.toFixed(2)).join(' · ')}`);
-  // 위 끝 3.0 = Jay 「두세 번」 — 옛 계수(1.05/+0.11)는 이 표에서 3.02 로 걸린다(수정 단계 변이 실측 · 지금 값 2.76)
-  assert.ok(fm >= 2.2 && fm <= 3.0, `첫 판 평균 ${fm.toFixed(2)} — ${first.map(v => v.toFixed(2)).join(' · ')}`);
+  assert.ok(fm >= 2.8 && fm <= 4.0, `첫 판 평균 ${fm.toFixed(2)} — ${first.map(v => v.toFixed(2)).join(' · ')}`);
 });

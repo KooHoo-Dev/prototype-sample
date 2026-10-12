@@ -33,6 +33,12 @@
 .cell.is-unusable.c-normal, .cell.is-unusable.c-magic, .cell.is-unusable.c-rare, .cell.is-unusable.c-legendary, .cell.is-unusable.c-set { background-color: rgba(120, 20, 16, 0.42); }
 .cell.is-focus { outline: 2px solid var(--ui-accent); outline-offset: -1px; }
 .grid-doll { grid-template-columns: repeat(3, 52px); grid-auto-rows: 52px; }
+/* 피드백 2 D4 — 옛 세이브(가방 40칸 시절)의 넘친 칸: 격자 아래 줄 · 붉은 빗금 · 꺼내기만(놓는 자리가 아니다) · 격자 밑 한 줄 */
+.cell.is-over { border-color: rgba(255, 90, 70, 0.75); border-style: dashed;
+  background-image: repeating-linear-gradient(135deg, rgba(255, 80, 60, 0.16) 0 4px, transparent 4px 8px); }
+.cell.is-over.is-empty { cursor: default; opacity: 0.6; }
+.bag-over { margin-top: 6px; width: 0; min-width: 100%; word-break: keep-all; font-size: 12px; line-height: 1.35; color: var(--bad); }
+.area-head.is-over { color: var(--bad); }
 
 .rows { display: flex; flex-direction: column; gap: 2px; max-height: 330px; overflow: auto; }
 .row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid transparent; border-radius: 4px; cursor: pointer; min-height: 22px; font-size: 13px; }
@@ -154,7 +160,7 @@
 .node.is-bar::after { content: ''; position: absolute; right: 7px; bottom: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--ui-accent); }
 .skill-detail { flex: 1 1 auto; min-width: 250px; max-width: 330px; padding: 8px 10px; border: 1px solid #2c2630; border-radius: 6px; background: rgba(0, 0, 0, 0.18); font-size: 13px; }
 .skill-detail h3 { margin: 0 0 2px; font-size: 16px; color: #ffe2b0; }
-.skill-desc { color: #cfc8bc; margin: 4px 0 8px; }
+.skill-desc { color: #cfc8bc; margin: 4px 0 8px; word-break: keep-all; }   /* 피드백 2 통합 — 「0.5 / 초」처럼 숫자와 단위가 갈라지지 않게(분쇄자 · 메테오 설명) */
 .skill-why { color: var(--bad); margin-bottom: 6px; }
 .skill-detail .trade { margin-top: 6px; }
 .skill-actions { margin-top: 8px; font-size: 11px; color: var(--ui-dim); }
@@ -200,7 +206,9 @@
 .reroll-step { font-size: 12px; color: var(--ui-dim); margin-bottom: 4px; }
 
 /* ── 보관함 ── */
-.pnl-stash { width: 560px; }
+.pnl-stash { width: auto; }   /* 피드백 2 D4 — 보관함 | 가방 나란히(약 820px) */
+/* 왼쪽에 붙여 오른쪽에 툴팁 카드(300px) 자리를 남긴다 — 1280 폭에서 가운데면 양쪽 220px 라 카드가 가방을 덮었다 */
+.panel-layer > [data-panel="stash"] { justify-self: start; }
 .pnl-stash .area { margin-bottom: 8px; }
 .pnl-stash .grid { grid-template-columns: repeat(var(--cols, 10), 44px); grid-auto-rows: 36px; gap: 3px; }
 .pnl-stash .cell-name { top: 10px; }

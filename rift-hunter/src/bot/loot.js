@@ -8,6 +8,7 @@ import { ECON } from '../data/economy.js';
 import { roundTo } from '../core/math.js';
 import { ticks } from '../core/time.js';
 import { compareEquip } from '../sim/loot/compare.js';
+import { isBagFull } from '../sim/progression/inventory.js';
 import { powerScore } from '../sim/loot/stats.js';
 import { flowDist } from '../sim/world/flow.js';
 
@@ -54,7 +55,7 @@ export function lootTarget(bot, sv) {
   if (!ch || !rift) return null;
   const P = bot.params;
   if (rift.phase !== 'complete' && awakeWithin(sv, P.lootSafeR)) return null;
-  const bagFree = ch.bag.includes(null);
+  const bagFree = !isBagFull(ch);   // 피드백 2 D4: 든 아이템 < BAG_SIZE(넘친 옛 세이브면 못 줍는다)
   const tick = sv.tick;
   let best = null, br = Infinity, bd = Infinity;
   bot.bagBlocked = false;

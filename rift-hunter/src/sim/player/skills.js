@@ -16,6 +16,7 @@ import { clamp, deg2rad, fwdX, fwdZ, lerp, rightX, rightZ, yawOf } from '../../c
 import { circle, cone, line } from '../../core/shapes.js';
 import { secOf, ticks } from '../../core/time.js';
 import { CLASSES, PLAYER } from '../../data/classes.js';
+import { COMBAT } from '../../data/combat.js';
 import { CLASSES_BY_ID, LEGENDARIES_BY_ID, SKILL_NODES_BY_ID } from '../../data/index.js';
 import { BASIC_SKILLS, SKILL_NODES } from '../../data/skills.js';
 import { healPlayer, playerHit, playerHitShape } from '../combat.js';
@@ -394,6 +395,24 @@ function leapLanding(map, ax, az, bx, bz, r) {
   return land;
 }
 
+/**
+ * 피드백 2 D8 — 시야 자르기: a → b 선분이 벽 타일(losClear · 소품은 보지 않는다)에 막히면 그 선 위의 마지막 보이는 점에서 back(m)만큼 a 쪽 · 트여 있으면 b 그대로.
+ * 메테오가 벽 너머(시야 밖)에 떨어지지 않게 한다(QUALITY §2 「안전 지대 없음」 — 벽 앞에서 벽 너머 몬스터를 위험 없이 잡던 길)
+ * @param {any} map @returns {{x:number, z:number}}
+ */
+export function sightClip(map, ax, az, bx, bz, back = 0) {
+  if (!map || losClear(map, ax, az, bx, bz)) return { x: bx, z: bz };
+  let lo = 0, hi = 1;
+  for (let k = 0; k < BISECT * 2; k++) {
+    const mid = (lo + hi) / 2;
+    if (losClear(map, ax, az, ax + (bx - ax) * mid, az + (bz - az) * mid)) lo = mid;
+    else hi = mid;
+  }
+  const len = Math.hypot(bx - ax, bz - az);
+  const t = len > 0 ? Math.max(0, lo - Math.max(0, back) / len) : 0;
+  return { x: ax + (bx - ax) * t, z: az + (bz - az) * t };
+}
+
 /** 순간이동 도착점 — 가장 가까운 걷기 가능 점(벽을 건넌다) · 없으면 이쪽 편에서 닿는 끝 */
 function blinkLanding(map, ax, az, bx, bz, r) {
   const w = nearestWalkable(map, bx, bz);
@@ -691,25 +710,31 @@ export const SKILL_BEHAVIORS = {
     },
   },
 
-  /** 메테오 — 커서(range 로 자름) · 효과 하나(delay · 원 radius · 충돌 spec · 불타는 바닥 tickSpec) / shower: 작은 메테오 n */
+  /**
+   * 메테오 — 커서(range 로 자름 · 피드백 2 D8: 벽에 가려지면 이쪽 벽 앞의 마지막 보이는 바닥 — sightClip) · 효과 하나(delay · 원 radius · 충돌 spec · 불타는 바닥 tickSpec) /
+   * shower: 작은 메테오 n(각 점도 플레이어에게서 가려지면 같은 규칙으로 자른다)
+   */
   meteor: {
     act: 'cast',
     start(ctx, node, rank, cast) {
       const p = ctx.state.player;
       const { ux, uz, d } = dirOf(cast.tx - p.pos.x, cast.tz - p.pos.z, p.facing);
       const want = Math.min(d, node.skill.range);
-      cast.tx = p.pos.x + ux * want;
-      cast.tz = p.pos.z + uz * want;
+      const at = sightClip(ctx.map, p.pos.x, p.pos.z, p.pos.x + ux * want, p.pos.z + uz * want, COMBAT.sightBack);
+      cast.tx = at.x;
+      cast.tz = at.z;
       return true;
     },
     hit(ctx, node, rank, cast) {
       const def = node.skill, prm = cast.params;
+      const p = ctx.state.player;
       meteorAt(ctx, node, rank, cast, cast.tx, cast.tz, def.radius, prm.delay ?? 0, 1);
       const sh = prm.shower;
       if (sh && sh.n > 0) {
         for (let i = 0; i < sh.n; i++) {
           const a = cast.facing + Math.PI / 2 + (i * 2 * Math.PI) / sh.n;
-          meteorAt(ctx, node, rank, cast, cast.tx + fwdX(a) * def.radius, cast.tz + fwdZ(a) * def.radius, sh.r, (prm.delay ?? 0) + (i + 1) * (sh.delay ?? 0), sh.mul ?? 1);
+          const at = sightClip(ctx.map, p.pos.x, p.pos.z, cast.tx + fwdX(a) * def.radius, cast.tz + fwdZ(a) * def.radius, COMBAT.sightBack);
+          meteorAt(ctx, node, rank, cast, at.x, at.z, sh.r, (prm.delay ?? 0) + (i + 1) * (sh.delay ?? 0), sh.mul ?? 1);
         }
       }
     },

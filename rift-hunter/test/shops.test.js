@@ -191,7 +191,8 @@ test('sell → buyback: 판 값 그대로(이득 0) · 같은 아이템 · 장�
   assert.deepEqual(sell(ctx, { where: 'equip', slot: 'chest' }), { ok: false, reason: 'equipped' });
   it.flags.locked = true;
   assert.deepEqual(sell(ctx, { where: 'bag', idx: r.idx }), { ok: false, reason: 'itemLocked' });
-  assert.deepEqual(sell(ctx, { where: 'bag', idx: 30 }), { ok: false, reason: 'noItem' });
+  assert.deepEqual(sell(ctx, { where: 'bag', idx: BAG_SIZE - 1 }), { ok: false, reason: 'noItem' });
+  assert.deepEqual(sell(ctx, { where: 'bag', idx: BAG_SIZE }), { ok: false, reason: 'invalid' }, '피드백 2 D4: 칸 밖(넘친 것이 없을 때)');
   assert.deepEqual(sell(ctx, { where: 'stash', idx: 0 }), { ok: false, reason: 'invalid' });
   ch.gold = 0;
   ch.buyback = [];

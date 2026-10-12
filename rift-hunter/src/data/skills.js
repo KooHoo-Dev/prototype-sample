@@ -99,13 +99,13 @@ export const SKILL_NODES = [
   // ── 마법사 · 0 화염 ──
   { id: 'fireball', cls: 'mage', branch: 0, tier: 1, kind: 'active', maxRank: 5,
     skill: { behavior: 'fireball', targeting: 'direction', type: 'fire', tags: ['projectile', 'aoe'], cost: 16, cd: 0,
-      action: 0.55, scaled: true, hitFrac: 0.45, range: 16, radius: 2.5, coef: ranks(1.25, 0.15),   // 밸런스 게이트: 1.70/+0.20 → 1.25/+0.15(마법사가 전사보다 판이 짧고 진행이 빨랐다 — 정예 · 챔피언 처치가 목표보다 짧았다)
+      action: 0.55, scaled: true, hitFrac: 0.45, range: 16, radius: 2.5, coef: ranks(1.3, 0.155),   // 밸런스 게이트: 1.70/+0.20 → 1.25/+0.15(마법사가 전사보다 판이 짧고 진행이 빨랐다 — 정예 · 챔피언 처치가 목표보다 짧았다) · 피드백 2: → 1.30/+0.155(일반 생명 × 1.6 뒤 마법사가 균열 4~9 판에서 6분을 넘어 묶였다 · 1.50 은 후반 판이 4분 아래로 — 실험)
       params: { speed: 18, range: 16, r: 0.35, explodeR: 2.5, visual: 'fireball', visualSplit: 'fireballSplit' } } },
   { id: 'combustion', cls: 'mage', branch: 0, tier: 1, kind: 'passive', maxRank: 5,
     stats: { burnFrac: [20, 40, 60, 80, 100] } },
   { id: 'meteor', cls: 'mage', branch: 0, tier: 2, kind: 'active', maxRank: 5,
     skill: { behavior: 'meteor', targeting: 'point', type: 'fire', tags: ['aoe', 'dot'], cost: 40, cd: 2,
-      action: 0.60, scaled: true, hitFrac: 0.30, radius: 3.5, range: 18, coef: ranks(2.70, 0.30),   // 밸런스 게이트: 3.60/+0.40 → 2.70/+0.30(같은 까닭)
+      action: 0.60, scaled: true, hitFrac: 0.30, radius: 3.5, range: 18, coef: ranks(2.40, 0.27),   // 밸런스 게이트: 3.60/+0.40 → 2.70/+0.30(같은 까닭) · 피드백 2: → 2.40/+0.27(팩이 촘촘해져 후반 마법사 판이 4분대 — 메테오는 후반 기술이라 초반 진행은 그대로)
       params: { delay: 1.2, burn: { dur: 3, tick: 0.5, coefPerSec: [0.35, 0.39, 0.43, 0.47, 0.51] }, shake: 0.4, fx: 'meteor', fallDist: 6 } } },
   { id: 'splitFireball', cls: 'mage', branch: 0, tier: 3, kind: 'transform', maxRank: 1, req: 'fireball', transforms: 'fireball',
     patch: { split: { n: 3, spreadDeg: 15, mul: 0.7 } } },

@@ -4,7 +4,7 @@
 // 아이템은 한 자리(가방 칸 · 장착 칸 · 보관함 칸 · 재고 · 되사기)에만 있다 — 옮기는 명령은 「빼고 넣기」를 같은 호출 안에서 끝낸다(복사 0).
 
 import { EV } from '../../core/events.js';
-import { EQUIP_SLOTS, ITEM_SLOTS, MATERIAL_IDS, RARITIES } from '../../core/constants.js';
+import { BAG_SIZE, EQUIP_SLOTS, ITEM_SLOTS, MATERIAL_IDS, RARITIES } from '../../core/constants.js';
 import { BASES_BY_ID } from '../../data/index.js';
 import { ECON, PRICES } from '../../data/economy.js';
 import { ITEM } from '../../data/items.js';
@@ -88,17 +88,93 @@ export function eachCharItem(char, fn) {
   for (const e of char.buyback ?? []) if (e?.item) fn(e.item, 'buyback');
 }
 
+// ───────────────────────── 가방 칸 수(피드백 2 D4) ─────────────────────────
+// 가방은 BAG_SIZE(30)칸이다. 옛 세이브(40칸 시절)의 넘친 아이템은 보관함 빈칸으로 옮기고(moveBagOverflowToStash — 캐릭터를 붙일 때),
+// 보관함도 차면 가방 배열의 칸 밖(idx ≥ BAG_SIZE)에 그대로 둔다 — 사라지는 아이템 0. 든 아이템이 BAG_SIZE 아래로 줄 때까지 새로 넣지 못한다
+// (줍기 · 사기 · 되사기 · 제작 · 도박 · 벗기 · 보관함에서 꺼내기 — 모두 freeBagIdx 로). 칸이 비면 넘친 아이템을 칸 안으로 당긴다(settleBag).
+
+/** 가방에 든 아이템 수 @param {CharacterState|null|undefined} ch */
+export function bagCount(ch) {
+  let n = 0;
+  for (const it of ch?.bag ?? []) if (it) n++;
+  return n;
+}
+
+/** 가방이 찼다(든 아이템 ≥ BAG_SIZE — 넘친 옛 세이브 포함) @param {CharacterState|null|undefined} ch */
+export function isBagFull(ch) {
+  return bagCount(ch) >= BAG_SIZE;
+}
+
+/**
+ * 넘친 가방 정리(제자리 · 아이템 수는 그대로): 칸(BAG_SIZE) 밖의 아이템을 칸 안의 빈자리로 당기고, 칸 밖의 빈자리는 없앤다(길이 = BAG_SIZE + 남은 넘친 수).
+ * 넘친 것이 없으면 아무것도 하지 않는다 → 칸 안으로 당긴 수
+ * @param {CharacterState|null|undefined} ch @returns {number}
+ */
+export function settleBag(ch) {
+  const bag = ch?.bag;
+  if (!Array.isArray(bag)) return 0;
+  while (bag.length < BAG_SIZE) bag.push(null);
+  if (bag.length === BAG_SIZE) return 0;
+  let moved = 0;
+  let hole = bag.indexOf(null);
+  for (let i = BAG_SIZE; i < bag.length && hole >= 0 && hole < BAG_SIZE; i++) {
+    if (!bag[i]) continue;
+    bag[hole] = bag[i];
+    bag[i] = null;
+    moved++;
+    hole = bag.indexOf(null, hole + 1);
+  }
+  const over = bag.slice(BAG_SIZE).filter(Boolean);
+  bag.length = BAG_SIZE;
+  for (const it of over) bag.push(it);
+  return moved;
+}
+
+/**
+ * 새 아이템을 넣을 가방 칸 — 든 아이템이 BAG_SIZE 이상이면(넘친 옛 세이브 포함) -1 · 아니면 넘친 것을 먼저 당긴 뒤 칸 안의 빈 첫 칸
+ * @param {CharacterState|null|undefined} ch @returns {number}
+ */
+export function freeBagIdx(ch) {
+  if (!ch || !Array.isArray(ch.bag) || isBagFull(ch)) return -1;
+  settleBag(ch);
+  const i = ch.bag.indexOf(null);
+  return i >= 0 && i < BAG_SIZE ? i : -1;
+}
+
+/**
+ * 캐릭터를 붙일 때(GameSim.loadCharacter) — 가방 칸 밖(idx ≥ BAG_SIZE)의 아이템을 칸 안 빈자리 → 보관함 빈칸 순으로 옮긴다.
+ * 둘 다 차면 칸 밖에 그대로 둔다(사라지지 않는다). → {toBag, toStash, left}(옮긴 것이 있으면 부르는 쪽이 BAG · SAVE_REQUEST{all})
+ * @param {GameState} state @returns {{toBag:number, toStash:number, left:number}}
+ */
+export function moveBagOverflowToStash(state) {
+  const ch = state?.char;
+  const out = { toBag: 0, toStash: 0, left: 0 };
+  if (!ch || !Array.isArray(ch.bag)) return out;
+  out.toBag = settleBag(ch);
+  const stash = state.account?.stash;
+  if (Array.isArray(stash)) {
+    while (ch.bag.length > BAG_SIZE) {
+      const j = stash.indexOf(null);
+      if (j < 0) break;
+      stash[j] = /** @type {Item} */ (ch.bag.pop());
+      out.toStash++;
+    }
+  }
+  out.left = Math.max(0, ch.bag.length - BAG_SIZE);
+  return out;
+}
+
 // ───────────────────────── 더하기 · 빼기(재화) ─────────────────────────
 
 /**
- * 빈 첫 칸에 넣는다 · BAG
+ * 빈 첫 칸에 넣는다(피드백 2 D4: freeBagIdx — 든 아이템이 BAG_SIZE 이상이면 'bagFull') · BAG
  * @param {SimCtx} ctx @param {Item} item @param {string} [reason] BAG 의 reason(기본 'pickup')
  * @returns {{ok:true, idx:number}|{ok:false, reason:'bagFull'}}
  */
 export function addToBag(ctx, item, reason = 'pickup') {
   const ch = ctx.state.char;
   if (!ch) return { ok: false, reason: 'bagFull' };
-  const idx = ch.bag.indexOf(null);
+  const idx = freeBagIdx(ch);
   if (idx < 0) return { ok: false, reason: 'bagFull' };
   ch.bag[idx] = item;
   ctx.emit(EV.BAG, { reason });
@@ -260,12 +336,8 @@ export function equip(ctx, ref, toSlot = null) {
 
   const old = ch.equip[target];
   const off = item.slot === 'mainHand' && handsOf(item) === 2 ? ch.equip.offhand : null;
-  if (off) {
-    // 바꾼 뒤의 빈칸: 지금 빈칸 + (벗는 것이 없으면 이 아이템이 비운 칸)
-    let free = old ? 0 : 1;
-    for (let i = 0; i < ch.bag.length; i++) if (ch.bag[i] === null) free++;
-    if (free < 1) return fail('bagFull');
-  }
+  // 바꾼 뒤 가방의 아이템 수(이 아이템이 빠지고 · 벗은 것 · 보조가 들어온다)가 BAG_SIZE 를 넘으면 안 된다(피드백 2 D4 — 넘친 가방에는 새로 넣지 못한다)
+  if (off && bagCount(ch) + (old ? 1 : 0) > BAG_SIZE) return fail('bagFull');
   ch.bag[idx] = old ?? null;
   ch.equip[target] = item;
   if (off) {
@@ -290,7 +362,7 @@ export function unequip(ctx, slot) {
   if (!ch || !EQUIP_SET.has(slot)) return fail('invalid');
   const item = ch.equip[slot];
   if (!item) return fail('noItem');
-  const idx = ch.bag.indexOf(null);
+  const idx = freeBagIdx(ch);
   if (idx < 0) return fail('bagFull');
   ch.bag[idx] = item;
   ch.equip[slot] = null;
@@ -327,16 +399,21 @@ export function moveItem(ctx, from, to) {
   if (!Number.isInteger(fi) || fi < 0 || fi >= A.length) return fail('invalid');
   const item = A[fi];
   if (!item) return fail('noItem');
+  // 피드백 2 D4: 가방 밖(보관함)에서 가방의 빈칸으로 들어오는 것은 「새로 넣기」 — 든 아이템이 BAG_SIZE 이상이면 'bagFull' · 칸 밖(넘친 자리)은 놓는 자리가 아니다
+  const intoBag = to.where === 'bag' && from.where !== 'bag';
   let ti = to.idx;
   if (ti === undefined || ti === null || ti === -1) {
-    ti = B.indexOf(null);
+    ti = intoBag ? freeBagIdx(st.char) : B.indexOf(null);
     if (ti < 0) return fail(to.where === 'stash' ? 'stashFull' : 'bagFull');
   }
   if (!Number.isInteger(ti) || ti < 0 || ti >= B.length) return fail('invalid');
   if (A === B && ti === fi) return { ok: true, idx: ti };
   const other = B[ti];
+  if (to.where === 'bag' && !other && ti >= BAG_SIZE) return fail('invalid');
+  if (intoBag && !other && isBagFull(st.char)) return fail('bagFull');
   B[ti] = item;
   A[fi] = other ?? null;
+  if (from.where === 'bag' || to.where === 'bag') settleBag(st.char);
   ctx.emit(EV.BAG, { reason: stash ? 'stash' : 'move' });
   ctx.emit(EV.SAVE_REQUEST, { scope: stash ? 'all' : 'char', reason: stash ? 'stash' : 'move' });
   return { ok: true, idx: ti };
@@ -370,6 +447,7 @@ export function sortBag(ctx) {
   const ch = ctx.state.char;
   if (!ch) return fail('invalid');
   sortCells(ch.bag);
+  settleBag(ch);
   ctx.emit(EV.BAG, { reason: 'sort' });
   ctx.emit(EV.SAVE_REQUEST, { scope: 'char', reason: 'sort' });
   return { ok: true };

@@ -2,17 +2,25 @@
 // 조건부 패시브 판정. CONDS[id] = (ctx, mon|null) => boolean — 프레임워크는 ID 를 모른다(표만 돈다).
 // 패시브 노드의 cond 가 참인 적중(방어 쪽이면 피격)에만 condStats 가 더해진다. ctx.stats.conds 의 값은 이미 PlayerStats 단위다(§3.8).
 
+import { ticks } from '../core/time.js';
 import { COND } from '../data/combat.js';
 import { CLASSES_BY_ID } from '../data/index.js';
+import { knockEndTick } from './status.js';
 
 /** @typedef {import('../types.js').SimCtx} SimCtx */
 /** @typedef {import('../types.js').MonsterState} MonsterState */
 
-/** @param {SimCtx} ctx @param {MonsterState|null} mon */
+/**
+ * 기절 · 빙결 · 냉기 · 감속 · 피드백 2 D10: 밀려나는 중이거나 넉백이 끝난 뒤 COND.knockSec(0.5초) 안(회전 베기 넉백으로 분쇄자가 켜진다)
+ * @param {SimCtx} ctx @param {MonsterState|null} mon
+ */
 function targetDisabled(ctx, mon) {
   if (!mon) return false;
   const t = ctx.state.tick, s = mon.st;
-  return s.stunUntil > t || s.freezeUntil > t || s.chill > 0 || (s.slow !== null && s.slow.until > t) || mon.act === 'stunned' || mon.act === 'frozen';
+  if (s.stunUntil > t || s.freezeUntil > t || s.chill > 0 || (s.slow !== null && s.slow.until > t) || mon.act === 'stunned' || mon.act === 'frozen') return true;
+  if (mon.knock && t < mon.knock.until) return true;
+  const end = knockEndTick(mon);
+  return end >= 0 && t < end + ticks(COND.knockSec);
 }
 
 /** @param {SimCtx} ctx @param {MonsterState|null} mon */

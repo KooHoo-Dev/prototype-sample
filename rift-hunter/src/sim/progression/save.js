@@ -36,6 +36,8 @@ const BIG = Number.MAX_SAFE_INTEGER;
 /** 이름 · 문자열 키의 길이 상한(깨진 세이브가 거대한 문자열을 들고 오지 않게) */
 const STR_MAX = 64;
 const NAME_KEYS_MAX = 4;
+/** 피드백 2 D4 — 가방 배열에서 읽는 칸 수 상한(옛 세이브는 40칸 + 장착에서 밀린 것 · 깨진 세이브가 거대한 배열을 들고 오지 않게) */
+const BAG_READ_MAX = 200;
 const AFFIX_TIER_MAX = AFFIX_TIERS.minIlvl.length;
 const ITEM_FLAG_KEYS = ['gambled', 'crafted', 'bought', 'start', 'locked'];
 const RESULTS = ['complete', 'collapse', 'abandon'];
@@ -321,7 +323,8 @@ function sanitizeRecord(r) {
 }
 
 /**
- * 캐릭터 정화 → CharacterState|null(클래스를 모르면 null) — 칸은 인자 slot · 부위 · 클래스가 안 맞는 장착 · 양손과 겹친 보조는 가방으로(빈칸이 없으면 버린다) ·
+ * 캐릭터 정화 → CharacterState|null(클래스를 모르면 null) — 칸은 인자 slot · 부위 · 클래스가 안 맞는 장착 · 양손과 겹친 보조는 가방으로
+ * (피드백 2 D4: 빈칸이 없으면 칸 밖 — 가방 배열 끝(idx ≥ BAG_SIZE)에 둔다 · 옛 세이브 40칸의 31~40번째도 같다 · 버리지 않는다) ·
  * 되사기 값은 판매가로 다시 계산 · 재굴림 제안은 null
  * @param {any} raw @param {number} slot @returns {CharacterState|null}
  */
@@ -355,17 +358,19 @@ function sanitizeChar(raw, slot) {
   /** @type {Array<Item|null>} */
   const bag = emptyArray(BAG_SIZE);
   if (Array.isArray(raw.bag)) {
-    for (let i = 0; i < raw.bag.length; i++) {
+    for (let i = 0; i < raw.bag.length && i < BAG_READ_MAX; i++) {
       const it = raw.bag[i] == null ? null : sanitizeItem(raw.bag[i]);
       if (!it) continue;
       if (i < BAG_SIZE) bag[i] = it;
       else overflow.push(it);
     }
   }
+  // 피드백 2 D4: 칸 밖의 아이템(옛 세이브 — 가방 40칸 시절의 31~40번째 · 장착에서 밀려난 것)은 빈칸 → 칸 밖(idx ≥ BAG_SIZE)에 그대로 둔다(버리지 않는다).
+  //   보관함 빈칸으로 옮기는 것은 계정과 함께 붙일 때(GameSim.loadCharacter → moveBagOverflowToStash)
   for (const it of overflow) {
     const j = bag.indexOf(null);
-    if (j < 0) break;
-    bag[j] = it;
+    if (j >= 0) bag[j] = it;
+    else bag.push(it);
   }
 
   /** @type {Array<{item:Item, price:number}>} */
