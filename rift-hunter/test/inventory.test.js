@@ -343,9 +343,10 @@ test('applyDeathPenalty: 장착 전부 −10 · 0 에서 멈춘다 · 부서진 
 test('repairCost: §7.10 식 손 계산 · 등급과 무관 · 10칸 사망 1회 = 57.2 × G^(ilvl−1)', () => {
   const { ctx, ch } = setup();
   assert.equal(repairCost(ch), 0, '멀쩡하면 0');
-  ch.equip.mainHand.dur = 90;   // 검(한손) 20 × 4 × 0.1 = 8
-  ch.equip.chest.dur = 50;       // 갑옷 18 × 4 × 0.5 = 36
-  assert.equal(repairCost(ch), 44);
+  ch.equip.mainHand.dur = 90;   // 검(한손) 20 × 5 × 0.1 = 10(밸런스 게이트: repairBase 4 → 5)
+  ch.equip.chest.dur = 50;       // 갑옷 18 × 5 × 0.5 = 45
+  assert.equal(PRICES.repairBase, 5);
+  assert.equal(repairCost(ch), 55);
 
   // 같은 부위 · ilvl · 내구도면 등급이 달라도 같은 값(전설 · 세트를 낄수록 사망이 비싸지지 않는다)
   const L = 8;
@@ -366,7 +367,7 @@ test('repairCost: §7.10 식 손 계산 · 등급과 무관 · 10칸 사망 1회
   const c2 = makeTestCtx(makeTestState({ scene: 'town' }));
   c2.state.char = full;
   applyDeathPenalty(c2);
-  assert.equal(repairCost(full), Math.round(57.2 * GROWTH.gold ** (L - 1)));
+  assert.equal(repairCost(full), Math.round(143 * PRICES.repairBase * 0.1 * GROWTH.gold ** (L - 1)));   // 밸런스 게이트: 71.5 × G^(ilvl−1)
 });
 
 // ───────────────────────── 아이템 복사 0(퍼즈) ─────────────────────────

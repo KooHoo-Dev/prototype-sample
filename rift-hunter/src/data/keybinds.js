@@ -12,6 +12,8 @@ export const PANEL_KEYS = {
   blacksmith: { repair: 'KeyR' },
   skills: { bindRmb: 'KeyR' },
   general: { more: 'Equal', less: 'Minus' },
+  // W2 통합 게이트 — 분석 패널 단축키(NOTES-P12 §2-6 · 코드의 기본값과 같다)
+  analytics: { cancel: 'KeyX', json: 'KeyJ', csv: 'KeyC' },
 };
 
 /** event.button */

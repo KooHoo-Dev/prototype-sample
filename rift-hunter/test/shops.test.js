@@ -245,22 +245,22 @@ test('repairAll: 전부(repairCost) · 고칠 것 없음 nothing · 부분 수�
   ch.equip.offhand = mk(ctx, 'shield');
   ch.equip.helm = mk(ctx, 'helm');
   for (const s of ['mainHand', 'chest', 'offhand', 'helm']) ch.equip[s].dur = 0;
-  // 검 20×4 = 80 · 갑옷 18×4 = 72 · 방패 15×4 = 60 · 투구 12×4 = 48
-  assert.equal(repairCost(ch), 260);
+  // 검 20×5 = 100 · 갑옷 18×5 = 90 · 방패 15×5 = 75 · 투구 12×5 = 60(밸런스 게이트: repairBase 4 → 5)
+  assert.equal(repairCost(ch), 325);
   ch.gold = 1000;
   const full = repairAll(ctx);
-  assert.deepEqual(full, { ok: true, partial: false, repaired: ['mainHand', 'offhand', 'helm', 'chest'], cost: 260 });
-  assert.equal(ch.gold, 740);
+  assert.deepEqual(full, { ok: true, partial: false, repaired: ['mainHand', 'offhand', 'helm', 'chest'], cost: 325 });
+  assert.equal(ch.gold, 675);
   assert.ok(['mainHand', 'chest', 'offhand', 'helm'].every(s => ch.equip[s].dur === ITEM.durMax));
   assert.equal(calls.refresh, 1);
 
   for (const s of ['mainHand', 'chest', 'offhand', 'helm']) ch.equip[s].dur = 0;
-  ch.gold = 160;
-  assert.deepEqual(repairAll(ctx), { ok: true, partial: true, repaired: ['mainHand', 'chest'], cost: 152 });
-  assert.equal(ch.gold, 8);
+  ch.gold = 200;
+  assert.deepEqual(repairAll(ctx), { ok: true, partial: true, repaired: ['mainHand', 'chest'], cost: 190 });
+  assert.equal(ch.gold, 10);
   assert.equal(ch.equip.offhand.dur, 0);
-  ch.gold = 70;
-  assert.deepEqual(repairAll(ctx), { ok: true, partial: true, repaired: ['offhand'], cost: 60 }, '비싼 것은 건너뛰고 살 수 있는 것을');
+  ch.gold = 85;
+  assert.deepEqual(repairAll(ctx), { ok: true, partial: true, repaired: ['offhand'], cost: 75 }, '비싼 것은 건너뛰고 살 수 있는 것을');
   ch.gold = 10;
   assert.deepEqual(repairAll(ctx), { ok: false, reason: 'gold' });
   assert.equal(ch.gold, 10);

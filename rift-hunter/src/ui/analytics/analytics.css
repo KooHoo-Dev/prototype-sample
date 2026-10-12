@@ -1,2 +1,111 @@
-/* OWNER: P12 — 계약 §10.1 · §10.9 */
-/* STUB — W2 에서 P12 가 채운다 */
+/* OWNER: P12 — 계약 §10.1 · §10.9 (분석 패널 · 계측 HUD)
+   공통 변수 · .panel · .tabs · .btn · .bar · .menu · .is-focus · .r-<rarity> · .rank-<rank> · .good/.bad 는 hud.css(P10).
+   이 파일의 클래스는 an-(분석 패널) · meter-(계측 HUD)로 시작한다. 1280×720 에서 패널 높이 640px 안 · 탭마다 자기 안에서 스크롤. */
+
+/* ── 패널 틀 ── */
+.an-panel { width: 1076px; height: min(640px, calc(100vh - 24px)); display: flex; flex-direction: column; overflow: hidden; padding-bottom: 10px; }
+.an-panel .panel-title { margin-bottom: 6px; }
+.an-tabs { flex: none; margin-bottom: 8px; }
+.an-body { flex: 1 1 auto; min-height: 0; position: relative; }
+.an-tab { height: 100%; box-sizing: border-box; }
+.an-h { margin: 0 0 4px; font-size: 13px; font-weight: 700; color: #e9d8bc; }
+.an-foot { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; align-self: end; }
+.an-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.an-block { margin-bottom: 10px; }
+.an-empty { padding: 18px 8px; color: var(--ui-dim); font-size: 13px; }
+
+/* ── 값 고르기 줄(드랍 시뮬레이터 · 봇) ── */
+.an-form { display: flex; flex-direction: column; gap: 2px; }
+.an-row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 6px; padding: 2px 6px; border: 1px solid transparent; border-radius: 4px; cursor: default; }
+.an-row:hover { background: rgba(255, 255, 255, 0.03); }
+.an-row.is-focus { outline: none; border-color: var(--ui-accent); background: rgba(255, 176, 96, 0.08); }
+.an-row-label { font-size: 12px; color: var(--ui-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-step { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.an-val { flex: 1 1 auto; min-width: 0; text-align: center; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-arrow { padding: 0 6px; font-size: 10px; line-height: 18px; }
+.an-row-action { grid-template-columns: 1fr; padding: 4px 6px; }
+.an-action { width: 100%; padding: 5px 10px; }
+
+/* ── 드랍 시뮬레이터 ── */
+.an-sim { display: grid; grid-template-columns: 300px minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 6px 16px; }
+.an-col { min-width: 0; min-height: 0; overflow: auto; }
+.an-progress { margin: 8px 0 4px; height: 14px; }
+.an-progress .bar-fill { background: linear-gradient(#e0b050, #8a6418); transition: none; }
+.an-status { font-size: 12px; color: var(--ui-dim); min-height: 16px; margin-bottom: 8px; }
+.an-status.is-done { color: var(--good); }
+.an-status.is-running { color: #e9d8bc; }
+.an-cmp { width: 100%; border-collapse: collapse; font-size: 12px; }
+.an-cmp th { font-weight: 400; font-size: 11px; color: var(--ui-dim); text-align: right; padding: 1px 6px; border-bottom: 1px solid #3a3228; white-space: nowrap; }
+.an-cmp th:first-child { text-align: left; }
+.an-cmp td { padding: 1px 6px; line-height: 17px; }
+.an-cmp td.an-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.an-cmp tr.is-ok td:nth-child(4) { color: var(--good); }
+.an-cmp tr.is-bad td:nth-child(4), .an-cmp tr.is-bad td:nth-child(5) { color: var(--bad); font-weight: 700; }
+.an-cmp tr.is-small td { opacity: 0.62; }
+.an-cmp td.an-z { color: var(--ui-dim); font-size: 11px; }
+.an-sum td.an-name { max-width: 118px; color: #d8d0c4; }
+.an-sum th, .an-sum td { padding-left: 4px; padding-right: 4px; }
+.an-hist-box { margin-top: 2px; }
+.an-hist { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 86px; padding: 0 1px; border-bottom: 1px solid #5a4a3a; background: rgba(255, 255, 255, 0.02); }
+.an-hbar { flex: 1 1 0; height: 100%; transform-origin: center bottom; transform: scaleY(0); background: linear-gradient(var(--r-legendary), #8a4a10); border-radius: 1px 1px 0 0; }
+.an-hmark { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed rgba(255, 255, 255, 0.75); pointer-events: none; }
+.an-haxis { display: flex; justify-content: space-between; font-size: 10px; color: var(--ui-dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.an-hcap { font-size: 11px; color: #d8d0c4; margin-top: 3px; }
+.an-hcap-th { color: var(--ui-dim); }
+.an-hcap:empty { display: none; }
+
+/* ── 표 보기 ── */
+.an-tables { display: grid; grid-template-columns: 168px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 6px 14px; }
+.an-tlist { overflow: auto; min-height: 0; }
+.an-titem { padding: 5px 10px; font-size: 13px; }
+.an-tview { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.an-thead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.an-src { font-size: 11px; color: var(--ui-dim); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.an-tscroll { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid #2e2830; border-radius: 4px; background: rgba(0, 0, 0, 0.18); }
+.an-data { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.an-data th { position: sticky; top: 0; z-index: 1; background: #221d26; color: #d8c8a8; font-weight: 400; font-size: 11px; text-align: left;
+  padding: 3px 8px; border-bottom: 1px solid #4a4038; white-space: nowrap; cursor: pointer; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.an-data th.an-num { text-align: right; }
+.an-data th.is-sorted { color: var(--ui-accent); }
+.an-data td { padding: 2px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); white-space: nowrap; }
+.an-data tr:nth-child(even) td { background: rgba(255, 255, 255, 0.018); }
+.an-data tr.an-late td { color: #f0c890; }
+.an-notes { flex: none; margin-top: 6px; max-height: 64px; overflow: auto; font-size: 11px; color: var(--ui-dim); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.an-notes > div { white-space: nowrap; }
+
+/* ── 세션 기록 ── */
+.an-session { display: flex; flex-direction: column; gap: 6px; }
+.an-shead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; flex: none; }
+.an-ssum { font-size: 13px; color: #e9d8bc; }
+.an-sbtns { margin-top: 0; }
+.an-smsg { font-size: 12px; min-height: 16px; flex: none; }
+.an-sscroll { flex: 1 1 auto; }
+.an-session .an-foot { align-self: stretch; }
+.an-runs th { cursor: default; font-family: inherit; }
+.an-runs tr.an-group th { position: sticky; top: 0; border-bottom: none; color: var(--ui-dim); text-align: center; }
+.an-runs thead tr:nth-child(2) th { top: 21px; }
+.an-runs th.an-gcell { border-bottom: 1px solid #4a4038; }
+.an-runs td.an-res { color: #e9d8bc; }
+.an-runs tr.res-collapse td.an-res { color: var(--bad); }
+.an-runs tr.res-abandon td { opacity: 0.7; }
+.an-runs tr.res-complete td.an-res { color: var(--good); }
+.an-runs tfoot td { border-top: 1px solid #5a4a3a; font-weight: 700; background: #1d1922; position: sticky; bottom: 0; }
+
+/* ── 봇 ── */
+.an-bot { display: grid; grid-template-columns: 340px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 6px 18px; }
+.an-bstatus { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.an-bstatus.is-on { color: var(--good); }
+.an-bstatus.is-off { color: var(--ui-dim); }
+.an-blines { white-space: pre-line; font-size: 12px; color: #d8d0c4; margin-bottom: 10px; min-height: 32px; }
+.an-blog { font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(0, 0, 0, 0.22); border: 1px solid #2e2830;
+  border-radius: 4px; padding: 6px 8px; min-height: 200px; }
+.an-blog.is-empty .an-bline:first-child { color: var(--ui-dim); font-family: var(--ui-font); }
+.an-bline { min-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── 계측 HUD(왼쪽 · 대상 프레임 · 플레이어를 가리지 않는다) ── */
+.meter-hud { pointer-events: none; padding: 4px 8px; background: rgba(10, 8, 12, 0.72); border: 1px solid rgba(74, 64, 56, 0.85); border-radius: 4px;
+  font-size: 11px; line-height: 16px; max-width: 220px; }
+.meter-hud table { border-collapse: collapse; }
+.meter-hud th { font-weight: 400; color: var(--ui-dim); text-align: left; padding: 0 10px 0 0; white-space: nowrap; }
+.meter-hud td { text-align: right; font-variant-numeric: tabular-nums; color: var(--ui-fg); white-space: nowrap; }
+.meter-drops span + span::before { content: '·'; color: var(--ui-dim); margin: 0 3px; }

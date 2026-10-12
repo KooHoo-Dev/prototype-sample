@@ -48,11 +48,31 @@ export function makeInstanceMaterials() {
   };
 }
 
+/**
+ * 캐릭터 채움빛(화면 패스) — 플레이어 빛이 머리 위(3.2m)라 카메라를 보는 세로 면(가슴 · 다리)이 스치는 빛만 받아
+ * 단계 0 가죽 · 천이 던전에서 거의 검게 읽혔다(NOTES-P8). 카메라를 향한 면에 알베도 × CHAR_FILL 만큼 자체 발광을 더한다
+ * (위를 향한 면은 그대로 · 세계 빛과 그림자는 바꾸지 않는다 · 플레이어 · NPC 재질만).
+ */
+export const CHAR_FILL = 0.9;
+
+/** @param {MeshStandardMaterial} mat @param {number} k */
+function patchFill(mat, k) {
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', [
+      '#include <emissivemap_fragment>',
+      '\tfloat fillF = clamp( dot( normalize( normal ), normalize( vViewPosition ) ), 0.0, 1.0 );',
+      `\ttotalEmissiveRadiance += diffuseColor.rgb * ( ${k.toFixed(3)} * fillF );`,
+    ].join('\n'));
+  };
+  mat.customProgramCacheKey = () => 'charFill' + k;
+  return mat;
+}
+
 /** 플레이어 · NPC 재질 셋(투명도 — 순간이동의 0.1초 투명 · §9.5) @param {{transparent:boolean, sil?:number}} o */
 export function makeCharMaterials({ transparent, sil = 0 }) {
   return {
-    std: new MeshStandardMaterial({ vertexColors: true, roughness: 0.74, metalness: 0.04, flatShading: true, transparent }),
-    metal: new MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.32, flatShading: true, transparent }),
+    std: patchFill(new MeshStandardMaterial({ vertexColors: true, roughness: 0.74, metalness: 0.04, flatShading: true, transparent }), CHAR_FILL),
+    metal: patchFill(new MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.32, flatShading: true, transparent }), CHAR_FILL),
     glow: new MeshBasicMaterial({ vertexColors: true, transparent, toneMapped: false }),
     sil: sil ? patchPull(new MeshBasicMaterial({ color: sil, transparent: true, depthWrite: false, depthFunc: GreaterDepth, blending: AdditiveBlending, fog: false }), SIL_PULL) : null,
   };

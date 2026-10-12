@@ -11,7 +11,7 @@ import { START } from '../src/data/economy.js';
 import { getMonDef, getRank } from '../src/data/index.js';
 import { MON } from '../src/data/monsters.js';
 import { PRESETS } from '../src/data/presets.js';
-import { earlyDmgMul, riftRow } from '../src/data/rift.js';
+import { earlyDmgMul, earlyHpMul, riftRow } from '../src/data/rift.js';
 import { DEFAULT_ROOM, mapFromAscii } from '../src/debug/fixtureMap.js';
 import { addMonster } from '../src/sim/entities.js';
 import { makeItem } from '../src/sim/loot/rollItem.js';
@@ -69,7 +69,7 @@ export function makeTestStats(overrides = {}) {
   const weapon = mage
     ? { min: 3, max: 6, aps: 1.4, type: /** @type {const} */ ('lightning'), hands: /** @type {1} */ (1), baseId: 'wand', fist: false }
     : { min: 3, max: 7, aps: 1.4, type: /** @type {const} */ ('phys'), hands: /** @type {1} */ (1), baseId: 'sword', fist: false };
-  const lifeMax = mage ? 90 : 120;
+  const lifeMax = mage ? 100 : 120;   // 밸런스 게이트: 마법사 생명 90 → 100(data/classes.js)
   // sheetDps = (min + max)/2 × aps × (1 + main/100) × (1 + 0) × (1 + 0.05 × 0.5)
   const sheetDps = ((weapon.min + weapon.max) / 2) * 1.4 * 1.1 * 1.025;
   // ehp = lifeMax / (1 − DRa(12, 1)) = lifeMax / (1 − 12/92)
@@ -187,7 +187,7 @@ export function addTestMonster(ctx, { typeId = 'ghoul', rank = 'normal', x, z, a
   const rk = getRank(rank);
   const level = ctx.state.rift?.level ?? 1;
   const row = riftRow(level);
-  const hpMax = MON.hpBase * def.hp * rk.hp * row.hpMul;
+  const hpMax = MON.hpBase * def.hp * rk.hp * row.hpMul * earlyHpMul(level);   // 밸런스 게이트: monsterStats 와 같은 식
   /** @type {Record<string, number>} */
   const res = {};
   for (const t of ['phys', 'fire', 'cold', 'lightning']) res[t] = Math.min(MON.resCap, def.res[t] ?? 0);

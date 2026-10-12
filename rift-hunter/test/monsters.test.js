@@ -11,7 +11,7 @@ import { deg2rad } from '../src/core/math.js';
 import { ticks } from '../src/core/time.js';
 import { getMonDef, getMonAffix } from '../src/data/index.js';
 import { MON, RANKS } from '../src/data/monsters.js';
-import { RIFT, earlyDmgMul, riftRow } from '../src/data/rift.js';
+import { RIFT, earlyDmgMul, earlyHpMul, riftRow } from '../src/data/rift.js';
 import { rebuildSpace } from '../src/sim/entities.js';
 import {
   chaseStop, monsterStats, onMonDamaged, onMonDeath, onMonHitPlayer, onMonSpawn, spawnMonster, startAttack, updateMonsters, wakePack,
@@ -92,8 +92,11 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 test('monsterStats(§5.6): 등급 · 레벨 · 속성 배율 · 저항 상한 0.5 · 수호자는 속성 저항 없음 · r/height 는 이미 곱한 값', () => {
   const s = monsterStats('ghoul', 'champion', 5, ['tough', 'fast']);
   const row = riftRow(5);
-  assert.ok(Math.abs(s.hpMax - 19 * 1.0 * 3.5 * row.hpMul * 1.5) < 1e-9);
-  assert.ok(Math.abs(s.dmg - 3.5 * 1.0 * 1.5 * row.dmgMul) < 1e-9);   // 🔒 MON.dmgBase 3.5 · 균열 5 는 첫 판 경사 밖(earlyDmgMul 1 — W1 수정 2)
+  const rk = (id) => RANKS.find(r => r.id === id);
+  // 밸런스 게이트: 🔒 hpBase 36 · dmgBase 24.5 · champion 8 · elite 15 · guardian 32 — 식은 데이터를 읽고 첫 판 경사(생명 · 피해)를 곱한다(균열 5 는 경사 안)
+  assert.ok(Math.abs(s.hpMax - MON.hpBase * 1.0 * rk('champion').hp * row.hpMul * 1.5 * earlyHpMul(5)) < 1e-9);
+  assert.ok(Math.abs(s.dmg - MON.dmgBase * 1.0 * rk('champion').dmg * row.dmgMul * earlyDmgMul(5)) < 1e-9);
+  assert.deepEqual([MON.hpBase, MON.dmgBase, rk('champion').hp, rk('elite').hp, rk('guardian').hp], [36, 24.5, 8, 15, 32]);
   assert.ok(Math.abs(row.hpMul - 1.14 ** 4) < 1e-9 && Math.abs(row.dmgMul - 1.1 ** 4) < 1e-9);
   assert.ok(Math.abs(s.speed - 2.6 * 1.3) < 1e-9);
   assert.ok(Math.abs(s.r - 0.45 * 1.15) < 1e-9 && Math.abs(s.height - 1.7 * 1.15) < 1e-9 && s.scale === 1.15);
@@ -106,7 +109,7 @@ test('monsterStats(§5.6): 등급 · 레벨 · 속성 배율 · 저항 상한 0.
   const g = monsterStats('boneGiant', 'guardian', 3, ['fireEnchanted', 'coldEnchanted', 'tough']);
   assert.equal(g.res.fire, 0);
   assert.equal(g.res.cold, 0.15);
-  assert.ok(Math.abs(g.hpMax - 19 * 1.1 * 28 * riftRow(3).hpMul * 1.5) < 1e-9);   // 🔒 RANKS.guardian.hp 28(W1 수정 · NOTES-W1FIX)
+  assert.ok(Math.abs(g.hpMax - MON.hpBase * 1.1 * rk('guardian').hp * riftRow(3).hpMul * 1.5 * earlyHpMul(3)) < 1e-9);   // 🔒 RANKS.guardian.hp(밸런스 게이트 32)
   assert.ok(Math.abs(g.r - 1.3) < 1e-9 && Math.abs(g.height - 4.6) < 1e-9);
   // 수호자 경험치 배율이 유한(getMonDef)
   assert.ok(Number.isFinite(getMonDef('boneGiant').xp) && Number.isFinite(getMonDef('ashWitch').xp));
@@ -133,17 +136,39 @@ test('W1 수정 2(NOTES-W1FIX §2.0): 첫 판 피해 경사 — 균열 1~4 의 m
       assert.ok(Math.abs(x.dmg - base * want) < 1e-9, `${typeId} L${L}`);
     }
   }
-  // 균열 5 이상에는 완화가 없다(계약 §7.3 — 첫 수정의 전역 완화가 균열 5 이상의 위협을 지웠던 것의 회귀 · NOTES-W1FIX §2.0)
-  for (const L of [5, 8, 10, 20, 30]) assert.equal(earlyDmgMul(L), 1, `L${L}`);
+  // 표 다음 레벨부터 완화가 없다(계약 §7.3 — 첫 수정의 전역 완화가 높은 균열의 위협을 지웠던 것의 회귀 · NOTES-W1FIX §2.0 · 밸런스 게이트: 표 11칸 — 균열 12 부터 × 1)
+  for (const L of [t.length + 1, t.length + 5, 20, 30]) assert.equal(earlyDmgMul(L), 1, `L${L}`);
+  // 균열 1 의 실제 피해 배율은 옛 값(dmgBase 3.5 × 0.205)과 같다 — 첫 판(balance.test)이 맞춘 값
+  assert.ok(Math.abs(MON.dmgBase * t[0] - 3.5 * 0.205) < 0.01, `균열 1 피해 ${MON.dmgBase * t[0]}`);
   // 잘못된 값 · 표 밖은 1(NaN · 0 이 몬스터 피해로 새지 않는다)
   for (const L of [0, -1, NaN, 99]) assert.equal(earlyDmgMul(L), 1);
 });
 
+test('밸런스 게이트: 첫 판 생명 경사 — 몬스터 생명은 × RIFT.earlyHp[L − 1](오르는 쪽 · 0..1) · 표 다음 레벨부터 × 1 · 잘못된 값은 1', () => {
+  const t = RIFT.earlyHp;
+  assert.ok(Array.isArray(t) && t.length >= 1);
+  for (let i = 0; i < t.length; i++) {
+    assert.ok(t[i] > 0 && t[i] <= 1, `earlyHp[${i}]`);
+    if (i > 0) assert.ok(t[i] >= t[i - 1], '레벨이 오를수록 커진다');
+  }
+  for (let L = 1; L <= t.length + 3; L++) {
+    const want = L <= t.length ? t[L - 1] : 1;
+    assert.equal(earlyHpMul(L), want, `L${L}`);
+    for (const [typeId, rank] of [['ghoul', 'normal'], ['skeletonArcher', 'elite'], ['ashWitch', 'guardian']]) {
+      const x = monsterStats(typeId, /** @type {any} */ (rank), L, []);
+      const base = MON.hpBase * getMonDef(typeId).hp * RANKS.find(r => r.id === rank).hp * riftRow(L).hpMul;
+      assert.ok(Math.abs(x.hpMax - base * want) < 1e-6 * base, `${typeId} L${L}`);
+    }
+  }
+  for (const L of [0, -1, NaN, 99]) assert.equal(earlyHpMul(L), 1);
+});
+
 test('W1 수정 3(NOTES-W1FIX §2.0): 첫 판 경사의 레벨 비 — 균열 L → L+1 의 어려움 √(생명 × 피해) 증가 ÷ 보상 증가(계약 §7.14 +9.4%/레벨)가 0.8~1.25', () => {
   const REWARD = 1.094;   // 계약 §7.14 「보상(L)」 = √(powerScore × 골드/판) +9.4%/레벨
-  for (let L = 1; L <= RIFT.earlyDmg.length + 2; L++) {
+  // 밸런스 게이트: 생명 경사(earlyHp)도 함께 — 두 경사를 합친 레벨당 증가가 비 1.25 안
+  for (let L = 1; L <= Math.max(RIFT.earlyDmg.length, RIFT.earlyHp.length) + 2; L++) {
     const a = riftRow(L), b = riftRow(L + 1);
-    const hard = Math.sqrt((b.hpMul / a.hpMul) * ((b.dmgMul * earlyDmgMul(L + 1)) / (a.dmgMul * earlyDmgMul(L))));
+    const hard = Math.sqrt(((b.hpMul * earlyHpMul(L + 1)) / (a.hpMul * earlyHpMul(L))) * ((b.dmgMul * earlyDmgMul(L + 1)) / (a.dmgMul * earlyDmgMul(L))));
     const ratio = hard / REWARD;
     assert.ok(ratio <= 1.25 && ratio >= 0.8, `L${L}→${L + 1}: ${ratio.toFixed(4)}`);   // 옛 표 [0.2, 0.3, 0.45, 0.67] 은 L1→2 1.2537
   }

@@ -15,7 +15,7 @@ import { buildFloor } from './world/floor.js';
 import { applyAtmosphere, flickerNoise, makeGlowTexture, pickNearest } from './world/lights.js';
 import { WALL_FADE, occludesPlayer, propOccludesPlayer, stepFade } from './world/occlusion.js';
 import { TALL_PROP_H, propBase, propParts } from './world/props.js';
-import { LIGHT_SCALE, OBJ, PLAYER_LIGHT, WALL_H } from './world/style.js';
+import { EMIT, LIGHT_SCALE, OBJ, PLAYER_LIGHT, WALL_H } from './world/style.js';
 import { buildTown } from './world/town.js';
 import { wallPlacement, wallVariants } from './world/walls.js';
 
@@ -403,11 +403,13 @@ export class WorldLayer {
     this._cCol = [];
     this._cSel = new Int32Array(n); this._cAsg = new Int32Array(n);
     map.lights.forEach((l, i) => {
-      this._cX[i] = l.x; this._cY[i] = l.y; this._cZ[i] = l.z;
+      // 종류별 보정(EMIT.lightY · lightColor — 바닥 가까운 빛이 바닥에 진한 원반을 만들지 않게 · 화면 패스)
+      const spec = EMIT[l.kind];
+      this._cX[i] = l.x; this._cY[i] = spec?.lightY != null ? Math.max(l.y, spec.lightY) : l.y; this._cZ[i] = l.z;
       this._cI[i] = l.intensity; this._cR[i] = l.radius; this._cF[i] = l.flicker;
       this._cPh[i] = (i * 2.399) % (Math.PI * 2);
       this._cOn[i] = 1;
-      this._cCol.push(new THREE.Color(l.color));
+      this._cCol.push(new THREE.Color(spec?.lightColor ?? l.color));
     });
     for (let d = 0; d < DYN; d++) {
       const i = nMap + d;

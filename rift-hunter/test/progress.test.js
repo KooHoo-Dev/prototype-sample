@@ -34,9 +34,9 @@ const mon = (typeId, rank, level, flags = {}) => ({ typeId, rank, level, flags: 
 // ───────────────────────── 경험치 ─────────────────────────
 
 // W1 수정(NOTES-W1FIX): reqEarly [200, 500, 900] → [60, 300, 700] — 누적 레벨 10 = 16,244 − 540 = 15,704 · 30 = 412,126(계약 §7.11)
-test('xpReq: §7.11 표 그대로(reqEarly 60 · 300 · 700 → round(1100 × 1.15^(n−1))) · 누적 레벨 10 = 15,704 · 30 = 412,126 · 캡은 Infinity', () => {
-  const table = [60, 300, 700, 1673, 1924, 2212, 2544, 2926, 3365, 3870, 4450, 5118, 5885, 6768, 7783, 8951, 10293, 11837, 13613, 15655, 18003,
-    20704, 23809, 27381, 31488, 36211, 41642, 47889, 55072];
+test('xpReq: §7.11 표 그대로(reqEarly 60 · 300 · 700 → round(1300 × 1.15^(n−1)) — 밸런스 게이트 a 1100 → 1300) · 누적 레벨 10 = 18,368 · 30 = 486,866 · 캡은 Infinity', () => {
+  const table = [60, 300, 700, 1977, 2274, 2615, 3007, 3458, 3977, 4573, 5259, 6048, 6955, 7999, 9198, 10578, 12165, 13990, 16088, 18501, 21276,
+    24468, 28138, 32359, 37213, 42795, 49214, 56596, 65085];
   assert.equal(table.length, LEVEL_CAP - 1);
   for (let n = 1; n < LEVEL_CAP; n++) assert.equal(xpReq(n), table[n - 1], `레벨 ${n}`);
   assert.equal(xpReq(LEVEL_CAP), Infinity);
@@ -44,9 +44,9 @@ test('xpReq: §7.11 표 그대로(reqEarly 60 · 300 · 700 → round(1100 × 1.
   assert.equal(xpReq(0), table[0], '1 보다 작으면 1');
   let cum = 0;
   for (let n = 1; n < 10; n++) cum += xpReq(n);
-  assert.equal(cum, 15704);
+  assert.equal(cum, 18368);
   for (let n = 10; n < 30; n++) cum += xpReq(n);
-  assert.equal(cum, 412126);
+  assert.equal(cum, 486866);
 });
 
 test('xpForKill: round(5 × 종류 × 등급 × xpMul(몬스터 레벨) × 레벨 차 × (1 + xpPct)) · d > 12 감점(최소 0.3) · d < 0 가점(최대 1.5)', () => {

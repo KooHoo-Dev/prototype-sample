@@ -18,11 +18,11 @@ const WOOD = 0x4a3220, IRON = 0x3c3c44;
 export function buildEmitters(map, M, T, E, flames, glows) {
   map.lights.forEach((l, i) => {
     const spec = EMIT[l.kind] ?? EMIT_DEFAULT;
-    const color = new THREE.Color(l.color).getHex();
+    const color = spec.color ?? new THREE.Color(l.color).getHex();
     const gy = spec.glowY ?? l.y;
     if (spec.mesh === 'sconce') sconce(map, l, M, T, flames);
     else if (spec.mesh === 'brazier') brazier(l, M, T, E, flames);
-    glows.push({ x: l.x, y: gy, z: l.z, size: spec.glow, color, k: spec.ground ? 0.55 : 0.85, ground: spec.ground, cand: i });
+    glows.push({ x: l.x, y: gy, z: l.z, size: spec.glow, color, k: spec.k ?? (spec.ground ? 0.55 : 0.85), ground: spec.ground, cand: i });
   });
 }
 

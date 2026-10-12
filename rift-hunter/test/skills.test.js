@@ -166,7 +166,7 @@ test('지진: 시전 자리 원 r 6.0 · 파동 셋(판정 틱 + 0.4 · 0.9 · 1
     assert.equal(e.hostile, false);
     assert.equal(e.owner, 'player');
     assert.deepEqual({ type: e.shape.type, x: e.shape.x, z: e.shape.z, r: e.shape.r }, { type: 'circle', x: p.pos.x, z: p.pos.z, r: 6.0 });
-    assert.ok(Math.abs(e.spec.coef - (1.10 + 0.12)) < 1e-9, '랭크 2 계수');
+    assert.ok(Math.abs(e.spec.coef - (0.85 + 0.095)) < 1e-9, '랭크 2 계수');   // 밸런스 게이트: 0.85 / +0.095
     assert.equal(e.spec.shake, 0.35);
   }
   assert.equal(new Set(waves.map(e => e.spec.actionId)).size, 3);
@@ -214,7 +214,7 @@ test('돌진은 벽 앞에서 멈춘다(raycastWalk · 몸 반지름)', () => {
   assert.ok(isWalkableR(ctx.map, p.pos.x, p.pos.z, p.r));
 });
 
-test('회오리: 채널 · 틱(0.30 × APS_REF/aps)마다 원 r 2.4 · 틱마다 새 actionId · 유지 비용 12/초 · 커서 쪽 0.7 속도 · 몬스터 통과', () => {
+test('회오리: 채널 · 틱(0.30 × APS_REF/aps)마다 원 r 2.4 · 틱마다 새 actionId · 유지 비용 10/초(밸런스 게이트 12 → 10) · 커서 쪽 0.7 속도 · 몬스터 통과', () => {
   const { st, ctx, p } = setup({ resource: 100, ranks: { whirlwind: 1 }, bar: ['whirlwind'] });
   const o = { ...p.pos };
   const cur = { x: o.x + 10, z: o.z };
@@ -236,7 +236,7 @@ test('회오리: 채널 · 틱(0.30 × APS_REF/aps)마다 원 r 2.4 · 틱마다
   assert.equal(ids.length, 3, '채널 틱 셋');
   assert.equal(new Set(ids).size, 3, '틱마다 새 actionId');
   assert.ok(firstHits.includes(ahead.id) && !firstHits.includes(outside.id));
-  assert.ok(Math.abs(p.resource - (90 - 12 * (3 * iv) / 30)) < 1e-6, `유지 비용(시작 틱 뒤 매 틱) ${p.resource}`);
+  assert.ok(Math.abs(p.resource - (90 - 10 * (3 * iv) / 30)) < 1e-6, `유지 비용(시작 틱 뒤 매 틱) ${p.resource}`);
   assert.ok(Math.abs(p.pos.x - (o.x + 6 * 0.7 * (3 * iv + 1) / 30)) < 1e-6, `0.7 속도로 커서 쪽(시작 틱부터) ${p.pos.x - o.x}`);
   if (!REAL) assert.deepEqual(ahead.pos, aheadPos, '몬스터를 밀지 않는다(통과)');
   assert.equal(countEvents(ctx.events, EV.ACTION_HIT), 3);
@@ -339,7 +339,7 @@ test('화염구: 투사체 r 0.35 · 18 m/s · 16m · 폭발 원 2.5 · 판정 �
   assert.ok(Math.abs(Math.hypot(pr[0].vel.x, pr[0].vel.z) - 18) < 1e-9);
   assert.equal(pr[0].until - pr[0].born, Math.max(1, ticks(16 / 18)));
   assert.equal(pr[0].explode.r, 2.5);
-  assert.ok(Math.abs(pr[0].spec.coef - 1.9) < 1e-9);
+  assert.ok(Math.abs(pr[0].spec.coef - 1.40) < 1e-9);   // 밸런스 게이트: 1.25 / +0.15(랭크 2)
   assert.equal(pr[0].pierce, 0);
   assert.equal(pr[0].spec.type, 'fire');
 });
@@ -356,7 +356,7 @@ test('메테오: 커서(18m 로 자름) · 효과 하나(예고 1.2 · 원 3.5 �
   assert.equal(e[0].shape.r, 3.5);
   assert.equal(e[0].end - e[0].hitAt, ticks(3));
   assert.equal(e[0].tickT, ticks(0.5));
-  assert.ok(Math.abs(e[0].spec.coef - 3.6) < 1e-9);
+  assert.ok(Math.abs(e[0].spec.coef - 2.7) < 1e-9);   // 밸런스 게이트: 2.70 / +0.30(랭크 1)
   assert.ok(Math.abs(e[0].tickSpec.coef - 0.35 * 0.5) < 1e-9);
   assert.equal(e[0].hostile, false);
   assert.ok(e[0].from && Number.isFinite(e[0].from.x));
@@ -449,7 +449,7 @@ test('변형 — 여진: 0.5초 뒤 같은 자리 · 방향 원뿔 60%(stomp · 
   assert.equal(e[0].shape.r, 4.0);
   assert.ok(Math.abs(e[0].shape.angle - deg2rad(120)) < 1e-9);
   assert.ok(Math.abs(e[0].shape.facing - p.facing) < 1e-9);
-  assert.ok(Math.abs(e[0].spec.coef - 1.4 * 0.6) < 1e-9);
+  assert.ok(Math.abs(e[0].spec.coef - 1.05 * 0.6) < 1e-9);   // 밸런스 게이트: 지면 강타 1.05
   assert.equal(e[0].spec.stun, undefined, '파생 적중 — 기절 없음');
   assert.equal(e[0].spec.knock, undefined);
   assert.equal(e[0].hostile, false);
@@ -475,7 +475,7 @@ test('변형 — 피의 회오리 · 분열 화염구(±15° 셋 · 70%) · 얼�
   assert.equal(pr.length, 3);
   const ang = pr.map(x => Math.atan2(x.vel.x, x.vel.z)).sort((a, b) => a - b);
   assert.ok(Math.abs(ang[0] + deg2rad(15)) < 1e-9 && Math.abs(ang[1]) < 1e-9 && Math.abs(ang[2] - deg2rad(15)) < 1e-9);
-  for (const x of pr) { assert.equal(x.visual, 'fireballSplit'); assert.ok(Math.abs(x.spec.coef - 1.7 * 0.7) < 1e-9); }
+  for (const x of pr) { assert.equal(x.visual, 'fireballSplit'); assert.ok(Math.abs(x.spec.coef - 1.25 * 0.7) < 1e-9); }   // 밸런스 게이트: 화염구 1.25(랭크 1)
   const n = setup({ cls: 'mage', ranks: { frostNova: 1, iceShards: 1 }, bar: ['frostNova'] });
   cast(n.ctx, { x: n.p.pos.x + 1, z: n.p.pos.z });
   toHit(n.ctx);
@@ -515,8 +515,8 @@ test('describeSkill: 계수 · 피해(무기 × coef × (1 + 주/100) × (1 + �
   assert.equal(b.range, 1.1);
   assert.equal(b.cost, 0);
   const g = describeSkill({ ...s, costReduce: 0.2, aoePct: 0.1 }, 'groundStomp', 3);
-  assert.ok(Math.abs(g.coefPct - 170) < 1e-9);
-  assert.ok(Math.abs(g.dmgMin - 3 * 1.7 * 1.1 * 1.1) < 1e-9);
+  assert.ok(Math.abs(g.coefPct - 127) < 1e-9);   // 밸런스 게이트: 1.05 / +0.11(랭크 3)
+  assert.ok(Math.abs(g.dmgMin - 3 * 1.27 * 1.1 * 1.1) < 1e-9);
   assert.ok(Math.abs(g.cost - 14 * 0.8) < 1e-9);   // 지면 강타 비용 14(W1 수정 · NOTES-W1FIX — 계약 §7.2) × (1 − 0.2)
   assert.equal(g.radius, 4.0);
   assert.equal(g.extra.stun, 1.0, '랭크 3 기절');
@@ -527,7 +527,7 @@ test('describeSkill: 계수 · 피해(무기 × coef × (1 + 주/100) × (1 + �
   const a = describeSkill({ ...s, transforms: ['aftershock'] }, 'groundStomp', 1);
   assert.deepEqual(a.extra.aftershock, { delay: 0.5, mul: 0.6 });
   const e = describeSkill(makeTestStats({ cls: 'mage' }), 'energyShield', 2);
-  assert.ok(Math.abs(e.extra.absorb - 90 * 0.34) < 1e-9);
+  assert.ok(Math.abs(e.extra.absorb - 100 * 0.34) < 1e-9);   // 밸런스 게이트: 마법사 생명 90 → 100
   assert.equal(e.extra.absorbPct, 0.34);
   const m = describeSkill(makeTestStats({ cls: 'mage' }), 'meteor', 2);
   assert.ok(Math.abs(m.extra.burn.coefPerSec - 0.39) < 1e-9);

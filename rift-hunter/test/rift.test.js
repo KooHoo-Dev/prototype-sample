@@ -12,7 +12,7 @@ import { circle } from '../src/core/shapes.js';
 import { ticks } from '../src/core/time.js';
 import { DEATH, METER } from '../src/data/combat.js';
 import { getMonDef } from '../src/data/index.js';
-import { RIFT } from '../src/data/rift.js';
+import { RIFT, earlyGaugeMulOf } from '../src/data/rift.js';
 import { getMonster, removeMarked } from '../src/sim/entities.js';
 import { meterView, updateMeter } from '../src/sim/meter.js';
 import { unlockAfter } from '../src/sim/progression/progress.js';
@@ -36,20 +36,27 @@ const kill = (m, by = 'player') => {
   m.lastHit = { by, skillId: null, noProcs: false, frozen: false };
 };
 
-test('게이지: 처치마다 RANKS.gauge × 종류 gauge × 초반 배율(L ≤ 2 · 일반/하수인 1.25) · GAUGE · 100 → guardian · 출현 예고 → at 틱에 수호자', () => {
+test('게이지: 처치마다 RANKS.gauge × 종류 gauge × 초반 배율(균열별 배열 RIFT.earlyGaugeMul · 일반/하수인 — 밸런스 게이트) · GAUGE · 100 → guardian · 출현 예고 → at 틱에 수호자', () => {
   const { state, ctx, rift } = setup();
   const g = addTestMonster(ctx, { x: 10, z: 10 });
   const c = addTestMonster(ctx, { x: 12, z: 10, rank: 'champion' });
   kill(g);
   kill(c);
   resolveDeaths(ctx);
-  assert.ok(Math.abs(rift.gauge - (0.25 * 1.0 * RIFT.earlyGaugeMul + 1.0 * 1.0)) < 1e-9, String(rift.gauge));
+  assert.ok(Math.abs(rift.gauge - (0.25 * 1.0 * earlyGaugeMulOf(1) + 1.0 * 1.0)) < 1e-9, String(rift.gauge));
   assert.equal(countEvents(ctx.events, EV.GAUGE), 2);
   const s3 = setup({ level: 3 });
   const g3 = addTestMonster(s3.ctx, { x: 10, z: 10 });
   kill(g3);
   resolveDeaths(s3.ctx);
-  assert.ok(Math.abs(s3.rift.gauge - 0.25) < 1e-9, 'L3 은 초반 배율 없음');
+  assert.ok(Math.abs(s3.rift.gauge - 0.25 * earlyGaugeMulOf(3)) < 1e-9, 'L3 은 균열 3 의 초반 배율(밸런스 게이트 — 균열별 배열)');
+  // 밸런스 게이트: 초반 배율은 균열별 배열 — 1 이상 · 줄어들고 · 표 끝 다음 레벨부터 1
+  const n = Array.isArray(RIFT.earlyGaugeMul) ? RIFT.earlyGaugeMul.length : RIFT.earlyGaugeTo;
+  for (let L = 1; L <= n; L++) {
+    assert.ok(earlyGaugeMulOf(L) >= 1, `L${L}`);
+    if (L > 1) assert.ok(earlyGaugeMulOf(L) <= earlyGaugeMulOf(L - 1), `L${L} 줄어든다`);
+  }
+  for (const L of [n + 1, n + 5, 30, 0, NaN]) assert.equal(earlyGaugeMulOf(L), 1, `L${L}`);
   // 100%
   addGauge(ctx, 200);
   assert.equal(rift.gauge, 100);

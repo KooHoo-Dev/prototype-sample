@@ -285,6 +285,9 @@ export class GameSim {
     const fromRift = st.scene === 'rift';
     // W1 수정(NOTES-W1FIX · §5.10): 부활로 떠날 때 남은 진정 · 잠든 몬스터를 처음 자리로(전환 막 아래)
     if (t.reason === 'respawn' && st.rift) settleOnRespawn(ctx);
+    // 밸런스 게이트(NOTES-BALANCE): 수호자 처치 뒤 완료 마무리(completeAt · RIFT.completeDelay) 전에 떠나면(처치 직후 끝난 귀환 시전) 여기서 마무리한다 —
+    //   전에는 마을에서 새 균열을 열면 그 판의 요약 · 해금 · 완료 경험치 · 기록이 조용히 사라졌다(봇 실측). 맵은 아직 균열 맵이다(나가는 포털 자리).
+    if (fromRift && st.rift && st.rift.phase === 'complete' && !st.rift.summary) finishRift(ctx);
     st.scene = 'town';
     ctx.map = this.townMap;
     ctx.flow = null;
@@ -661,12 +664,18 @@ export class GameSim {
     const st = this.state;
     const rift = st.rift;
     if (!st.char || !rift || st.scene !== 'rift') return this._done(fail('notInRift'));
-    for (const m of rift.mons) {
-      if (m.gone || m.dead || m.hp <= 0) continue;
-      m.hp = 0;
-      m.lastHit = { by: 'player', skillId: null, noProcs: true, frozen: false };
+    // W2 통합: 사망 훅이 새로 세운 몬스터(분열 사본 · §8.2)까지 쓰러지게 살아 있는 것이 없을 때까지 되풀이한다(사본은 다시 분열하지 않는다 — 상한은 안전망)
+    for (let pass = 0; pass < 4; pass++) {
+      let any = false;
+      for (const m of rift.mons) {
+        if (m.gone || m.dead || m.hp <= 0) continue;
+        m.hp = 0;
+        m.lastHit = { by: 'player', skillId: null, noProcs: true, frozen: false };
+        any = true;
+      }
+      if (!any) break;
+      resolveDeaths(this.ctx);
     }
-    resolveDeaths(this.ctx);
     return this._done({ ok: true });
   }
 

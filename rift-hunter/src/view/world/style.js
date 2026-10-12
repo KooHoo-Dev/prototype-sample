@@ -53,7 +53,9 @@ export const WALL_H = 3.0;
 export const EMIT = {
   candle: { mesh: 'candle', glow: 1.3, glowY: 0.55, ground: false },
   torch: { mesh: 'sconce', glow: 1.9, glowY: null, ground: false },
-  lava: { mesh: 'lava', glow: 4.2, glowY: 0.06, ground: true },
+  // 화면 패스: 용암은 바닥의 「붉은 원」으로 읽혀 적대 표식(#ff3b30 원)과 섞였다 — 후광을 줄이고(4.2 → 2.4 · 세기 0.55 → 0.3)
+  // 주황 쪽으로(color) · 실제 빛은 바닥에서 띄워(lightY — 0.3m 점광원이 바닥에 진한 붉은 원반을 만들었다) 색을 주황으로(lightColor)
+  lava: { mesh: 'lava', glow: 2.4, glowY: 0.06, ground: true, k: 0.3, color: 0xff8a2a, lightColor: 0xff9a40, lightY: 1.4 },
   brazier: { mesh: 'brazier', glow: 2.2, glowY: 1.45, ground: false },
   bonfire: { mesh: 'bonfire', glow: 4.0, glowY: 1.1, ground: false },
 };

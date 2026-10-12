@@ -173,7 +173,10 @@ test('균열 레벨 곡선: riftRow 1..99 유한 · 표 30행 · 30 위도 같�
   assert.equal(riftRow(NaN).level, 1);
   const r5 = riftRow(5);
   assert.ok(Math.abs(r5.hpMul - 1.14 ** 4) < 1e-9);
-  assert.ok(Math.abs(riftRow(25).hpMul - 1.14 ** 19 * 1.12 ** 5) < 1e-9, 'L > 20 은 hpLate');
+  // 밸런스 게이트: GROWTH.lateFrom 20 → 30 — L > lateFrom 은 hpLate(식은 GROWTH 를 읽는다)
+  const lf = GROWTH.lateFrom;
+  assert.ok(Math.abs(riftRow(lf + 5).hpMul - GROWTH.hp ** (lf - 1) * GROWTH.hpLate ** 5) < 1e-6 * riftRow(lf + 5).hpMul, 'L > lateFrom 은 hpLate');
+  assert.ok(Math.abs(riftRow(25).hpMul - 1.14 ** 24) < 1e-6 * riftRow(25).hpMul, 'L25 는 아직 hp(lateFrom 30)');
   assert.deepEqual([riftRow(1).champAffixes, riftRow(10).champAffixes, riftRow(4).eliteAffixes, riftRow(5).eliteAffixes, riftRow(15).eliteAffixes], [1, 2, 2, 3, 4]);
   for (const k of Object.keys(GROWTH)) assert.ok(isNum(GROWTH[k]));
 });

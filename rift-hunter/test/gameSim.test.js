@@ -15,7 +15,9 @@ import { DEATH, PICKUP } from '../src/data/combat.js';
 import { TOWN } from '../src/data/town.js';
 import { FIXTURES } from '../src/debug/fixtures.js';
 import { GameSim } from '../src/sim/GameSim.js';
-import { killPlayer, openRecallPortal } from '../src/sim/rift.js';
+import { killPlayer, openRecallPortal, spawnGuardianNow } from '../src/sim/rift.js';
+import { RIFT } from '../src/data/rift.js';
+import { nearestWalkable } from '../src/sim/world/nav.js';
 import { pickHover } from '../src/sim/pick.js';
 import { createPlayerState } from '../src/sim/state.js';
 import { createCharacter } from '../src/sim/progression/character.js';
@@ -557,4 +559,36 @@ test('W1 통합: 완료 경로 — 개발 캐릭터(L10 · 프리셋 A) · 무�
     assert.equal(st.char.records[0].result, 'complete');
     assertFiniteDeep(st, cls);
   }
+});
+
+test('밸런스 게이트: 수호자 처치 직후(완료 마무리 completeDelay 전) 귀환해 마을로 가면 떠나는 commit 에서 마무리한다 — 요약 · 해금 · RIFT_COMPLETE 한 번 · 새 균열을 열어도 잃지 않는다', () => {
+  const { sim, log } = riftSim({ seed: 5 });
+  const st = sim.state;
+  const rift = st.rift;
+  const ch = st.char;
+  const p = st.player;
+  const unlock0 = ch.riftUnlocked;
+  rift.gauge = 100;
+  rift.phase = 'guardian';
+  const at = nearestWalkable(sim.getMap(), p.pos.x + 6, p.pos.z, 4) ?? p.pos;
+  const g = spawnGuardianNow(sim.ctx, at.x, at.z);
+  assert.ok(g);
+  // 귀환 시전이 끝나는 틱에 수호자가 쓰러진다(봇 실측: 처치 39틱 뒤 귀환 · completeAt 6틱 전)
+  g.hp = 0;
+  g.lastHit = { by: 'player', skillId: null, noProcs: true, frozen: false };
+  sim.step(NEUTRAL_INPUT);
+  assert.equal(rift.phase, 'complete');
+  assert.ok(rift.completeAt !== null && rift.summary === null, '마무리는 completeDelay 뒤');
+  assert.equal(openRecallPortal(sim.ctx, p.pos).ok, true);
+  assert.equal(sim.commitTravel().ok, true);
+  assert.equal(st.scene, 'town');
+  assert.ok(rift.summary && rift.summary.result === 'complete', '떠날 때 마무리하지 않았다(요약 없음)');
+  assert.equal(ch.riftUnlocked, unlock0 + RIFT.unlockNoDeath, '해금이 사라졌다');
+  assert.equal(log.filter((e) => e.name === EV.RIFT_COMPLETE).length, 1);
+  // 마을에서 새 균열을 열어도 그 판의 완료는 남는다
+  assert.equal(sim.openRift(1).ok, true);
+  assert.equal(sim.commitTravel().ok, true);
+  assert.equal(ch.riftUnlocked, unlock0 + RIFT.unlockNoDeath);
+  assert.equal(log.filter((e) => e.name === EV.RIFT_COMPLETE).length, 1);
+  assertFiniteDeep(st, 'state');
 });

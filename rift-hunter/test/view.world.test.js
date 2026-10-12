@@ -19,7 +19,7 @@ import { buildFloor } from '../src/view/world/floor.js';
 import { createLightRig, pickNearest } from '../src/view/world/lights.js';
 import { WALL_FADE, occludesPlayer, propOccludesPlayer, stepFade } from '../src/view/world/occlusion.js';
 import { PROP_BASE, propParts } from '../src/view/world/props.js';
-import { WALL_H } from '../src/view/world/style.js';
+import { EMIT, WALL_H } from '../src/view/world/style.js';
 import { wallTileCount, wallVariants } from '../src/view/world/walls.js';
 
 const S = Math.SQRT1_2;
@@ -578,4 +578,23 @@ test('벽 인스턴스의 정의 — 벽 타일 = 바닥에 8방향으로 닿는
     assert.ok(touches);
   }
   assert.equal(walls, wallTileCount(map));
+});
+
+test('view.world: 바닥 빛(용암)은 적대 표식 색과 섞이지 않는다(화면 패스 — 시작점 밑 붉은 원 회귀 · NOTES-W1 7-4)', () => {
+  // sRGB 16진의 색상각(°) — three 의 Color 는 선형으로 바꿔 각이 달라진다
+  const hueOf = (hex) => {
+    const r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mx === mn) return 0;
+    const h = mx === r ? ((g - b) / (mx - mn)) % 6 : mx === g ? (b - r) / (mx - mn) + 2 : (r - g) / (mx - mn) + 4;
+    return (h * 60 + 360) % 360;
+  };
+  assert.ok(hueOf(0xff3b30) < 5, '적대 테두리는 붉다');
+  const L = EMIT.lava;
+  // 적대 테두리 #ff3b30 의 색상각은 약 3° — 바닥 후광 · 실제 빛은 주황(20° 이상)
+  assert.ok(hueOf(L.color) >= 20, `후광 ${hueOf(L.color).toFixed(1)}°`);
+  assert.ok(hueOf(L.lightColor) >= 20, `빛 ${hueOf(L.lightColor).toFixed(1)}°`);
+  assert.ok(L.k <= 0.35 && L.glow <= 3, '후광은 작고 옅게');
+  assert.ok(L.lightY >= 1, '점광원을 바닥에서 띄운다(바닥에 진한 원반이 생기지 않게)');
+  const cav = TILESETS.find((t) => t.id === 'cavern');
+  assert.ok(cav.lights.kinds.some((k) => k.kind === 'lava'), '용암 빛이 데이터에 있다');
 });

@@ -46,13 +46,13 @@ export const SKILL_NODES = [
   { id: 'groundStomp', cls: 'warrior', branch: 0, tier: 1, kind: 'active', maxRank: 5,
     // W1 수정(NOTES-W1FIX): cost 20 → 14 — 첫 범위 스킬을 더 자주(분노 흐름 · 전사 판 길이)
     skill: { behavior: 'cone', targeting: 'direction', type: 'phys', tags: ['aoe', 'melee'], cost: 14, cd: 0,
-      action: 0.60, scaled: true, hitFrac: 0.50, radius: 4.0, angleDeg: 120, coef: ranks(1.40, 0.15),
+      action: 0.60, scaled: true, hitFrac: 0.50, radius: 4.0, angleDeg: 120, coef: ranks(1.05, 0.11),   // 밸런스 게이트: 1.40/+0.15 → 1.05/+0.11(프리셋 A 가 B 보다 49% 빨랐고 전사가 균열 10 에 마법사보다 42% 일찍 닿았다 — 1.25 에서 한 번 더 · 전사 4시드 균열 10 해금 1.31 → 1.62시간)
       status: { stun: [0.8, 0.9, 1.0, 1.1, 1.2] }, params: { shake: 0.25, fxAftershock: 'stomp', fxShockwave: 'shockwave' } } },
   { id: 'weaponMastery', cls: 'warrior', branch: 0, tier: 1, kind: 'passive', maxRank: 5,
     stats: { physPct: [6, 12, 18, 24, 30] } },
   { id: 'earthquake', cls: 'warrior', branch: 0, tier: 2, kind: 'active', maxRank: 5,
     skill: { behavior: 'quake', targeting: 'self', type: 'phys', tags: ['aoe'], cost: 30, cd: 8,
-      action: 0.50, scaled: true, hitFrac: 0.40, radius: 6.0, coef: ranks(1.10, 0.12),
+      action: 0.50, scaled: true, hitFrac: 0.40, radius: 6.0, coef: ranks(0.85, 0.095),   // 밸런스 게이트: 1.10/+0.12 → 0.85/+0.095(같은 까닭)
       params: { waves: [0.4, 0.9, 1.4], shake: 0.35, fx: 'quakeWave' } } },
   { id: 'aftershock', cls: 'warrior', branch: 0, tier: 3, kind: 'transform', maxRank: 1, req: 'groundStomp', transforms: 'groundStomp',
     patch: { aftershock: { delay: 0.5, mul: 0.6 } } },
@@ -66,8 +66,8 @@ export const SKILL_NODES = [
   { id: 'bloodthirst', cls: 'warrior', branch: 1, tier: 1, kind: 'passive', maxRank: 5,
     stats: { lifePctOnHit: [0.3, 0.6, 0.9, 1.2, 1.5] } },
   { id: 'whirlwind', cls: 'warrior', branch: 1, tier: 2, kind: 'active', maxRank: 5,
-    skill: { behavior: 'spin', targeting: 'point', type: 'phys', tags: ['aoe', 'channel', 'melee'], cost: 10, costPerSec: 12, cd: 0,
-      action: 0.30, scaled: true, hitFrac: 1, radius: 2.4, coef: ranks(0.42, 0.05),
+    skill: { behavior: 'spin', targeting: 'point', type: 'phys', tags: ['aoe', 'channel', 'melee'], cost: 10, costPerSec: 10, cd: 0,   // 밸런스 게이트: 유지 12 → 10/초
+      action: 0.30, scaled: true, hitFrac: 1, radius: 2.4, coef: ranks(0.78, 0.095),   // 밸런스 게이트: 0.42/+0.05 → 0.78/+0.095(프리셋 B 「학살」이 A 보다 31~49% 느렸다 · 0.88 로 더 올려도 B 는 빨라지지 않았다 — 분노 · 3마리 조건이 묶는다)
       params: { moveMul: 0.7, endRecover: 0.15, fxVortex: 'vortex' } } },
   { id: 'bloodWhirl', cls: 'warrior', branch: 1, tier: 3, kind: 'transform', maxRank: 1, req: 'whirlwind', transforms: 'whirlwind',
     patch: { healPerTarget: 0.006, healTargetsCap: 3 } },
@@ -92,13 +92,13 @@ export const SKILL_NODES = [
   // ── 마법사 · 0 화염 ──
   { id: 'fireball', cls: 'mage', branch: 0, tier: 1, kind: 'active', maxRank: 5,
     skill: { behavior: 'fireball', targeting: 'direction', type: 'fire', tags: ['projectile', 'aoe'], cost: 16, cd: 0,
-      action: 0.55, scaled: true, hitFrac: 0.45, range: 16, radius: 2.5, coef: ranks(1.70, 0.20),
+      action: 0.55, scaled: true, hitFrac: 0.45, range: 16, radius: 2.5, coef: ranks(1.25, 0.15),   // 밸런스 게이트: 1.70/+0.20 → 1.25/+0.15(마법사가 전사보다 판이 짧고 진행이 빨랐다 — 정예 · 챔피언 처치가 목표보다 짧았다)
       params: { speed: 18, range: 16, r: 0.35, explodeR: 2.5, visual: 'fireball', visualSplit: 'fireballSplit' } } },
   { id: 'combustion', cls: 'mage', branch: 0, tier: 1, kind: 'passive', maxRank: 5,
     stats: { burnFrac: [20, 40, 60, 80, 100] } },
   { id: 'meteor', cls: 'mage', branch: 0, tier: 2, kind: 'active', maxRank: 5,
     skill: { behavior: 'meteor', targeting: 'point', type: 'fire', tags: ['aoe', 'dot'], cost: 40, cd: 2,
-      action: 0.60, scaled: true, hitFrac: 0.30, radius: 3.5, range: 18, coef: ranks(3.60, 0.40),
+      action: 0.60, scaled: true, hitFrac: 0.30, radius: 3.5, range: 18, coef: ranks(2.70, 0.30),   // 밸런스 게이트: 3.60/+0.40 → 2.70/+0.30(같은 까닭)
       params: { delay: 1.2, burn: { dur: 3, tick: 0.5, coefPerSec: [0.35, 0.39, 0.43, 0.47, 0.51] }, shake: 0.4, fx: 'meteor', fallDist: 6 } } },
   { id: 'splitFireball', cls: 'mage', branch: 0, tier: 3, kind: 'transform', maxRank: 1, req: 'fireball', transforms: 'fireball',
     patch: { split: { n: 3, spreadDeg: 15, mul: 0.7 } } },

@@ -1,5 +1,5 @@
-// OWNER: P10 — 계약 §10.1 · §10.2 · §10.6
-// STUB — W2 에서 P10 가 채운다. W0: 제목 하나 있는 빈 상자
+// OWNER: P10 — 계약 §10.2(pause) · 브리프 §3.1(균열 진행은 저장되지 않는다)
+// 일시정지: 계속 · 설정 · 도움말 · 타이틀로(열린 균열이 활동 중이면 확인). 닫히면(Esc · 계속) UIRoot 가 actions.resume().
 
 /** @typedef {import('../../types.js').Panel} Panel */
 
@@ -8,17 +8,48 @@
  * @returns {Panel}
  */
 export function createPausePanel(ctx) {
-  const el = ctx.widgets.panelFrame('panel.pause.title');
+  const { t, widgets: w, actions, sim, ui } = ctx;
+  const el = w.panelFrame('panel.pause.title');
   el.dataset.panel = 'pause';
+  el.classList.add('pnl-pause');
+  const menu = el.appendChild(w.el('div', 'menu'));
+  const items = [
+    { key: 'pause.resume', run: () => ui.closePanel('pause', 'confirm') },
+    { key: 'pause.settings', run: () => ui.openPanel('settings') },
+    { key: 'pause.help', run: () => ui.openPanel('help') },
+    { key: 'pause.quit', run: () => quit() },
+  ];
+  for (const it of items) {
+    const r = menu.appendChild(w.el('div', 'menu-item'));
+    r.appendChild(w.el('div', 'menu-label', t(it.key)));
+  }
+  el.appendChild(w.el('p', 'panel-note', t('pause.riftNote')));
+  const foot = el.appendChild(w.el('div', 'panel-foot'));
+  foot.appendChild(w.el('div', 'panel-hint', t('pause.hint')));
+  const nav = w.listNav(menu, (i) => items[i]?.run());
+  let busy = false;
+
+  async function quit() {
+    if (busy) return;
+    const r = sim?.state?.rift;
+    if (r && (r.phase === 'active' || r.phase === 'guardian')) {
+      busy = true;
+      const ok = await w.confirm('pause.quitConfirm');
+      busy = false;
+      if (!ok) return;
+    }
+    actions.quitToTitle?.();
+  }
+
   return {
     id: 'pause',
     modal: true,
     el,
-    open(args = {}) {},
+    open() { nav.focus(0, true); },
     close() {},
-    update(state) {},
-    handleKey(e) { return false; },
+    update() {},
+    handleKey(e) { return nav.handleKey(e); },
     keys: [],
-    dispose() { el.remove(); },
+    dispose() { nav.destroy(); el.remove(); },
   };
 }

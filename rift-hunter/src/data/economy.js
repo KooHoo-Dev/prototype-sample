@@ -3,7 +3,7 @@
 
 export const ECON = { potionMax: 10, scrollMax: 10, recordsMax: 200, buybackMax: 10 };
 export const START = { gold: 0, potions: 5, scrolls: 3, riftUnlocked: 1, materials: { scrap: 0, dust: 0, essence: 0 } };
-export const PRICES = { sellRate: 0.15, buyMul: { normal: 1.5, magic: 1.5, rare: 2.5 }, repairBase: 4.0, potion: 15, scroll: 10, resetPerLevel: 30 };   // 🔒 sellRate · buyMul · repairBase · potion
+export const PRICES = { sellRate: 0.15, buyMul: { normal: 1.5, magic: 1.5, rare: 2.5 }, repairBase: 5.0, potion: 15, scroll: 10, resetPerLevel: 30 };   // 🔒 sellRate · buyMul · repairBase · potion
 export const GAMBLE = { price: 110, slotRef: 15, mainHandValue: 24, rarity: { magic: 720, rare: 240, legendary: 30, set: 10 } };   // 🔒
 export const REROLL = { gold: 90, growth: 1.5, cap: 8, dustBase: 1, dustCap: 5, essenceFrom: 3 };   // 🔒
 export const CRAFT = { gold: 150, scrap: 20, dust: 10, essence: 0 };
@@ -14,7 +14,8 @@ export const SHOP = { blacksmithStock: 9, generalStock: 4, stockRarity: { magic:
 
 export const XP = {
   // W1 수정(NOTES-W1FIX): reqEarly [200, 500, 900] → [60, 300, 700] — 레벨 2 ≈ 일반 12처치(첫 팩 안에 첫 스킬) · 3 ≈ 72 · 4 ≈ 212
-  base: 5, req: { a: 1100, g: 1.15 }, reqEarly: [60, 300, 700], completeBonus: 560,   // 🔒 §7.14
+  // 밸런스 게이트(NOTES-BALANCE): req.a 1100 → 1300 — 봇이 캐릭터 레벨 30 에 4.4~4.5시간에 닿았다(목표 5~9시간) · 레벨 10 은 33~35분(30~50분)
+  base: 5, req: { a: 1300, g: 1.15 }, reqEarly: [60, 300, 700], completeBonus: 560,   // 🔒 §7.14
   diff: { penaltyFrom: 12, penaltyStep: 0.1, penaltyMin: 0.3, bonusStep: 0.1, bonusMax: 0.5 },
 };
 

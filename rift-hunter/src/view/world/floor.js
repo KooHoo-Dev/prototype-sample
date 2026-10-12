@@ -103,12 +103,13 @@ function cavernFloor(b, map, seed) {
     let c = [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t];
     const a = Math.max(0, valueNoise(x, z, 6.7, seed + 10) - 0.6) * 2.4;
     if (a > 0) c = [c[0] + (ash[0] - c[0]) * a, c[1] + (ash[1] - c[1]) * a, c[2] + (ash[2] - c[2]) * a];
+    // 용암 둘레 그을림 — 둥근 원반이 적대 표식처럼 읽히지 않게 좁고(r + 0.6) 가장자리를 잡음으로 흐트린다(화면 패스)
     let e = 0;
     for (const p of lava) {
-      const d = Math.hypot(x - p.x, z - p.z);
-      if (d < p.r + 1.6) e = Math.max(e, 1 - d / (p.r + 1.6));
+      const d = Math.hypot(x - p.x, z - p.z) * (0.75 + 0.5 * valueNoise(x, z, 1.7, seed + 13));
+      if (d < p.r + 0.6) e = Math.max(e, 1 - d / (p.r + 0.6));
     }
-    if (e > 0) { e *= 0.85; c = [c[0] + (ember[0] - c[0]) * e, c[1] + (ember[1] - c[1]) * e, c[2] + (ember[2] - c[2]) * e]; }
+    if (e > 0) { e *= 0.6; c = [c[0] + (ember[0] - c[0]) * e, c[1] + (ember[1] - c[1]) * e, c[2] + (ember[2] - c[2]) * e]; }
     return c;
   };
   const step = 1;   // m

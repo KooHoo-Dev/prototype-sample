@@ -1130,7 +1130,7 @@ StatKey → PlayerStats 대응: `freezeAt` → `freezeAtReduce`(점 그대로) �
 | `MON_STRIKE` | `mon/strike` | `{id, actId, x, z, facing}` (판정 틱) | P3 | audio(휘두름) · fx |
 | `MON_STATUS` | `mon/status` | `{id, kind:'stun'\|'freeze'\|'burn'\|'shock'\|'flinch', on}` | P2 | fx · audio(얼음 깨짐) |
 | `MON_DIED` | `mon/died` | `{id, typeId, rank, x, z, facing, launch:{x,z}\|null, byPlayer, elite}` (elite = 챔피언 이상) | P2 | view(쓰러짐 · 날아감) · fx(먼지 · 뼈) · audio · ui(대상 프레임) |
-| `AFFIX` | `affix/fx` | `{monId, affixId, what, x, z}` · what ∈ `teleportOut teleportIn shieldWarn shieldOn shieldOff split sparks novaWarn jailWarn plagueWarn mortarFire fireArm heal` | P3 · P16 | audio(예고음 — 감옥 · 몰타르 · 보호막 · 냉기 노바는 고유) · fx |
+| `AFFIX` | `affix/fx` | `{monId, affixId, what, x, z}` · what ∈ `teleportOut teleportIn shieldWarn shieldOn shieldOff split sparks novaWarn jailWarn plagueWarn mortarFire fireArm heal` (W2 확정: `jailWarn` · `plagueWarn` · `mortarFire`의 x, z = 시전한 몬스터 자리 · 잿빛 마녀 순간이동은 `MON_ACT{actId:'blink'}`와 함께 연출용 `teleportOut`(떠난 자리) · `teleportIn`(도착 자리)을 `affixId: null`로 낸다 — 구독자는 `affixId`에 기대지 않는다) | P3 · P16 | audio(예고음 — 감옥 · 몰타르 · 보호막 · 냉기 노바는 고유) · fx |
 | `PROJ_SPAWN` | `proj/spawn` | `{id, visual, owner, x, z, vx, vz}` | P2 | audio(발사음) |
 | `PROJ_END` | `proj/end` | `{id, visual, x, z, reason:'hit'\|'wall'\|'expire'\|'cancel'}`(cancel = 사망 · 정리로 지움 — §5.14) | P2 | fx(터짐) · audio |
 | `EFFECT_SPAWN` | `effect/spawn` | `{id, kind, hostile, shape, sec, dur}` (sec = 예고 길이 · dur = 지속) | P2 | audio(예고음) · fx(표식은 상태에서 그린다 — 이벤트는 등장 소리용) |
@@ -1177,6 +1177,8 @@ StatKey → PlayerStats 대응: `freezeAt` → `freezeAtReduce`(점 그대로) �
 | `FADE` | `app/fade` | `{phase:'out'\|'in', sec}` | P9 | ui(전환 막 — 검은 막 · CSS 불투명도) |
 | `LABELS` | `app/labels` | `{on}` (Alt 누름/뗌 — 설정 「늘 이름표」와 OR) | P9 | ui(바닥 이름표 · 고급 툴팁) |
 | `BOT` | `app/bot` | `{on}` | P9 | ui(봇 탭 · 「봇 관전 중」 배지 · 켜져 있는 동안 자동 패널을 열지 않는다 — §11.13) |
+
+- **W2 확정 — `PAUSED.reason`**: `menu` = 맨 위 패널이 `pause` · `settings` · `help` · `modal` = 그 밖의 모달(상점 · 사망 · 완료 · 안내 · 확인 · 분석 …) · `blur` · `hidden` · `debug` · `context`. 전환 막 · 히트스톱 · 마을에서 겹쳐 보는 패널로 step하지 않는 것은 일시정지가 아니다(PAUSED를 내지 않는다). audio는 `menu`·`modal`·`blur`·`debug`·`context`에서 전투 지속음만 멈추고 환경음을 줄인다(UI · 거래음은 난다) · 탭 숨김은 app이 `audio.setPaused(true)`를 직접 부른다(컨텍스트 suspend).
 
 ---
 
@@ -1331,7 +1333,7 @@ PLAYER_HIT → life ≤ 0 이면 그 자리에서 ctx.hooks.onPlayerKilled(ctx, 
 
 몬스터 투사체의 적중은 `updateProjectiles`가 `monsterHitPlayer(ctx, getMonster(ctx, proj.srcId), spec)`로 판정한다 — 출처가 없거나 죽었으면(`dead` · `gone`) `hazardHitPlayer`. 몬스터 소유 효과(바닥 표식)는 늘 `hazardHitPlayer`(속성 onHitPlayer 없음).
 
-몬스터 수치: `hpMax = MON.hpBase × type.hp × rank.hp × row.hpMul × Π affix.mods.hpMul` · `dmg = MON.dmgBase × type.dmg × rank.dmg × row.dmgMul × earlyDmgMul(L)`(W1 수정 2 — 첫 판 경사: 균열 1~4는 `RIFT.earlyDmg[L − 1]`, 5 이상은 1 · §7.3 · NOTES-W1FIX §2.0) · 공격 하나의 `raw = mon.dmg × atk.mul` · `res[t] = min(MON.resCap 0.5, type.res[t] + Σ affix.mods.res[t])`(수호자는 속성의 `mods.res`를 받지 않는다 — §8.3) · `r = type.radius × rank.scale` · `height = type.height × rank.scale`. `type`은 `getMonDef(typeId)`(일반 · 수호자 공용 — §6.2). 몬스터의 공격은 치명타가 없다.
+몬스터 수치: `hpMax = MON.hpBase × type.hp × rank.hp × row.hpMul × Π affix.mods.hpMul × earlyHpMul(L)`(밸런스 게이트 — 첫 판 생명 경사: 균열 1~11은 `RIFT.earlyHp[L − 1]`, 12 이상은 1) · `dmg = MON.dmgBase × type.dmg × rank.dmg × row.dmgMul × earlyDmgMul(L)`(W1 수정 2 — 첫 판 경사 · 밸런스 게이트: 균열 1~11은 `RIFT.earlyDmg[L − 1]`, 12 이상은 1 · §7.3 · NOTES-W1FIX §2.0 · NOTES-BALANCE) · 공격 하나의 `raw = mon.dmg × atk.mul` · `res[t] = min(MON.resCap 0.5, type.res[t] + Σ affix.mods.res[t])`(수호자는 속성의 `mods.res`를 받지 않는다 — §8.3) · `r = type.radius × rank.scale` · `height = type.height × rank.scale`. `type`은 `getMonDef(typeId)`(일반 · 수호자 공용 — §6.2). 몬스터의 공격은 치명타가 없다.
 
 ### 5.7 조건부 패시브 — `CONDS` (P2 `conds.js`)
 
@@ -1385,7 +1387,7 @@ PLAYER_HIT → life ≤ 0 이면 그 자리에서 ctx.hooks.onPlayerKilled(ctx, 
 - **복귀**(`returnToRift()` · 마을 포털 도착 — 둘 다 `requestReturnToRift(ctx)`(P2 `rift.js`) · 「Enter」 안내 또는 마을 포털 클릭 · 키 1번): `rift`가 있고 붕괴가 아니고 마을이면 → `requestTravel{to:'rift', reason:'townPortal'}` → commit: rift 하위 시각을 민다(§5.11) → `placePlayer(returnPos ?? checkpoint)`(생명 · 자원 유지) · `protectUntil = tick + ticks(DEATH.protectSec 1.5)` · 귀환 포털이 있었으면 닫는다 · `returnPrompt = false`. 사망 → 부활 → 복귀 = 키 입력 2번 · 시스템 시간 `DEATH.panelDelay` 0.3 + 부활 막 0.2 + 0.2 + 복귀 막 0.3 + 0.3 = **1.3초**(+ 사람의 반응 두 번 ≈ 0.5초 → 약 1.8초) — 브리프 §7 「2초 안」. 사망 패널이 뜨기 전에 누른 Enter는 버리지 않는다(§10.5-6) · 그 사이의 안내는 큐로(§10.2).
 - **안전 지점**(`checkpoint`): 15틱마다 15m 안에 깨어 있는 몬스터가 없고 살아 있으면 `checkpointCalm += 15` · 60틱 이상이면 `checkpoint = pos`. 몬스터가 다가오면 0으로. 균열 시작점이 처음 값. **W1 수정(NOTES-W1FIX)**: 살아 있는 **잠든** 몬스터가 `aggro + RIFT.checkpointSleepMargin`(2m) 안이고 `losClear`(벽)면 조용하지 않다(0으로 — 깨기 직전 자리가 안전 지점이 되지 않게 · 음수면 끈다). 안전 지점을 정한 뒤에 그 시야가 생긴 경우(나중에 나온 수호자 · 집으로 돌아간 떼)는 부활 때 복귀 지점을 다시 고른다(위 「부활」 · W1 수정 3).
 - **판 경험치 집계**(W1 확정): `rift.stats.xp` · `meter.runXp`는 P2가 `grantXp` 결과의 `amount`(캡에서 버린 양을 뺀 실제 양)로 더한다 — P6 `grantXp`는 둘을 건드리지 않는다. 완료 정리로 사라지는 몬스터(`flags.no*` 전부)는 `onMonDeath`(사망 폭발 · 분열 · 웅덩이)를 돌리지 않고, 완료 때 남은 적대 투사체 · 예고도 지운다.
-- **완료 뒤**: 수호자 사망 → `phase = 'complete'` · 수호자 드랍(보장 포함) · 남은 몬스터는 경험치 · 드랍 · 게이지 없이 사라진다(`flags.no*` 세우고 생명 0 — 다음 `resolveDeaths`에서 정리 · `MON_DIED`는 낸다) · `completeAt = tick + ticks(RIFT.completeDelay 1.5)`. 그 틱에: 완료 경험치 `grantXp(ctx, round(XP.completeBonus × xpMul(L)), 'complete')`(P2 — W1 확정 · P6 `completeRun`은 경험치를 주지 않는다) → 요약 → `completeRun(ctx, summary)`(P6 — 해금 · 최고 기록 · 기록 · 저장) → `RIFT_COMPLETE` → 나가는 포털(`exit` · 수호자 자리 + 3m의 걷기 가능 점) `PORTAL_OPENED`. 균열은 다음 균열을 열 때까지 열려 있다(마을 포털로 돌아와 남은 전리품을 주울 수 있다).
+- **완료 뒤**: 수호자 사망 → `phase = 'complete'` · 수호자 드랍(보장 포함) · 남은 몬스터는 경험치 · 드랍 · 게이지 없이 사라진다(`flags.no*` 세우고 생명 0 — 다음 `resolveDeaths`에서 정리 · `MON_DIED`는 낸다) · `completeAt = tick + ticks(RIFT.completeDelay 1.5)`. 그 틱에: 완료 경험치 `grantXp(ctx, round(XP.completeBonus × xpMul(L)), 'complete')`(P2 — W1 확정 · P6 `completeRun`은 경험치를 주지 않는다) → 요약 → `completeRun(ctx, summary)`(P6 — 해금 · 최고 기록 · 기록 · 저장) → `RIFT_COMPLETE` → 나가는 포털(`exit` · 수호자 자리 + 3m의 걷기 가능 점) `PORTAL_OPENED`. 균열은 다음 균열을 열 때까지 열려 있다(마을 포털로 돌아와 남은 전리품을 주울 수 있다). **밸런스 게이트**: `completeAt` 전에 균열을 떠나면(처치 직후 끝난 귀환 시전 · 부활) 마을로 가는 commit(`_enterTown` — 맵이 아직 균열 맵일 때)이 그 자리에서 같은 마무리를 한다(`finishRift`) — 전에는 마을에서 새 균열을 열면 그 판의 요약 · 해금 · 완료 경험치 · 기록이 조용히 사라졌다(`gameSim.test`).
 
 ### 5.11 장면 전환 — `pendingTravel` (P2)
 
@@ -1484,7 +1486,7 @@ PLAYER_HIT → life ≤ 0 이면 그 자리에서 ctx.hooks.onPlayerKilled(ctx, 
 
 ### 5.18 게이지 · 수호자 (P2 `rift.js` + P3)
 
-- 처치마다(`phase === 'active'` · `!flags.noGauge`) `gauge += RANKS[rank].gauge × type.gauge × early`(%) · `GAUGE` — `early` = `rift.level ≤ RIFT.earlyGaugeTo`(2)이고 rank ∈ {normal, minion}이면 `RIFT.earlyGaugeMul`(1.6 — W1 수정 · 1.25 → 1.6), 아니면 1(첫 판들의 기본 공격뿐인 시간을 줄이는 손잡이 — §7.14). `gauge ≥ 100` → `gauge = 100` · `phase = 'guardian'` · 자리 = `findGuardianSpot(ctx)`(P3 — 플레이어에서 8~10m · 걷기 가능 · 시야) · `rift.guardianSpawn = {x, z, at: tick + ticks(RIFT.guardianDelay 2.0)}` · 비적대 효과 `guardianSpawn` · `GAUGE_FULL` · `HINT gauge`.
+- 처치마다(`phase === 'active'` · `!flags.noGauge`) `gauge += RANKS[rank].gauge × type.gauge × early`(%) · `GAUGE` — `early` = rank ∈ {normal, minion}이면 `earlyGaugeMulOf(rift.level)`(밸런스 게이트 — 균열별 배열 `RIFT.earlyGaugeMul` [1.5, 1.35, 1.2, 1.1] · 균열 5 이상 1 · 옛 W1 수정: 균열 ≤ 2 × 1.6 — 균열 3 에서 1 로 끊겨 봇이 7.5분 판을 7~8번 돌았다), 아니면 1(첫 판들의 기본 공격뿐인 시간을 줄이는 손잡이 — §7.14). `gauge ≥ 100` → `gauge = 100` · `phase = 'guardian'` · 자리 = `findGuardianSpot(ctx)`(P3 — 플레이어에서 8~10m · 걷기 가능 · 시야) · `rift.guardianSpawn = {x, z, at: tick + ticks(RIFT.guardianDelay 2.0)}` · 비적대 효과 `guardianSpawn` · `GAUGE_FULL` · `HINT gauge`.
 - `at` 틱: `spawnGuardian(ctx, x, z)`(P3 — 종류는 균열을 채울 때 정해 둔 `rift.guardianType`) → `guardianId` · `GUARDIAN_APPEAR`. 수호자는 바로 깨어 있다. (W1 수정 4) `at` 전에 플레이어가 쓰러져 부활로 떠나면 부활 commit(`settleOnRespawn`)에서 세우고 바로 재운다(§5.10).
 - 수호자 처치 → §5.10 「완료 뒤」.
 
@@ -1802,7 +1804,7 @@ export class GameSim {
   priceOf(ref, kind)                    // → 정수 | null — kind 'sell'|'buy'|'buyback'|'reroll'
   // 디버그(§11.8)
   debugGotoTown() / debugOpenRift(level, seed) / debugCompleteRift() / debugSpawnPack(typeId, rank, affixIds = null, at = null)
-  debugKillAll() / debugGrant({gold, xp, materials, items}) / debugDropItem({rarity, slot, ilvl}) / debugSetLevel(n) / debugSetRiftUnlocked(n)
+  debugKillAll() /* W2 확정: 사망 훅이 세운 몬스터(분열 사본)까지 — 살아 있는 것이 없을 때까지 resolveDeaths를 되풀이 */ / debugGrant({gold, xp, materials, items}) / debugDropItem({rarity, slot, ilvl}) / debugSetLevel(n) / debugSetRiftUnlocked(n)
   debugSetInvincible(on) / debugRevealMap() / debugResetSkills() /* 무료 — 브리프 §3.3 */ / debugLoadState(state, map, riftMap = null)
 }
 ```
@@ -1973,7 +1975,7 @@ export function makeDevCharacter({slot = 0, cls, name, level = 1, rift = 1, pres
 
 - view: `state`(전부 읽기) · `sim.getMap()` · `MAP_LOADED` 때 다시 읽는다 · `weaponVisual(item)`(P5) · `nav.tileAt`(벽 낮추기 계산).
 - ui: `state` · `sim.getStats()` · §6.13 조회 함수.
-- audio: 이벤트와 `state.scene` · `rift.tileset` · `player.channel`(지속음)만.
+- audio: 이벤트와 `state.scene` · `rift.tileset` · `player.channel`(지속음)만. **W2 확정**: 그 밖에 `player.pos`(듣는 자리) · `player.recall`(귀환 시전음 — §9.11) · `player.lowLife` · `player.dead`와, 처음 보는 몬스터 ID마다 한 번 `rift.mons[].{typeId, rank}`(템플릿별 피격 · 정예 예고음 크기 — `HIT` · `MON_ACT` · `MON_STRIKE` payload에 등급이 없다 · `MAP_LOADED` · `RIFT_CLOSED`에서 캐시를 비운다)를 읽는다(읽기 전용).
 
 ### 6.13 ui가 부르는 순수 조회 · 계산 (import 허용 목록 — §2.1)
 
@@ -2066,6 +2068,7 @@ export function measureTable({…, makeSim})     // → MEASURE.md 마크다운 
 - `makeSim`은 `(seed, account) → GameSim`이다 — `scripts/measure.mjs`와 `test/*`가 `(seed, account) => new GameSim({bus: new EventBus(), seed, account, devSession: true})`를 넘긴다(bot/*는 GameSim을 import하지 않는다 — §2.2).
 - 봇이 읽어도 되는 것: 화면에 보이는 것 — 플레이어 `BOT.viewR`(11.4m — 기본 카메라에서 위 · 아래로 보이는 거리 §9.3) 안의 몬스터(위치 · 등급 · 속성 · 생명 비율 · act · aim) · 효과(모양 · 시각) · 투사체 · 드랍 · 포털 · 맵(탐색한 타일) · 자기 시트 · 데이터 표. **읽지 않는 것**: 몬스터의 `ax`(훅 타이머) · `readyAt` · 잠든 팩의 위치(탐색하지 않은 곳) · 난수 상태.
 - 봇이 부르는 명령: `GameSim`의 공개 명령(ui와 같은 것) + `commitTravel`. 거래는 사람이 NPC 앞에서 패널을 여는 것처럼 **INTERACT를 받은 뒤** 명령을 부른다.
+- **W2 확정**: 봇은 버스를 구독하지 않는다(dispose가 없어 켜고 끌 때 리스너가 새지 않게) — 「INTERACT를 받았다」 = 그 물체로 가던 의도가 끝나고 `state.town.lastInteract`가 그 물체 · 반경 안(같은 step의 sim 동작을 상태로 읽는다). 계약에 더한 것(덧붙이기만): 프리셋 값 `RANDOM_BUILD`(−1 · 측정의 무작위 배분) · 측정 하네스용 내부 필드 `bot.levelOverride` · `bot.abandonRift` · `runSession`의 선택 인자 `maxRuns` · `maxRiftSec` · `snapshots`와 결과의 `levelAt` · `unlockAt` · `snaps` · `bot` · `runRift` 요약의 측정 누적 `m`. `BOT.priority`에 `guardian: 3` · `minion: 1`.
 
 ### 6.17 `test/helpers.js` (P0 완성 — W1 테스트가 서로를 기다리지 않게)
 
@@ -2139,7 +2142,7 @@ export const CLASSES = [
     startGear: [{ baseId: 'sword', tier: 0 }, { baseId: 'chest', tier: 0 }],
     mainHandBases: ['sword', 'axe', 'mace', 'greatsword', 'greataxe'], offhandBases: ['shield'] },
   { id: 'mage', mainStat: 'int', resource: 'mana',
-    life: { base: 90, growth: 1.09 },  🔒
+    life: { base: 100, growth: 1.09 },  🔒   // 밸런스 게이트: 90 → 100
     resourceMax: { base: 100, perLevel: 2 }, regen: { base: 7, perLevel: 0.15 },
     rage: null,
     moveSpeed: 6, radius: 0.40, height: 1.8, basic: 'magicBolt',
@@ -2167,14 +2170,14 @@ export const CLASSES = [
 
 | ID | 갈래 · 단계 | 종류 · 최대 | 동작 · 대상 | 비용 · 생성 | 쿨 | 행동 · 판정 | 모양 | coef | 상태 · params |
 |---|---|---|---|---|---|---|---|---|---|
-| `groundStomp` 지면 강타 | 0 · 1 | active · 5 | cone · direction | 분노 14(W1 수정 · 20 → 14) | 0 | 0.60✓ · 0.50 | 원뿔 r 4.0 · 120° | 1.40 / +0.15 | stun [0.8, 0.9, 1.0, 1.1, 1.2] · shake 0.25 |
+| `groundStomp` 지면 강타 | 0 · 1 | active · 5 | cone · direction | 분노 14(W1 수정 · 20 → 14) | 0 | 0.60✓ · 0.50 | 원뿔 r 4.0 · 120° | 1.05 / +0.11(밸런스 게이트 · 옛 1.40 / +0.15) | stun [0.8, 0.9, 1.0, 1.1, 1.2] · shake 0.25 |
 | `weaponMastery` 무기 숙련 | 0 · 1 | passive · 5 | — | — | — | — | — | — | `physPct` [6, 12, 18, 24, 30] |
-| `earthquake` 지진 | 0 · 2 | active · 5 | quake · self | 분노 30 | 8 | 0.50✓ · 0.40 | 원 r 6.0(시전 자리) | 파동마다 1.10 / +0.12 | waves [0.4, 0.9, 1.4] · shake 0.35 |
+| `earthquake` 지진 | 0 · 2 | active · 5 | quake · self | 분노 30 | 8 | 0.50✓ · 0.40 | 원 r 6.0(시전 자리) | 파동마다 0.85 / +0.095(밸런스 게이트 · 옛 1.10 / +0.12) | waves [0.4, 0.9, 1.4] · shake 0.35 |
 | `aftershock` 여진 | 0 · 3 | transform · 1 · req `groundStomp` | — | — | — | — | — | — | patch `{aftershock: {delay: 0.5, mul: 0.6}}` |
 | `crusher` 분쇄자 | 0 · 4 | passive · 3 | — | — | — | — | — | — | cond `targetDisabled` · `allPct` [10, 20, 30] |
 | `charge` 돌진 | 1 · 1 | active · 5 | dash · point | 생성 10 | 6 | 거리/22 + 0.1 · 1틱 | 선 폭 1.6 · 2~10 | 1.20 / +0.15 | knock 2.5 · speed 22 |
 | `bloodthirst` 피의 갈증 | 1 · 1 | passive · 5 | — | — | — | — | — | — | `lifePctOnHit` [0.3, 0.6, 0.9, 1.2, 1.5] |
-| `whirlwind` 회오리 | 1 · 2 | active · 5 | spin · point(따라감) | 시작 10 · 유지 12/초 | 0 | 채널 · 틱 0.30✓ | 원 r 2.4 | 틱마다 0.42 / +0.05 | moveMul 0.7 · endRecover 0.15 |
+| `whirlwind` 회오리 | 1 · 2 | active · 5 | spin · point(따라감) | 시작 10 · 유지 10/초(밸런스 게이트 · 옛 12) | 0 | 채널 · 틱 0.30✓ | 원 r 2.4 | 틱마다 0.78 / +0.095(밸런스 게이트 · 옛 0.42 / +0.05) | moveMul 0.7 · endRecover 0.15 |
 | `bloodWhirl` 피의 회오리 | 1 · 3 | transform · 1 · req `whirlwind` | — | — | — | — | — | — | patch `{healPerTarget: 0.006, healTargetsCap: 3}`(대상당 최대 생명 × 0.6% · 채널 틱당 대상 3까지 — 초당 최대 6%) |
 | `berserker` 광전사 | 1 · 4 | passive · 3 | — | — | — | — | — | — | cond `rage50` · `attackSpeedPct` [5, 10, 15] · `critChance` [3, 6, 9] |
 | `warCry` 전투 함성 | 2 · 1 | active · 5 | buff · self | 생성 30 | 15 | 0.40 · 0.50 | — | — | buffSec 8 · value [0.40, 0.46, 0.52, 0.58, 0.64](방어도 × (1 + value)) |
@@ -2187,9 +2190,9 @@ export const CLASSES = [
 
 | ID | 갈래 · 단계 | 종류 · 최대 | 동작 · 대상 | 비용 | 쿨 | 행동 · 판정 | 모양 | coef | 상태 · params |
 |---|---|---|---|---|---|---|---|---|---|
-| `fireball` 화염구 | 0 · 1 | active · 5 | fireball · direction | 마나 16 | 0 | 0.55✓ · 0.45 | 투사체 r 0.35 · 18 m/s · 16 → 폭발 원 r 2.5 | 1.70 / +0.20 | speed 18 · range 16 · r 0.35 · explodeR 2.5 |
+| `fireball` 화염구 | 0 · 1 | active · 5 | fireball · direction | 마나 16 | 0 | 0.55✓ · 0.45 | 투사체 r 0.35 · 18 m/s · 16 → 폭발 원 r 2.5 | 1.25 / +0.15(밸런스 게이트 · 옛 1.70 / +0.20) | speed 18 · range 16 · r 0.35 · explodeR 2.5 |
 | `combustion` 연소 | 0 · 1 | passive · 5 | — | — | — | — | — | — | `burnFrac` [20, 40, 60, 80, 100](화염 적중 피해의 % → 3초 화상) |
-| `meteor` 메테오 | 0 · 2 | active · 5 | meteor · point | 마나 40 | 2 | 0.60✓ · 0.30 | 예고 1.2 · 원 r 3.5 · 사거리 18 | 3.60 / +0.40 | delay 1.2 · burn `{dur: 3, tick: 0.5, coefPerSec: [0.35, 0.39, 0.43, 0.47, 0.51]}`(충돌과 같은 원 r 3.5 — 효과 하나의 tickSpec) · shake 0.4 |
+| `meteor` 메테오 | 0 · 2 | active · 5 | meteor · point | 마나 40 | 2 | 0.60✓ · 0.30 | 예고 1.2 · 원 r 3.5 · 사거리 18 | 2.70 / +0.30(밸런스 게이트 · 옛 3.60 / +0.40) | delay 1.2 · burn `{dur: 3, tick: 0.5, coefPerSec: [0.35, 0.39, 0.43, 0.47, 0.51]}`(충돌과 같은 원 r 3.5 — 효과 하나의 tickSpec) · shake 0.4 |
 | `splitFireball` 분열 화염구 | 0 · 3 | transform · 1 · req `fireball` | — | — | — | — | — | — | patch `{split: {n: 3, spreadDeg: 15, mul: 0.7}}` |
 | `heartOfFire` 불의 심장 | 0 · 4 | passive · 3 | — | — | — | — | — | — | `firePct` [8, 16, 24] · cond `targetBurning` · `critChance` [5, 10, 15] |
 | `frostNova` 서리 노바 | 1 · 1 | active · 5 | nova · self | 마나 20 | 4 | 0.45✓ · 0.50 | 원 r 5.0 | 1.00 / +0.12 | chill [60, 65, 70, 75, 80] |
@@ -2209,10 +2212,14 @@ export const CLASSES = [
 ### 7.3 균열 레벨 곡선 — `data/rift.js` (P2 · 시드)
 
 ```js
-export const GROWTH = { item: 1.10, hp: 1.14, dmg: 1.10, gold: 1.14, xp: 1.12, lateFrom: 20, hpLate: 1.12, dmgLate: 1.05 };   🔒 (모두)
+export const GROWTH = { item: 1.10, hp: 1.14, dmg: 1.10, gold: 1.14, xp: 1.12, lateFrom: 30, hpLate: 1.12, dmgLate: 1.05 };   🔒 (모두) · 밸런스 게이트: lateFrom 20 → 30
 export const RIFT = { lives: 3, guardianDelay: 2.0, completeDelay: 1.5, unlockClear: 1, unlockNoDeath: 2, maxLevel: 99, exitPortalOffset: 3, exploreR: 14,
-  portalR: 1.0, earlyGaugeTo: 2, earlyGaugeMul: 1.6,   // W1 수정(NOTES-W1FIX): earlyGaugeMul 1.25 → 1.6 · (P2 W1 키) checkpointSleepMargin: 2 — §5.10 안전 지점
-  earlyDmg: [0.205, 0.305, 0.453, 0.673] };   // W1 수정 2(NOTES-W1FIX §2.0): 첫 판 피해 경사 — 균열 L ≤ 4의 몬스터 피해 × earlyDmg[L − 1] · 5 이상 × 1 · W1 수정 3: [0.2, 0.3, 0.45, 0.67] → 이 값(레벨 비 ≤ 1.25)
+  portalR: 1.0, earlyGaugeTo: 4, earlyGaugeMul: [1.5, 1.35, 1.2, 1.1],   // 밸런스 게이트: 균열별 배열(earlyGaugeMulOf — 균열 3 의 1.6 → 1 절벽) · W1 수정(NOTES-W1FIX): 1.25 → 1.6 · (P2 W1 키) checkpointSleepMargin: 2 — §5.10 안전 지점
+  earlyDmg: [0.0293, 0.0404, 0.0556, 0.0767, 0.1057, 0.1458, 0.2009, 0.277, 0.3818, 0.5263, 0.7254],   // 밸런스 게이트: dmgBase × 7 에 맞춰 균열 1~11(균열 1 실제 배율 0.205 그대로) · 옛 W1 수정 3 [0.205, 0.305, 0.453, 0.673](dmgBase 3.5 기준)
+  earlyHp: [0.45, 0.4839, 0.5203, 0.5595, 0.6016, 0.6469, 0.6956, 0.748, 0.8043, 0.8649, 0.93] };   // 밸런스 게이트: 첫 판 생명 경사(earlyHpMul) · 균열 12 부터 1
+  // (옛 W1 수정 2 · 3 — NOTES-W1FIX §2.0: 균열 L ≤ 4의 몬스터 피해 × earlyDmg[L − 1] · [0.2, 0.3, 0.45, 0.67] → [0.205, 0.305, 0.453, 0.673](레벨 비 ≤ 1.25) — 밸런스 게이트가 위 값으로 바꿨다)
+export function earlyHpMul(L)         // 밸런스 게이트 · 순수 — RIFT.earlyHp[L − 1] · 표 밖 · 잘못된 값은 1(monsterStats가 hpMax에 곱한다 — §5.6)
+export function earlyGaugeMulOf(L)    // 밸런스 게이트 · 순수 — RIFT.earlyGaugeMul 이 배열이면 [L − 1](표 밖 1) · 수면 L ≤ earlyGaugeTo 일 때 그 값(§5.18)
 export function earlyDmgMul(L)        // W1 수정 2 · 순수 — RIFT.earlyDmg[L − 1] · 표 밖 · 잘못된 값은 1(monsterStats가 mon.dmg에 곱한다 — §5.6)
 export function riftRow(L) {          // 순수 · 1..maxLevel · 30 위도 같은 식(NaN · Infinity 없음 — L은 정수로 자르고 [1, maxLevel])
   return { level: L, monLevel: L, ilvl: L,
@@ -2228,6 +2235,7 @@ export const RIFT_LEVELS = Array.from({ length: 30 }, (_, i) => riftRow(i + 1));
 
 - 본문의 `ITEM_GROWTH` · `GOLD_GROWTH` · `XP_GROWTH`는 `GROWTH.item` · `GROWTH.gold` · `GROWTH.xp`를 가리킨다(코드는 `GROWTH`를 import한다 — 같은 값을 다른 파일에 다시 적지 않는다). 아이템 가치 · 모든 가격 · 골드 더미가 `GROWTH.gold`, 무기 피해 · 방어도 · pow 옵션 · 감소 식의 분모가 `GROWTH.item`.
 - **첫 판 피해 경사(W1 수정 2 · NOTES-W1FIX §2.0)**: `riftRow`의 `dmgMul`(🔒 곡선 — 아래 표)은 그대로 두고, 몬스터 피해에만 `earlyDmgMul(L)`을 곱한다(`monsterStats` · §5.6) — 균열 1 · 2 · 3 · 4 = × 0.205 · 0.305 · 0.453 · 0.673(W1 수정 3 — 옛 표 0.2 · 0.3 · 0.45 · 0.67) → 실제 피해 배율 0.21 · 0.34 · 0.55 · 0.90(균열 5 = 1.46부터 표 그대로). 이 구간은 레벨당 피해 × 1.634~1.637(표의 +10%가 아니다) · 어려움 √(생명 × 피해) +36.5~36.6%/레벨 · 보상(+9.4%)과의 비 **1.2475~1.2485**(§7.14 목표 0.8~1.25 안 — 옛 표는 L1→2 · L2→3 1.2537 · L4→5 1.2505로 밖이었다 · 균열 5에서 1이 되는 기하 경사라 균열 1이 0.2022보다 작으면 넘는다 · `monsters.test`가 본다) — `earlyGaugeMul`과 같은 「첫 판들만의 예외」이고, 브리프의 「레벨당 +8~15%」에서는 벗어난다(입문 구간 — Jay가 정할 것 · NOTES-W1FIX §7). 균열석 미리보기(`previewRift`)의 `dmgMul`에는 들어 있지 않다(P11이 보이려면 `earlyDmgMul(L)`을 곱한다).
+- **밸런스 게이트(NOTES-BALANCE) — 첫 판 경사를 생명까지 · 균열 11 까지**: 몬스터 피해 🔒 `MON.dmgBase` 3.5 → 24.5(× 7) · 생명 🔒 `MON.hpBase` 19 → 36과 함께 경사를 넓혔다 — 피해 `earlyDmg`(11칸 · 레벨당 × 1.3785 · 균열 1 실제 배율 0.205 = 옛 값) · 생명 `earlyHp`(11칸 · 균열 1 × 0.45 → 레벨당 × 1.0753 · 균열 12 부터 1). 두 경사를 합친 레벨당 × 1.4822 → 어려움 √(생명 × 피해) ÷ 보상(+9.4%) 비 ≤ 1.2467(`monsters.test`). 균열 L 의 실제 피해 배율(옛 dmgBase 3.5 기준) 0.205 · 0.283 · 0.389 · 0.537 · 0.740 · 1.02 · 1.41 · 1.94 · 2.67 · 3.68 · 5.08 · (12 이상) 7 × 표 `dmgMul`. 입문 구간(브리프의 「레벨당 +8~15%」 밖)이 균열 1~4 → 1~11 로 늘었다 — Jay가 정할 것(NOTES-BALANCE). `previewRift`의 배율에는 경사가 들어 있지 않다(P11이 보이려면 곱한다) · 분석 패널 균열 표에 `earlyHpMul(L)` · `earlyDmgMul(L)` 열.
 
 | L | 몬스터 생명 배율 | 피해 배율 | 골드 · 가치 배율 | 경험치 배율 | 아이템 위력(1.10^) | 마법 · 희귀 · 전설 배율 | 챔피언/정예 속성 | 챔피언 · 정예 팩 |
 |---|---|---|---|---|---|---|---|---|
@@ -2244,7 +2252,7 @@ export const RIFT_LEVELS = Array.from({ length: 30 }, (_, i) => riftRow(i + 1));
 ### 7.4 몬스터 — `data/monsters.js` (P3 · 시드)
 
 ```js
-export const MON = { hpBase: 19, dmgBase: 3.5,  🔒  wakeCheckT: 6, maxAwake: 120, leash: 36, leashSec: 3, shieldFront: 0.5, frontDeg: 45,
+export const MON = { hpBase: 36, dmgBase: 24.5,  🔒(밸런스 게이트 · 옛 19 · 3.5)  wakeCheckT: 6, maxAwake: 120, leash: 36, leashSec: 3, shieldFront: 0.5, frontDeg: 45,
                      stopFrac: 0.8, sepPad: 0.1, sepMaxNeighbors: 6, targetingRange: 15, directChaseR: 3, linkRadius: 11, linkMinDepth: 2,
                      reachTolerance: 0.3, resCap: 0.5, threatRange: 11 };
 ```
@@ -2254,10 +2262,10 @@ export const MON = { hpBase: 19, dmgBase: 3.5,  🔒  wakeCheckT: 6, maxAwake: 1
 | 등급 | hp | dmg | xp | gauge(%) | tc | scale | stunMul | freezeMul | knockMul | flinchFrac | 기절 면역(초) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | normal | 1 | 1 | 1 | 0.25 | normal | 1.00 | 1.0 | 1.0 | 1.0 | 0.15 | 0.5 |
-| champion | 3.5 🔒 | 1.5 | 4 | 1.0 | champion | 1.15 | 0.6 | 0.7 | 0.5 | 0.30 | 1.5 |
-| elite | 7 🔒 | 1.7 | 12 | 3.0 | elite | 1.30 | 0.4 | 0.5 | 0 | null | 2.0 |
+| champion | 8 🔒(밸런스 게이트 · 옛 3.5) | 1.5 | 4 | 1.0 | champion | 1.15 | 0.6 | 0.7 | 0.5 | 0.30 | 1.5 |
+| elite | 15 🔒(밸런스 게이트 · 옛 7) | 1.7 | 12 | 3.0 | elite | 1.30 | 0.4 | 0.5 | 0 | null | 2.0 |
 | minion | 2 | 1.2 | 2 | 0.5 | minion | 1.05 | 0.7 | 0.8 | 0.5 | 0.25 | 1.0 |
-| guardian | 28 🔒 | 2.0 | 60 | 0 | guardian | 1.00 | 0.25 | 0.3 | 0 | null | 3.0 |
+| guardian | 32 🔒(밸런스 게이트 · 옛 28) | 2.0 | 60 | 0 | guardian | 1.00 | 0.25 | 0.3 | 0 | null | 3.0 |
 | split | 0.6 | 0.5 | 0.25 | 0.1 | split | 0.60 | 1.0 | 1.0 | 1.0 | 0.15 | 0.5 |
 | spawn | 1 | 1 | 0 | 0 | null | 1.00 | 1.0 | 1.0 | 1.0 | 0.15 | 0.5 |
 
@@ -2270,7 +2278,7 @@ export const MON = { hpBase: 19, dmgBase: 3.5,  🔒  wakeCheckT: 6, maxAwake: 1
 | `ghoul` | 굶주린 구울 | humanoid · melee swarm | melee | 0.45 · 1.7 | 2.6 · 8 | 1.0 | 1.0 | 1.0 | 1.0 | — | 12 | ✓ |
 | `fallen` | 타락 소인 | small · melee swarm | fallen | 0.35 · 1.1 | 5.2 · 12 | 0.8 | 0.6 | 0.6 | 0.6 | — | 12 | ✓ |
 | `fallenShaman` | 소인 주술사 | small · ranged support | shaman | 0.35 · 1.2 | 3.6 · 8 | 0.8 | 0.9 | 1.5 | 1.5 | fire 0.25 | 14 | ✗ |
-| `skeletonArcher` | 해골 궁수 | humanoid · ranged | archer | 0.40 · 1.8 | 3.2 · 8 | 0.8 | 0.8 | 1.0 | 1.0 | cold 0.25 | 14 | ✓ |
+| `skeletonArcher` | 해골 궁수 | humanoid · ranged | archer | 0.40 · 1.8 | 3.2 · 8 | 0.8 | 0.6(밸런스 게이트 · 옛 0.8) | 1.0 | 1.0 | cold 0.25 | 14 | ✓ |
 | `shieldSkeleton` | 방패 해골 | humanoid · melee | shield | 0.45 · 1.85 | 3.0 · 3.0 | 1.2 | 0.9 | 1.3 | 1.3 | cold 0.25 | 12 | ✓ |
 | `charger` | 돌격 짐승 | quadruped · melee | charger | 0.60 · 1.3 | 3.8 · 6 | 1.3 | 1.2 | 1.5 | 1.5 | — | 14 | ✓ |
 | `bloater` | 역병 덩어리 | blob · melee | bloater | 0.55 · 1.4 | 2.6 · 6 | 1.0 | 1.0 | 1.0 | 1.0 | — | 12 | ✗ |
@@ -2289,8 +2297,8 @@ export const MON = { hpBase: 19, dmgBase: 3.5,  🔒  wakeCheckT: 6, maxAwake: 1
 | skeletonArcher | `arrow` projectile | 0.60 | 0.40 | 1.8 | range 11 | 1.0 · phys | aimLine(붉은 조준선 · aimLock 0.2) | proj `{speed: 16, r: 0.2, life: 1.2, visual: 'arrow'}` · params `{keepMin: 7, keepMax: 10, backoff: 4, backoffMul: 0.3}` |
 | shieldSkeleton | `shieldBash` melee | 0.50 | 0.70 | 0 | reach 0.9 · 80° | 1.0 · phys | pose(방패 들기) | push 1.2 · params `{frontBlock: true}` |
 | charger | `gore` melee | 0.60 | 0.60 | 0 | reach 1.0 · 80° | 1.0 · phys | pose | — |
-| charger | `charge` charge | 0.90 | 0.80 | 5 | range 5~11 | 2.0 · phys | groundLine(바닥 직선 · 폭 2r · 발 구르기) | push 2.0 · escape 1.0 · params `{speed: 14, maxLen: 13, wallStun: 2.0}` |
-| bloater | `burst` explode | 1.00 | 0 | 0 | range 2.2 | 2.5 · phys | groundCircle(r 2.8 · 붉게 부풀기) | escape 2.3 · params `{r: 2.8, poolR: 1.6, poolSec: 3, poolTick: 0.5, poolMulPerSec: 0.3}` — 터지면 자신 사망(경험치 · 드랍 · 게이지 없음) · 죽으면(터지기 전 포함) 웅덩이 |
+| charger | `charge` charge | 0.90 | 0.80 | 5 | range 5~11 | 6.0 · phys(밸런스 게이트 · 옛 2.0) | groundLine(바닥 직선 · 폭 2r · 발 구르기) | push 2.0 · escape 1.0 · params `{speed: 14, maxLen: 13, wallStun: 2.0}` |
+| bloater | `burst` explode | 1.00 | 0 | 0 | range 2.2 | 7.5 · phys(밸런스 게이트 · 옛 2.5) | groundCircle(r 2.8 · 붉게 부풀기) | escape 2.3 · params `{r: 2.8, poolR: 1.6, poolSec: 3, poolTick: 0.5, poolMulPerSec: 0.3}` — 터지면 자신 사망(경험치 · 드랍 · 게이지 없음) · 죽으면(터지기 전 포함) 웅덩이 |
 | boneNest | `spawn` spawn | 0.50 | 0 | 3.5 | range 11 | — | glow(맥동) | params `{child: 'boneling', cap: 6}` |
 | boneling | `jab` melee | 0.35 | 0.50 | 0 | reach 0.6 · 70° | 1.0 · phys | pose | — |
 | ashling | `claw` melee | 0.40 | 0.50 | 0 | reach 0.7 · 80° | 1.0 · fire | pose | — |
@@ -2308,16 +2316,16 @@ export const MON = { hpBase: 19, dmgBase: 3.5,  🔒  wakeCheckT: 6, maxAwake: 1
 |---|---|---|---|---|---|---|---|---|---|---|
 | `fast` | 빠름 | speedMul 1.30 · atkSpeedMul 1.25 | — | ✓ | ✗ | — | — | 1 | 100 | P3 |
 | `tough` | 강인함 | hpMul 1.5 · immune [flinch, knock] | — | ✓ | ✗ | — | shielding | 1 | 100 | P3 |
-| `fireEnchanted` | 화염 강화 | res fire +0.3 | `{extraFire: 0.3, delay: 1.0, deathR: 3.0, deathMul: 1.2, escape: 2.5}` | ✓ | ✓(사망 폭발은 H1~H4 예외 — 플레이어가 시점을 정한다) | — | — | 1 | 90 | P3 |
-| `coldEnchanted` | 냉기 강화 | res cold +0.3 | `{chillSec: 1.5, novaEvery: 8, novaFirst: 3, novaR: 4.0, delay: 1.3, novaMul: 0.8, novaChillSec: 2.0, escape: 3.5}` | ✓(적중 감속만 · 노바는 하수인 제외) | ✓ | — | — | 1 | 90 | P3 |
+| `fireEnchanted` | 화염 강화 | res fire +0.3 | `{extraFire: 0.3, delay: 1.0, deathR: 3.0, deathMul: 3.6(밸런스 게이트 · 옛 1.2), escape: 2.5}` | ✓ | ✓(사망 폭발은 H1~H4 예외 — 플레이어가 시점을 정한다) | — | — | 1 | 90 | P3 |
+| `coldEnchanted` | 냉기 강화 | res cold +0.3 | `{chillSec: 1.5, novaEvery: 8, novaFirst: 3, novaR: 4.0, delay: 1.3, novaMul: 2.4(밸런스 게이트 · 옛 0.8), novaChillSec: 2.0, escape: 3.5}` | ✓(적중 감속만 · 노바는 하수인 제외) | ✓ | — | — | 1 | 90 | P3 |
 | `vampiric` | 흡혈 | — | `{leech: 0.5, regenPctPerSec: 0.003}`(W1 수정 · 0.01 → 0.003 — 수호자 싸움) | ✓ | ✗ | — | — | 1 | 80 | P3 |
 | `shielding` | 보호막 | — | `{every: 9, first: 4, warn: 0.5, dur: 3.0}` | ✗ | ✗ | — | tough | 3 | 70 | P3 |
 | `lightningEnchanted` | 번개 강화 | res lightning +0.3 | `{chance: 0.25, icd: 0.5, n: 3, speed: 6, r: 0.35, life: 2.0, mul: 0.5}` | ✓ | ✗(투사체) | — | — | 2 | 90 | P16 |
 | `teleporter` | 순간이동 | — | `{farDist: 8, cd: 4, minR: 2.5, maxR: 4, vanish: 0.4}` | ✗ | ✗ | ranged | — | 3 | 80 | P16 |
 | `jailer` | 감옥 | — | `{every: 7, first: 2, r: 1.2, delay: 0.8, rootSec: 1.5, range: 11, escape: 1.6}` | ✗ | ✓ | — | — | 4 | 70 | P16 |
 | `splitter` | 분열 | — | `{n: 3, spread: 1.5}`(사본 = 등급 split · 속성 없음) | ✗ | ✗ | structure | — | 2 | 70 | P16 |
-| `plague` | 역병 | — | `{every: 6, first: 2, r: 2.0, delay: 1.0, dur: 5, tick: 0.5, mulPerSec: 0.25, range: 11, escape: 2.4}` | ✗ | ✓ | — | — | 3 | 80 | P16 |
-| `mortar` | 몰타르 | — | `{minDist: 6, every: 5, first: 1.5, n: 3, spread: 2.0, r: 1.5, delay: 1.2, mul: 0.9, range: 11, escape: 1.9}` | ✗ | ✓ | melee | — | 2 | 80 | P16 |
+| `plague` | 역병 | — | `{every: 6, first: 2, r: 2.0, delay: 1.0, dur: 5, tick: 0.5, mulPerSec: 0.75(밸런스 게이트 · 옛 0.25), range: 11, escape: 2.4}` | ✗ | ✓ | — | — | 3 | 80 | P16 |
+| `mortar` | 몰타르 | — | `{minDist: 6, every: 5, first: 1.5, n: 3, spread: 2.0, r: 1.5, delay: 1.2, mul: 2.7(밸런스 게이트 · 옛 0.9), range: 11, escape: 1.9}` | ✗ | ✓ | melee | — | 2 | 80 | P16 |
 
 - `every` · `first`는 초(깬 뒤 첫 사용까지 `first` · 그 뒤 `every`). 막히면(위협 간격) 다음 틱에 다시.
 - 바닥 위협을 만드는 속성의 예고 길이는 `params.delay`, H5의 탈출 거리는 `params.escape`다(§5.9 · data 검사). 수호자에게 붙은 속성은 `mods.res`를 적용하지 않는다(§8.3) · 저항 합은 `MON.resCap`(0.5) 이하.
@@ -2327,8 +2335,8 @@ export const MON = { hpBase: 19, dmgBase: 3.5,  🔒  wakeCheckT: 6, maxAwake: 1
 
 | ID | 이름 | 템플릿 · 태그 | r · h | 속도 · 선회 | hp | dmg | 저항 | 공격 |
 |---|---|---|---|---|---|---|---|---|
-| `boneGiant` | 뼈 거인 | humanoid(거대 · 뼈) · melee | 1.30 · 4.6 | 3.2 · 2.5 | 1.1 | 1.0 | cold 0.15 | `swing` melee 예비 0.8 · 후딜 0.7 · reach 2.0 · 120° · mul 1.5 / `slam` cast 예비 1.2 · 후딜 1.0 · 쿨 7 · range 6.0 · 원뿔 r 6.5 · 100° · mul 2.5 · shake 0.5 · escape 3.2 / `spikes` cast 예비 1.4 · 후딜 0.8 · 쿨 10 · range 11 · escape 3.9 · 선 5개(플레이어 방향 ±50°를 25° 간격) · len 12 · width 1.4 · mul 1.8 |
-| `ashWitch` | 잿빛 마녀 | humanoid(긴 옷) · ranged | 0.55 · 2.2 | 4.0 · 6 | 0.9 | 1.0 | fire 0.15 | `ashBolt` projectile 예비 0.5 · 후딜 0.5 · 쿨 1.6 · range 11 · mul 1.0 · fire · proj `{speed: 11, r: 0.4, life: 1.6, visual: 'ashBolt'}` / `emberRain` cast 예비 1.2 · 후딜 0.6 · 쿨 8 · range 11 · escape 3.1 · 원 5개 r 1.8(하나는 플레이어 자리 · 넷은 2.5~3.5m 고리 위 72° 이상 떨어져) · mul 1.8 · fire / `summon` cast 예비 1.0 · 후딜 0.5 · 쿨 14 · `{child: 'ashling', n: 4, cap: 8}` |
+| `boneGiant` | 뼈 거인 | humanoid(거대 · 뼈) · melee | 1.30 · 4.6 | 3.2 · 2.5 | 1.1 | 1.0 | cold 0.15 | `swing` melee 예비 0.8 · 후딜 0.7 · reach 2.0 · 120° · mul 1.5 / `slam` cast 예비 1.2 · 후딜 1.0 · 쿨 7 · range 6.0 · 원뿔 r 6.5 · 100° · mul 7.5(밸런스 게이트 · 옛 2.5) · shake 0.5 · escape 3.2 / `spikes` cast 예비 1.4 · 후딜 0.8 · 쿨 10 · range 11 · escape 3.9 · 선 5개(플레이어 방향 ±50°를 25° 간격) · len 12 · width 1.4 · mul 5.4(밸런스 게이트 · 옛 1.8) |
+| `ashWitch` | 잿빛 마녀 | humanoid(긴 옷) · ranged | 0.55 · 2.2 | 4.0 · 6 | 0.9 | 1.0 | fire 0.15 | `ashBolt` projectile 예비 0.5 · 후딜 0.5 · 쿨 1.6 · range 11 · mul 1.0 · fire · proj `{speed: 11, r: 0.4, life: 1.6, visual: 'ashBolt'}` / `emberRain` cast 예비 1.2 · 후딜 0.6 · 쿨 8 · range 11 · escape 3.1 · 원 5개 r 1.8(하나는 플레이어 자리 · 넷은 2.5~3.5m 고리 위 72° 이상 떨어져) · mul 5.4(밸런스 게이트 · 옛 1.8) · fire / `summon` cast 예비 1.0 · 후딜 0.5 · 쿨 14 · `{child: 'ashling', n: 4, cap: 8}` |
 
 - 고유 기술의 모양은 그 공격의 `params`(W0 스캐폴드 확정 — data 검사가 읽는다): slam `{shape:'cone', r:6.5, angleDeg:100, shake:0.5}` · spikes `{shape:'line', n:5, spreadDeg:50, stepDeg:25, len:12, width:1.4, count:5}` · emberRain `{shape:'circle', n:5, r:1.8, ringMin:2.5, ringMax:3.5, minSepDeg:72, count:5}` · summon `{child:'ashling', n:4, cap:8, r:2}`.
 - 공통 params: boneGiant `{}` · ashWitch `{keepMin: 7, keepMax: 10, blinkNear: 3, blinkAfter: 1.5, blinkCd: 6, blinkDist: 6}`.
@@ -2519,7 +2527,7 @@ export const MATERIAL_DROP = { scrap: 70, dust: 25, essence: 5 };
 ```js
 export const ECON = { potionMax: 10, scrollMax: 10, recordsMax: 200, buybackMax: 10 };
 export const START = { gold: 0, potions: 5, scrolls: 3, riftUnlocked: 1, materials: { scrap: 0, dust: 0, essence: 0 } };
-export const PRICES = { sellRate: 0.15, buyMul: { normal: 1.5, magic: 1.5, rare: 2.5 }, repairBase: 4.0, potion: 15, scroll: 10, resetPerLevel: 30 };   🔒(sellRate · buyMul · repairBase · potion)
+export const PRICES = { sellRate: 0.15, buyMul: { normal: 1.5, magic: 1.5, rare: 2.5 }, repairBase: 5.0, potion: 15, scroll: 10, resetPerLevel: 30 };   🔒(sellRate · buyMul · repairBase · potion) · 밸런스 게이트: repairBase 4.0 → 5.0
 export const GAMBLE = { price: 110, slotRef: 15, mainHandValue: 24, rarity: { magic: 720, rare: 240, legendary: 30, set: 10 } };   🔒
 export const REROLL = { gold: 90, growth: 1.5, cap: 8, dustBase: 1, dustCap: 5, essenceFrom: 3 };   🔒
 export const CRAFT = { gold: 150, scrap: 20, dust: 10, essence: 0 };
@@ -2534,7 +2542,7 @@ export const SHOP = { blacksmithStock: 9, generalStock: 4, stockRarity: { magic:
 | 아이템 가치 | `round(ITEM.slotValue[slotKey] × RARITY.value[rarity] × G^(ilvl−1))` (§5.13) |
 | 판매가 | `max(1, round(value × sellRate))` · 되사기 = 판 값 그대로 |
 | 상점 구매가 | `round(value × buyMul[rarity])`(희귀 2.5 — 부위 · 옵션을 보고 골라 사는 희귀가 사냥을 앞지르지 않게 · §7.14) |
-| 수리비 | `round(Σ 장착 ITEM.slotValue[slotKey] × repairBase × G^(ilvl−1) × (durMax − dur)/durMax)` — **등급과 무관**(전설 · 세트를 낄수록 사망이 비싸지지 않게) · 사망 1회(−10%) = 장착 slotValue 합(10칸 143) × 4.0 × 0.1 = 57.2 × G^(ilvl−1) |
+| 수리비 | `round(Σ 장착 ITEM.slotValue[slotKey] × repairBase × G^(ilvl−1) × (durMax − dur)/durMax)` — **등급과 무관**(전설 · 세트를 낄수록 사망이 비싸지지 않게) · 사망 1회(−10%) = 장착 slotValue 합(10칸 143) × 4.0 × 0.1 = 71.5 × G^(ilvl−1)(밸런스 게이트 repairBase 5 · 옛 4 = 57.2) |
 | 포션 · 두루마리 | `round(potion × G^(PLc−1))` · `round(scroll × G^(PLc−1))` |
 | 도박 | `round(GAMBLE.price × slotValue / GAMBLE.slotRef × G^(PL−1))`(부위의 `ITEM.slotValue` · 주무기는 `GAMBLE.mainHandValue` 24 · 부위 평균 ≈ 110) · ilvl = PL · 부위는 고른다 · 등급 확률은 `GAMBLE.rarity`에서 그 부위 · 클래스에 전설 · 세트가 없으면 그 몫을 희귀로 내린 값(`gambleOdds(char, slot)`)을 화면에 공개 |
 | 재굴림 | 골드 `round(REROLL.gold × G^(ilvl−1) × growth^min(rerolls, cap))` + 비전 가루 `min(dustCap, dustBase + rerolls)` + 망각의 정수 `rerolls ≥ essenceFrom(3) ? 1 : 0`(깊은 재굴림 — 정수가 쓰이는 곳) |
@@ -2546,13 +2554,13 @@ export const SHOP = { blacksmithStock: 9, generalStock: 4, stockRarity: { magic:
 ### 7.11 경험치 — `data/economy.js`의 `XP` (P6 · 시드)
 
 ```js
-export const XP = { base: 5, req: { a: 1100, g: 1.15 }, reqEarly: [60, 300, 700], completeBonus: 560,  🔒   // W1 수정: [200, 500, 900] → [60, 300, 700]
+export const XP = { base: 5, req: { a: 1300, g: 1.15 }, reqEarly: [60, 300, 700], completeBonus: 560,  🔒   // 밸런스 게이트: a 1100 → 1300 · W1 수정: [200, 500, 900] → [60, 300, 700]
   diff: { penaltyFrom: 12, penaltyStep: 0.1, penaltyMin: 0.3, bonusStep: 0.1, bonusMax: 0.5 } };
 ```
 
 - 처치 경험치 = `round(XP.base × type.xp × rank.xp × riftRow(monLevel).xpMul × diffMul × (1 + xpPct))` · `diffMul` = (캐릭터 레벨 − 몬스터 레벨 = d) d > 12이면 `max(0.3, 1 − 0.1 × (d − 12))`(정상 경로의 d = 9~11은 감점 0 — 낮은 균열 파밍만 깎인다), d < 0이면 `min(1.5, 1 + 0.1 × −d)`, 그 밖 1.
 - 균열 완료 보너스 = `round(completeBonus × xpMul(L))`.
-- 레벨 n → n+1 필요량 `xpReq(n)` = n ≤ 3이면 `XP.reqEarly[n − 1]`(첫 판 안에 스킬 3점 — W1 수정: 레벨 2 ≈ 일반 12처치(첫 팩 안에 첫 스킬) · 레벨 3 ≈ 72 · 레벨 4 ≈ 212), 그 뒤 `round(1100 × 1.15^(n−1))`: 60, 300, 700, 1673, 1924, 2212, 2544, 2926, 3365, 3870, 4450, 5118, 5885, 6768, 7783, 8951, 10293, 11837, 13613, 15655, 18003, 20704, 23809, 27381, 31488, 36211, 41642, 47889, 55072 (누적: 레벨 10 = 15,704 · 레벨 30 = 412,126 — W1 수정 전 16,244 · 412,666). 캡(30) 뒤 경험치는 버린다.
+- 레벨 n → n+1 필요량 `xpReq(n)` = n ≤ 3이면 `XP.reqEarly[n − 1]`(첫 판 안에 스킬 3점 — W1 수정: 레벨 2 ≈ 일반 12처치(첫 팩 안에 첫 스킬) · 레벨 3 ≈ 72 · 레벨 4 ≈ 212), 그 뒤 `round(1300 × 1.15^(n−1))`: 60, 300, 700, 1977, 2274, 2615, 3007, 3458, 3977, 4573, 5259, 6048, 6955, 7999, 9198, 10578, 12165, 13990, 16088, 18501, 21276, 24468, 28138, 32359, 37213, 42795, 49214, 56596, 65085 (누적: 레벨 10 = 18,368 · 레벨 30 = 486,866 — 밸런스 게이트(a 1300) · a 1100 이면 15,704 · 412,126). 캡(30) 뒤 경험치는 버린다.
 
 ### 7.12 맵 · 타일셋 · 마을 — `data/mapgen.js` · `tilesets.js` · `town.js` (P4 · 시드)
 
@@ -2562,7 +2570,7 @@ export const MAPGEN = { rooms: [10, 14], roomTiles: [8, 13], bigRoomChance: 0.25
   normalPerArea: 90, normalPerRoom: [2, 5], corridorSlotMinLen: 6, slotSpacing: 6, spawnClear: 18, eliteMinDepth: 2, startRoomTiles: [8, 9] };
 // W1 확정: MAPGEN.normalMin 56 — 아래 규칙만으로는 일반 자리가 시드 100개 최소 38 · 평균 51이라 놓인 게이지가 100%를 못 넘을 수 있다(§7.14는 ~60을 가정).
 //   규칙대로 놓은 뒤 넓은 방부터 더하고(6m · 18m 유지) 모자라면 같은 줄기로 다시 만든다 — 시드 3,000개 최소 56 · 평균 ~58.
-export const PATHING = { maxNodes: 6000 };
+export const PATHING = { maxNodes: 20000 };   // 밸런스 게이트: 6000 → 20000(생성 맵 8~30m 클릭 1,800쌍의 1.6% 가 [] — 벽 너머 먼 클릭이 씹혔다 · 20000 이면 0% · p99 7.7ms)
 export const FLOW = { everySec: 0.2, recenterCells: 2, maxSteps: 100 };
 ```
 
@@ -2605,7 +2613,8 @@ export const DEFAULT_SETTINGS = { volMaster: 0.8, volSfx: 0.9, volAmbient: 0.6, 
   hideNormal: false, advancedTooltips: false, meterHud: false, screenShake: true };
 export const SETTINGS_SCHEMA = { /* 키 → {type:'number', min, max} | {type:'bool'} | {type:'enum', values} — 정화(clamp · 모르는 키 버림) */ };
 // data/bot.js (P15) — §12.1
-export const BOT = { reactSec: 0.22, reactSd: 0.06, dodgeNotice: 0.9, missClick: 0.02, missOffset: 1.0, potionAt: 0.40, kiteFrom: 4.0, kiteCount: 3,
+export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick: 0.04,   // 밸런스 게이트: 「보통 사람」(옛 0.22 · 0.06 · 0.9 · 0.02)
+  missOffset: 1.0, potionAt: 0.40, kiteFrom: 4.0, kiteCount: 3,
   lootRadius: 12, lootSafeR: 10, upMaxSec: 360, downDeaths: 2, potionsTo: 10, scrollsTo: 5, viewR: 11.4, equipMinGain: 0.005,
   priority: { fallenShaman: 5, boneNest: 4, elite: 3, champion: 2, normal: 1 }, chaseGiveUpSec: 6, townSec: { blacksmith: 20, general: 8, riftStone: 4 } };
 ```
@@ -2648,6 +2657,8 @@ export const BOT = { reactSec: 0.22, reactSd: 0.06, dodgeNotice: 0.9, missClick:
 **W1 통합 게이트 실측(받는 피해 — 위 표가 다루지 않은 쪽 · 밸런스 게이트의 첫 과제)**: 실제 구현끼리 균열 1에 들어서면 2~3초 안에 시야 2팩 + 팩 연결(8m)로 40~50마리가 깬다(팩 62 · 몬스터 ~450 · 방마다 ~5팩이 6m 간격). 시작 전사(생명 120 · 시트 DPS 7.9)는 구울 6마리 한 팩만으로도 포션 없이는 버티지 못한다(받는 피해 ≈ (6+…+1) × 2.4초 × 구울 2.65/초 ≈ 134). 간이 스크립트(서서 싸움 · 포션 40% · 레벨업마다 프리셋)로 두 클래스 × 시드 4개 = 첫 판 전부 붕괴(36~97초 · 처치 3~24) · 15분에 레벨 4~5가 돼도 붕괴 반복. 손잡이 실험: 연결 0 · 시야 × 0.75 → 그래도 전부 붕괴 / 몬스터 피해 × 0.33 → 전부 붕괴 / × 0.2 → 8판 중 6판 완료(사망 0~3). 무적이면 같은 스크립트가 균열 1을 9~13분에 끝낸다(첫 판 목표 ≤ 9분 · 스킬 없이 기본 공격만이면 15분에 게이지 78~92%). 🔒 `MON.dmgBase` · 클래스 생명 · 맵 밀도(`MAPGEN.normalMin` · 팩 크기) · 연결 반경을 봇 측정으로 함께 맞춘다(NOTES-W1).
 
 **W1 수정 실측(NOTES-W1FIX — 최종에 바뀐 🔒 값은 `TREASURE` 구슬 맞교환 · `RANKS.guardian.hp` 28 · `XP.reqEarly` 셋이다)**: 받는 피해의 총량이 회복(포션 5 · 구슬)을 크게 넘었고(실측 한 판 전사 ~10,000 · 마법사 ~6,500 — 생명 120/90), 그 절반이 몸 둘레 제한이 없는 궁수 화살이었다. 첫 수정은 🔒 `MON.dmgBase`(3.5 → 0.9)와 궁수 dmg(0.8 → 0.5)를 전역으로 낮췄는데, 검증이 균열 5 이상의 위협이 사라졌음을 실측으로 냈다(개발 캐릭터 · 해금 최고 + 3 붕괴 0/36 · 받는 피해 W1의 16~29%). **W1 수정 2**: `dmgBase` 3.5 · 궁수 0.8로 되돌리고, 첫 판 완화를 균열 레벨에 묶었다 — `RIFT.earlyDmg` [0.2, 0.3, 0.45, 0.67] → **W1 수정 3** [0.205, 0.305, 0.453, 0.673](§7.3 · 균열 5부터 × 1 · 레벨 비 ≤ 1.25). 남은 것: 🔒 `TREASURE` normal · minion의 globe ↔ none 맞교환(25 → 80 · 80 → 150 — 장비 · 골드 · 포션 · 재료의 뽑기당 확률은 그대로라 위 드랍 · 골드 · 경제 · 재료 행은 변하지 않는다) · 🔒 `RANKS.guardian.hp` 35 → **28**(위 수호자 행 · 35면 균열 1 수호자 ~90초에 사망이 몰린다) · 🔒 `XP.reqEarly`(위 경험치 행) · 궁수 · 주술사 뒷걸음 0.3 · 흡혈 재생 0.01 → 0.003 · 초반 경사(`MON.linkMinDepth` 2) · 깊은 방 파도(`MON.linkRadius` 11) · 첫 판(`earlyGaugeMul` 1.6 · 분노 8 · 지면 강타 14) · 사망 진정(§5.10). 결과(`scriptedClear` learn — 피하기 · 우선 대상 없음 · W1 수정 3 값): 균열 1 첫 판(시작 장비 · 두 클래스 × 시드 1~8) 완료 8/8 · 8/8 · 붕괴 0 · 사망 중앙 0 · 0(평균 0.75 · 0.50) · 판 길이 중앙 7.4 · 8.0분(최대 8.6) · 최저 생명 비율 중앙 0.388 · 0.394 · 25마리 이상 순간 중앙 4.5 · 3.5(시드 9~16도 완료 8/8 · 8/8 · 사망 중앙 0 · 0). 균열 5 이상(개발 캐릭터 (R, 레벨) = (5, 10) · (10, 18) · (15, 24) · 시드 1~6): 해금 최고 + 3 붕괴 7/36(W1 수정 2 6 · W1 수치 14 · 첫 수정 0 — W1 수정 3의 부활 규칙 몫 +1) · 적정 사망 평균 전사 0.67 · 0 · 0 · 받는 피해 W1의 67~117% — 남은 차이는 설계 수정(뒷걸음 · 흡혈 재생 · 분노 · 수호자 생명)의 몫이다(NOTES-W1FIX §3.3). 레벨 비(어려움 · 보상 0.8~1.25)는 균열 5~20은 그대로(1.02~1.03)이고 균열 1~5는 경사로 1.2475~1.2485다. 봇으로 다시 잴 것: 적정 레벨 사망 0.2~1.0 · 무회피 2배 · 해금 최고 + 3 붕괴 ≥ 50%(하네스로는 W1 수치로도 못 미친다 — 특히 마법사) · 시작 장비 균열 8 붕괴 ≥ 80%(하네스 8/8) · 속성 효과 ≥ 5% · 수호자 30~70초(재검증 무적 실측 전사 균열 10 · 15 = 24.3 · 23.2초 · 마법사 7.5 · 8.2초 — `guardian.hp` 28 · 분노 8 / 지면 강타 14가 각각 약 절반 · 개발 장비 몫과 섞여 있다).
+
+**밸런스 게이트(NOTES-BALANCE) — 위 표의 산수 중 낡은 줄**: 이 문단 앞의 계산은 설계 · W1 값(🔒 `MON.dmgBase` 3.5 · `hpBase` 19 · `RANKS` 챔피언 3.5 · 정예 7 · 수호자 28 · `earlyGaugeMul` 1.6 · 수리 57.2 · `XP.req.a` 1100 · `BOT.reactSec` 0.22)로 했다. 게이트가 바꾼 값(§7.1 · 7.2 · 7.3 · 7.4 · 7.5 · 7.5b · 7.10 · 7.11 · 7.12 · 7.13 의 「밸런스 게이트」 표시)은 봇 실측(`npm run measure` → `docs/MEASURE.md` · 시드 1 · 9시간 세션)이 산수를 대신한다 — 한 판 6.0 / 5.2분(전사 / 마법사) · 첫 판 완료 사망 0 · 수리/수입 14 / 13% · 분당 처치 64 / 68 · 기본 공격 2.0방 · 챔피언 팩 11.9 / 8.8초 · 정예 팩 20.4 / 17.3초 · 수호자 50.6 / 38.7초 · 적정 사망/판 0.33 / 0.54 · 무회피 1.87 / 1.92배 · 해금 + 3 붕괴 88 / 60% · 레벨 곡선 비 1.19 / 1.20. 낡은 줄: 「첫 판」(일반 처치 수는 `earlyGaugeMul` [1.5, 1.35, 1.2, 1.1] 로 · 받는 피해는 `earlyDmg` · `earlyHp` 11칸으로 — §7.3) · 「챔피언 · 정예 · 수호자」(배율 8 · 15 · 32) · 「사망 수리비」(71.5 × G^(ilvl−1) → 장착 ilvl = L−1 이면 16.0% — 실측 13~14%) · 「경험치」(a 1300 → 레벨 10 = 18,368 · 30 = 486,866) · 「레벨 비」(균열 1~11 경사 · 성장을 더한 레벨당 어려움 +36.3% · 비 ≤ 1.2467 · 균열 12~20 1.02~1.03 그대로 — 실측 직선 맞춤 1.19 · 1.20). 「진행 속도」는 봇이 9시간 세션에서 잰 것이 정본이다(시드 1: 균열 5 29 / 24분 · 균열 10 1.83 / 1.77시간 · 레벨 30 6.52 / 4.99시간 — 시드마다 흔들린다 · 4시드는 NOTES-BALANCE §2).
 
 ---
 
@@ -2698,6 +2709,7 @@ export const BOT = { reactSec: 0.22, reactSd: 0.06, dodgeNotice: 0.9, missClick:
 | `mortar` | `onAwakeTick`: 플레이어가 6m 넘게 · 11m 안이면 깬 뒤 1.5초 · 이후 5초마다 포탄 3발(플레이어 자리 + 0 · ±2m 무작위 두 발 · 각 효과 `mortar` r 1.5 · 예고 1.2 · `from` = 몬스터 자리 · mul 0.9) · 위협 간격은 세 발을 한 묶음으로 본다(H1 한 번 · H4는 `count: 3`) · `AFFIX mortarFire` |
 
 - 같은 정예의 감옥 + 역병 + 몰타르: H1(팩 1.2초 간격)이 셋을 갈라 놓고 · H2가 속박 중 · 직후 0.8초에 새 표식을 막고 · H3가 다른 표식이 진행 중일 때 감옥을 막는다 → 「묶인 채 맞는」 연쇄가 없다.
+- **W2 확정(P16)**: H3는 예고만 보므로, 감옥은 끝나지 않은 적대 지속 효과(역병 · 독 웅덩이 — 예고 중 포함)가 감옥 원(r + 플레이어 몸)과 겹치면 시작하지 않는다(`jailer.js` 안 — 없으면 웅덩이 위에서 묶인 채 틱을 맞았다). 감옥 · 역병 · 몰타르 · 잿불 비는 11m 안 **그리고 벽 시야**일 때만 시작하고, 순간이동으로 사라진 동안에는 바닥 위협을 시작하지 않는다. 번개 강화는 쓰러뜨린 적중(생명 ≤ 0 · 아직 dead 아님)에도 불꽃을 낸다. 수호자는 분열하지 않는다.
 
 ### 8.3 수호자 — 행 + `guardians/<id>.js`
 
@@ -2711,7 +2723,7 @@ export const BOT = { reactSec: 0.22, reactSd: 0.06, dodgeNotice: 0.9, missClick:
 | | `spikes` 뼈 가시 | 11m 안 · 쿨 10초 · 효과 `boneSpikes` 5개(선 len 12 · 폭 1.4 · 플레이어 방향 기준 −50 · −25 · 0 · +25 · +50° · 예고 1.4 · `cancelOnSrcDeath` · H4 `count: 5`) — 선 사이로 피한다 |
 | `ashWitch` 잿빛 마녀 | `emberRain` 잿불 비 | 11m 안 · 쿨 8초 · 효과 `emberRain` 5개(§7.5b 배치 · 예고 1.2 · H4 `count: 5`) |
 | | `summon` 재의 하수인 | 쿨 14초 · 살아 있는 하수인 < 8이면 4마리(마녀 주변 2m · rank spawn · 깨어 있게) |
-| | (이동) | 7~10m 유지 · 플레이어가 3m 안에 1.5초 있으면 6m 떨어진 걷기 가능 점으로 순간이동(쿨 6 · `AFFIX`가 아니라 `MON_ACT{actId:'blink'}`) |
+| | (이동) | 7~10m 유지 · 플레이어가 3m 안에 1.5초 있으면 6m 떨어진 걷기 가능 점으로 순간이동(쿨 6 · `MON_ACT{actId:'blink'}` + 연출용 `AFFIX teleportOut/In` · `affixId: null` — W2 확정) · **W2 확정**: 「유지」 = 10m 밖이거나 시야가 없으면 다가오고 그 안에서는 제자리(뒷걸음질하지 않는다 — 거리는 순간이동이 벌린다) · 시전은 피해로 끊기지 않는다(기절 · 빙결의 공격 취소만 · `impl.onDamaged` 없음) · 소환은 플레이어가 `MON.threatRange` 안일 때만 |
 
 ### 8.4 스킬 — 노드 행 + `SKILL_BEHAVIORS`
 
@@ -2799,6 +2811,7 @@ export const BOT = { reactSec: 0.22, reactSd: 0.06, dodgeNotice: 0.9, missClick:
 - **빛**: 맵 `lights`를 카메라 대상까지 거리로 정렬해 가까운 것만 실제 PointLight 풀(`maxLights − 1`)에 배정 · 깜빡임 = `flicker` × 잡음(실제 시간). 먼 빛은 발광 메시(촛불 · 용암 · 화로)만.
 - **포털**: 마을 `townPortal`(돌 아치 · `town.portalOpen`이면 안쪽 발광) · 균열 `rift.portals`(빛 고리 — 소용돌이 입자는 P13). **균열석**(어두운 오벨리스크 · 보랏빛 균열 발광 · `char.runs === 0`인 동안 발밑에 비적대 흰 고리 — 첫 마을에서 어디로 가는지) · **보관함**(쇠 장식 상자) · 마을 건물(상자 + 지붕 + 문 · 대장장이 모루 · 잡화상 좌판 · 도박꾼 천막 · 신비술사 탑) · 모닥불.
 - 탐색하지 않은 곳: 그리기는 하되 빛이 없어 어둡다(미니맵이 탐색을 보인다).
+- **화면 패스 확정**: 용암 빛(`EMIT.lava` — `view/world/style.js`)은 바닥 후광을 작고 옅은 주황으로(지름 2.4 · 세기 0.3) · 실제 점광원은 높이 1.4m · 주황(`lightY` · `lightColor`) — 바닥 0.3m 의 붉은 빛이 적대 표식(붉은 원)과 같은 「붉은 원반」을 만들었다(NOTES-W1 7-4). 데이터(`tilesets.js`)의 값은 그대로다.
 
 ### 9.5 캐릭터 · 몬스터 — `ActorLayer.js` (P8)
 
@@ -2821,7 +2834,7 @@ export const BOT = { reactSec: 0.22, reactSd: 0.06, dodgeNotice: 0.9, missClick:
 | leap | `air` 진행: 웅크림 0.1 → 포물선(최고 2.0m at 중간) → 착지 찌그러짐 |
 | blink | 시작 + 0.15초에 위치가 바뀐다 — 그 전후 0.1초 투명도(섬광 없음) |
 | recall | 무릎 꿇고 손에 빛(P13) |
-| dead | 0.6초에 쓰러짐 · 그대로 |
+| dead | 0.6초에 쓰러짐 · 그대로 — **화면 패스 확정**: 쓰러지는 동안 몸을 화면 가로(카메라 방위 ± π/2 중 가까운 쪽 — `deadYawOffset`)로 돌려 눕힌다(시선 방향으로 누우면 55° 카메라에서 서 있는 T자로 읽혔다) |
 
 **몬스터 템플릿 5** — 파라메트릭 로우폴리. 부위마다 `InstancedMesh` 하나(템플릿 × 부위 · 용량 `MAX_DRAWN = 160`) — **드로콜이 몬스터 수에 비례하지 않는다**(브리프 §8.7). 매 프레임 보이는 몬스터의 부위 행렬을 포즈로 계산해 넣는다.
 
@@ -2896,6 +2909,7 @@ export const BOT = { reactSec: 0.22, reactSd: 0.06, dodgeNotice: 0.9, missClick:
 - **타격**: `HIT` → 종류별 불꽃(물리 흰 주황 · 화염 주황 · 냉기 하늘색 · 번개 흰 보라) · 치명타 크게 · `MON_DIED` → 먼지 · 뼈 조각(템플릿별).
 - **포털 소용돌이** · 레벨업 금빛 기둥(플레이어 주변만 · 화면을 덮지 않는다) · 수호자 출현 예고(검은 균열 + 보라 소용돌이 2초).
 - 화질: 입자 수 × `QUALITY.particles`. 입자 · 데칼 풀 상한(입자 2,000 · 데칼 200 — 브리프 §5 「투사체 · 바닥 효과 200」).
+- **W2 확정(P13)**: 궁수 조준선(공격 행 `telegraph: 'aimLine'` · `mon.aim` · `aimLocked`면 굵게)과 시전 빛(`'glow'` · cast + aim이면 대상 자리 빛기둥)은 P13이 상태로 그린다(P8은 그리지 않는다). 입자 상한 2,000 = 시뮬 입자(가산 1,100 + 먼지 300) + 프레임 스프라이트(오라 · 상태 · 포털 · 후광) 600 · 데칼 200 = 상태 효과 + 순간 표식 합. 몰타르 · 잿불 비 낙하체는 효과의 `from`이 있을 때만(없으면 바닥 표식만). 순간 연출은 이벤트 + 상태 대체 경로(놓친 `EFFECT_HIT` · `ACTION_HIT`을 효과 ID · `player.actId`로 한 번 세운다).
 
 ### 9.8 연출 ID 목록 (효과 `kind` · 투사체 `visual` — 만드는 쪽 / 그리는 쪽 P13)
 
@@ -2955,6 +2969,7 @@ export const BOT = { reactSec: 0.22, reactSd: 0.06, dodgeNotice: 0.9, missClick:
 - 동시 발음 상한 32 · 종류별 상한(피격 6 · 사망 6 · 발사 6 · 예고 4) · 같은 종류 30ms 안 재발음은 합친다.
 - 지속음: 회오리(`player.channel`) · 귀환 시전(`player.recall`) · 환경음(마을 모닥불 `townFire` · 묘지 바람 `cryptWind` · 동굴 용암 `cavernLava` — `state.scene` · `rift.tileset`). 탭 숨김 · 일시정지 · 판 끝(장면 전환)에서 정리(QUALITY §5).
 - 소리 목록(§9.9의 열 + UI 클릭 · 패널 열기/닫기 · 거래 · 실패음).
+- **W2 확정(P14)**: UI 버스 볼륨 = `volSfx × MIX.ui`(설정에 UI 볼륨이 없다). 일시정지 둘 — `setPaused(true)`(탭 숨김) = 모든 소리를 끊고 suspend · `PAUSED{menu|modal|blur|debug|context}` = 전투 지속음만 멈추고 환경음 × 0.35(UI · 거래 · 실패음은 난다). 0.06초 안 4개를 넘는 몰림은 그 뒤 소리를 줄인다(우선순위 5 — 고유 예고 · 정예 경보 · 전설/세트 종 · 레벨업 · 사망 · 수호자는 제외). 일반 버튼 클릭 이벤트는 없다(딸깍은 `PANEL_OPENED/CLOSED` · `BAG` · `SKILLS` · `SETTINGS_CHANGED` · `TRADE` · 실패음으로).
 
 ---
 
@@ -2988,6 +3003,7 @@ export class UIRoot {
 - **공통 위젯**(`ui/widgets.js` · P10): `panelFrame(titleKey)` · `gridNav(el, cols, rows, onPick)`(방향키 · Enter · 포커스 고리) · `listNav(el, onPick)` · `tabs(el, keys)`(`BracketLeft` · `BracketRight`) · `button(labelKey, onClick, hotkey)` · `bar(el)` · `confirm(textKey, params) → Promise<boolean>`(confirm 패널). P11 · P12는 이것만 써서 같은 조작감을 낸다. 가방 격자는 P11 내부 `pnlBagGrid.js`(gridNav 위 — 인벤토리 · 대장장이 · 잡화상 · 보관함 · 신비술사가 같이 쓴다).
 - **문면**: `t(key, params)`(`ui/i18n.js`) 하나. 화면에 문자열 키가 그대로 나오면 실패(§10.8).
 - 1280×720 · 1920×1080에서 겹침 · 잘림 없음(패널 최대 폭 1100px · 높이 640px · 그 안에서 스크롤).
+- **W2 확정(P10 · P11 · P12)**: `gridNav(el, cols, rows, onPick, opts?)` · `listNav(el, onPick, opts?)`의 선택 인자 `opts = {onFocus(i), onEdge(dir) → boolean(true면 먹음 — §10.5-8의 영역 넘기기), wrap, start}` · 반환 `{handleKey, focus(i, silent?), index, blur, refresh, setSize, active, destroy}` · `tabs(el, keys, onChange?)` → `{select, index, handleKey, destroy}` · `button(labelKey, onClick, hotkey?, params?)`(DOM 포커스를 받지 않는다) · `bar(host?)` → `{el, fill, set(v, text?)}` · `el(tag, cls, text)`. 맨 위 패널이 먹지 않은 keydown은 UIRoot가 그 패널 안의 ① 탭 ② 가장 최근에 쓴 활성 nav ③ `data-hotkey`가 그 `event.code`인 보이는 버튼에 넘긴다. UIRoot에 더한 것: `isOpen(id)` · `respawnFromPanel()` · `botOn`(읽기) · `minimap.tiles`(큰 지도와 공유). `INTERACT` → 상점 · 보관함 · 균열석 패널은 **UIRoot가 연다**(args `{from:'interact', object}` · 봇이 켜져 있으면 열지 않는다 — P11 패널은 구독하지 않는다). 계측 HUD는 UIRoot가 `createMeterHud({root: HUD 왼쪽 자리, sim, bus, settings, actions, t, ui, widgets})`로 만들고 매 프레임 `setVisible(settings.meterHud && HUD 보임)` · `update(state, dtReal)`를 부른다.
 
 ### 10.2 패널 목록
 
@@ -3018,13 +3034,14 @@ export class UIRoot {
 - 모든 거래 패널은 **전 · 후 수치를 나란히** 보인다(골드 · 재료 · 시트 DPS · 생명 · 방어 · 저항 — QUALITY §3). 패널을 연 채 명령을 부르고, 결과 `{ok:false}`면 `t('reason.' + reason, params)`를 패널 안에 보인다.
 - **봇이 켜져 있는 동안**(`BOT{on:true}`) ui는 `INTERACT` · `HINT` · `PLAYER_DIED` · `RIFT_COMPLETE`로 패널을 열지 않는다(봇이 모달에 막히지 않게 — §11.13) · 봇을 끄면 상태에 맞는 패널(사망 · 완료)을 연다.
 - **안내 큐**: `PLAYER_DIED`부터 다음 `PLAYER_SPAWNED{reason:'portal'}`까지 받은 `HINT`는 큐에 두었다가 그 뒤 비모달 안내로 낸다(재도전 경로에 카드가 끼지 않는다 — 키 2번 · QUALITY §3).
+- **W2 확정**: 새 캐릭터 덮어쓰기 확인은 **패널이** 한 번 받는다(`account.chars[slot]`이 차 있으면 confirm → `actions.newChar({slot, cls, name, confirmed:true})`) · app은 확인을 다시 묻지 않고 저장소에 `char:<slot>` 키가 있으면 백업만 한다. 사망 패널의 Escape는 패널을 닫지 않고 일시정지를 위에 연다(쓰러진 채 패널이 없는 상태 금지). Enter 버퍼 둘: ① 쓰러진 뒤 사망 패널이 뜨기 전의 Enter → 패널이 뜨는 틱에 `actions.respawn()`(겹쳐 보는 패널보다 먼저) ② 전환 막(FADE)이 걷히는 동안의 Enter → 막이 걷힌 뒤 복귀 안내가 떠 있으면 `actions.returnToRift()`(유효 1.2초 · 실제 시간). 봇이 켜져 있으면 모달 안내(town · controls)도 비모달 꼴로 내고 본 것으로 적는다. 막 · 알림 · 배너 · 피해 숫자는 `dtReal`(디버그 step이면 막과 Enter 버퍼만 벽시계)로 흐른다 — `__game.step` 정지 화면에서 막의 걷힘은 실제 시간이 지나야 끝난다(헤드리스 흐름 검사는 전환 뒤 실제 시간을 기다린다).
 
 ### 10.3 HUD (P10 · HTML/CSS · 한국어)
 
 | 자리 | 요소 | 읽는 것 |
 |---|---|---|
 | 하단 중앙 왼쪽 | **생명 구슬** · 보호막 겹 · 저생명 맥동(섬광 아님) · 포션 수(Q) + 쿨다운 부채 | `player.life/lifeMax` · `shield` · `lowLife` · `char.potions` · `potionReadyAt` |
-| 하단 중앙 | **스킬 바** 6칸: [좌클릭 기본] [우클릭] [1] [2] [3] [4] — 아이콘(이름 첫 글자 + 갈래 색) · 키 표시 · 쿨다운 부채 · 자원 부족이면 흐림 · 빈 칸 점선 | `char.skills.bar` · `skillReady` |
+| 하단 중앙 | **스킬 바** 6칸: [좌클릭 기본] [우클릭] [1] [2] [3] [4] — 아이콘(이름 두 글자 + 갈래 색 — **화면 패스 확정** `skillGlyph`: 여러 낱말이면 낱말마다 첫 글자 · 한 낱말이면 앞 두 글자 · 첫 글자만이면 「지면 강타 · 지진」이 겹쳤다) · 키 표시 · 쿨다운 부채 · 자원 부족이면 흐림 · 빈 칸 점선 | `char.skills.bar` · `skillReady` |
 | 하단 중앙 오른쪽 | **자원 구슬**(분노 붉은 주황 · 마나 파랑) · 두루마리 수(T) | `resource/resourceMax` · `char.scrolls` |
 | 하단 끝 | **경험치 바**(전체 폭 · 레벨 숫자 · 캡이면 「최대」) · 스킬 포인트가 있으면 「S — 스킬」 표시 | `char.xp` · `xpReq` · `pointsFree` |
 | 생명 구슬 위 | 버프 · 상태 아이콘(전투 함성 · 마력 보호막 · 감속 · 속박 · 부서진 장비 경고) | `player.buffs` · `st` · `stats.broken` |
@@ -3093,6 +3110,7 @@ export class UIRoot {
 | 봇 | 「봇 자동 사냥」 켬/끔(`actions.setBot` = `__game.setBot`) · 전략(basic · noDodge · challenge) · 프리셋 · 지금 상태(봇 로그 마지막 10줄) | 켜면 패널을 닫고 관전 |
 
 - **계측 HUD**(`meterHud.js` · 설정 `meterHud`): 왼쪽 작은 표 — DPS(최근 5초) · 받은 피해/초 · 분당 처치 · 시간당 경험치 · 시간당 골드 · 장비(등급별 이번 판) · 균열 경과 · 게이지 속도(%/분) · 동시에 노리는 수. `meterView`(P2)를 0.25초마다 읽는다.
+- **W2 확정(P12)**: 봇 탭의 「봇 로그 마지막 10줄」 = 봇이 켜져 있는 동안의 공개 이벤트(BOT · RIFT_OPENED · RIFT_COMPLETE · RIFT_COLLAPSE · PLAYER_DIED · LEVEL_UP · UNLOCK · 마을을 떠날 때 TRADE · EQUIPPED · GOLD 한 줄)로 쓴 관전 기록이다(ui는 봇 인스턴스를 읽지 못한다 — §2.1). 불운 보정 켬의 이론값 = 불운 수 사슬의 정상 분포로 `rarityDist(blp = n)`을 섞은 값(수호자는 처치 단위 사슬) · 판정 색 = |상대 오차| ≤ 3% 또는 |z| < 4 · 이론 1% 미만 칸은 흐리게. 표 보기의 열 이름 = 데이터 필드 이름 그대로. 패널을 닫으면 굴리던 시뮬레이터를 멈춘다(부분 결과는 남는다). 단축키 `PANEL_KEYS.analytics`(§11.5).
 
 ---
 
@@ -3152,6 +3170,7 @@ loop.start()  →  첫 프레임 렌더 직후 markReady()                 // §
 
 - `TRAVEL_REQUEST` → 입력 에지 비움 → `FADE{out, f}` → f초 뒤 `sim.commitTravel()`(맵 생성이 막 아래에서) → `FADE{in, f}` — `f` = 0.3초(reason `respawn`만 0.2초 — 재도전 2초 안 §5.10) → 막이 걷힌 뒤 1틱 에지 버림(§10.5-6). 전환 중 step 없음. 탭이 숨어 있으면 바로 commit(타이머가 멈추지 않게 루프의 실제 시간으로 잰다).
 - 첫 균열 입장의 셰이더 컴파일은 막 아래에서 `rc.renderer.compile(scene, camera)`로 끝낸다(QUALITY §4).
+- **W2 확정(P9)**: 막 아래에서 `commitTravel` **직전에** `ui.closeAll('code')`(사망 · 완료 · 상점 · 균열석 패널이 새 장면에 남지 않게 — commit이 낸 `HINT` 카드는 그 뒤에 열린다). 막이 걷히는 중에 새 `TRAVEL_REQUEST`가 오면(부활 막 아래에서 미리 누른 「Enter — 복귀」) 막을 다시 내리고 그 끝에서 commit한다 · 막 없이 남은 `pendingTravel`은 다음 프레임에 막을 내린다.
 
 ### 11.5 입력 — `input.js` · `data/keybinds.js`
 
@@ -3160,7 +3179,8 @@ export const KEYBINDS = { skill: ['Digit1', 'Digit2', 'Digit3', 'Digit4'], stand
   labels: ['AltLeft', 'AltRight'], inventory: 'KeyI', skills: 'KeyS', character: 'KeyC', map: 'Tab', analytics: 'Backquote', pause: 'Escape',
   confirm: ['Enter', 'NumpadEnter', 'Space'], up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', tabPrev: 'BracketLeft', tabNext: 'BracketRight' };
 export const PANEL_KEYS = { inventory: { sort: 'KeyZ', sell: 'KeyX', sellAll: 'KeyV', salvage: 'KeyD', stash: 'KeyF', lock: 'KeyL', area: 'KeyE' }, blacksmith: { repair: 'KeyR' },
-  skills: { bindRmb: 'KeyR' }, general: { more: 'Equal', less: 'Minus' } };
+  skills: { bindRmb: 'KeyR' }, general: { more: 'Equal', less: 'Minus' },
+  analytics: { cancel: 'KeyX', json: 'KeyJ', csv: 'KeyC' } };   // W2 확정 — analytics(P12의 시뮬레이터 취소 · 내려받기)
 export const MOUSE = { move: 0, skill0: 2 };   // event.button
 ```
 
@@ -3195,7 +3215,7 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 | `?bot=1` | 봇 켬(`?strategy=basic\|noDodge\|challenge`) |
 | `?analytics=1` | 분석 패널을 연다 |
 
-`?panel` · `?analytics`만 있으면 `dev`가 아니다(세이브를 쓴다). 그 밖의 쿼리가 하나라도 있으면 `dev`. README 첫 화면 「바로 해 보기」(P9): `/?class=warrior&level=18&rift=10` · `/?class=mage&level=20&rift=12&preset=1` · `/?fixture=riftAffixes` · `/?fixture=riftLoot` · `/?class=warrior&level=24&rift=18&bot=1` · `/?analytics=1`.
+`?panel` · `?analytics`만 있으면 `dev`가 아니다(세이브를 쓴다). 그 밖의 쿼리가 하나라도 있으면 `dev`. **W2 확정(P9)**: 캐릭터 상태가 필요한 패널(상점 · 보관함 · 균열석 · 인벤토리 · 스킬 · 캐릭터 · 사망 · 완료 · 지도)을 `?panel`로만 주면 고정 상태(`PANEL_FIXTURE` — `src/app/query.js`)를 띄우고 그때만 `dev`(고정 상태 캐릭터가 실제 세이브 칸에 쓰이지 않게) · 타이틀 · 설정 · 도움말 · 분석은 보통 세션. 모르는 쿼리 키는 `dev`로 바꾸지 않는다. `?class` 단독은 `createCharacter`(시작 장비) · `?level` 또는 `?rift`가 있으면 `makeDevCharacter` · `?scene=town`이면 `?rift`가 있어도 마을(해금만 n). README 첫 화면 「바로 해 보기」(P9): `/?class=warrior&level=18&rift=10` · `/?class=mage&level=20&rift=12&preset=1` · `/?fixture=riftAffixes` · `/?fixture=riftLoot` · `/?class=warrior&level=24&rift=18&bot=1` · `/?analytics=1`.
 
 ### 11.8 디버그 API — `window.__game` (`debugApi.js`)
 
@@ -3219,6 +3239,8 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 | `hash()` | `hashState(state)` |
 | `memory()` | `{rc: rc.stats(), dom: document.querySelectorAll('*').length, listeners: bus.count(), audio: audio.stats()}` |
 | `stats()` | `sim.getStats()` |
+
+- **W2 확정(P9)**: 더한 것 — `sim`(지금 GameSim) · `actions`(ui와 같은 actions — 화면 확인 스크립트가 타이틀 · 새 캐릭터 · 부활을 ui와 같은 길로). `step(n)`은 전환 막이 진행 중이면 그 틱만큼 막만 진행하고(그동안 sim은 step하지 않는다) 봇이 켜져 있으면 봇 입력을 쓴다 · 모달 패널이 열려 있어도 step한다(디버그 — 실제 루프는 §11.3대로 멈춘다).
 
 ### 11.9 고정 상태 — `debug/fixtures.js` (P0 완성 · `?fixture=<id>` · `__game.loadFixture`)
 
@@ -3273,6 +3295,7 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 - 봇이 켜져 있으면 루프는 매 틱 `input = bot.frame()`(사람의 입력과 에지는 버린다) → `sim.step(input)` → `bot.afterStep()`을 돈다. `autoCommit: false`라 afterStep은 `commitTravel`을 부르지 않고 app의 전환 막(§11.4)이 commit한다(두 번 commit하지 않는다).
 - 봇이 켜져 있는 동안 ui는 `INTERACT` · `HINT` · `PLAYER_DIED` · `RIFT_COMPLETE`로 패널을 열지 않는다(§10.2) · step 조건은 「마을이면 `ui.anyOpen()`」을 보지 않는다 — 사람이 연 일시정지 · 분석 패널(모달)만 멈춘다. 봇은 사망하면 `sim.respawn()` → 마을에서 `sim.returnToRift()`를 직접 부른다(사람의 Enter와 같다) · 거래는 `INTERACT`를 받은 뒤 명령으로.
 - 끄면 `BOT{on:false}` · 그 틱부터 사람 입력 · ui가 상태에 맞는 패널(사망 · 완료)을 연다.
+- **W2 확정(P9)**: 봇이 켜져 있으면 창 포커스를 잃어도 일시정지 패널을 띄우지 않고 멈추지 않는다(관전 중 다른 창을 눌러도 돈다) · 탭 숨김은 멈춘다. 봇이 켜져 있어도 멈추게 하는 모달 = `BOT_HALT_PANELS`(pause · settings · help · confirm · analytics · 타이틀 계열 — `src/app/screens.js`).
 
 ---
 
@@ -3282,9 +3305,9 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 
 - **사람처럼**: 매 틱 `InputFrame` 하나(커서 = 노리는 월드 점 · hover = 노리는 대상 — sim의 대상 검사 §5.2-1을 통과해야 한다). 마을 거래는 NPC 앞까지 걸어가 `INTERACT`를 받은 뒤에만 그 상점의 명령을 부른다(사람이 패널을 연 것과 같다). 전환은 `pendingTravel`이 서면 `commitTravel()`(`autoCommit` — 브라우저에서는 app의 막이 한다 · §11.13).
 - **보는 것**: 플레이어에서 `viewR`(11.4m — 기본 카메라 화면에 보이는 거리 §9.3 · 사람보다 많이 보지 않는다) 안의 몬스터(위치 · 등급 · 속성 · 생명 비율 · `act` · `aim` · `aimLocked`) · 효과(모양 · `start` · `hitAt` · `hostile`) · 투사체 · 드랍 · 포털 · 탐색한 타일 · 맵의 방/통로 배치(미니맵 · 큰 지도로 보이는 것 — 몬스터 배치는 아니다) · 자기 시트 · 데이터 표. **보지 않는 것**: 몬스터의 `ax`(훅 타이머) · `readyAt` · 잠든 팩 위치 · 난수 상태.
-- **반응 지연**: 새 자극(적대 예고 시작 · 생명 하락 · 새 대상)에 대한 결정은 `react ~ N(reactSec 0.22, reactSd 0.06)`을 [0.1, 0.4]로 자른 뒤에 한다(틱으로).
-- **실수**: 클릭의 `missClick`(2%)은 커서를 1m 안에서 흐트린다 · 적대 예고를 알아챌 확률 `dodgeNotice`(0.9 · 무회피 전략 0).
-- **피하기**: 알아챈 적대 예고가 플레이어 자리(+0.5m 여유)를 덮고 `hitAt − 지금 ≤ 걸어 나가는 시간 + 0.2초`면 — 12방향 × 2~5m 표본 중 걷기 가능하고 진행 중인 모든 적대 예고 밖이며 대상에 가까운 점으로 이동(좌클릭 땅). 걸어서 못 나가면 이동 스킬(도약 · 순간이동 · 돌진)을 그 점으로.
+- **반응 지연**: 새 자극(적대 예고 시작 · 생명 하락 · 새 대상)에 대한 결정은 `react ~ N(reactSec 0.30, reactSd 0.08)`을 [0.1, 0.5]로 자른 뒤에 한다(틱으로 · 밸런스 게이트 「보통 사람」 — 옛 0.22 · 0.06 · [0.1, 0.4]).
+- **실수**: 클릭의 `missClick`(4% — 밸런스 게이트 · 옛 2%)은 커서를 1m 안에서 흐트린다 · 적대 예고를 알아챌 확률 `dodgeNotice`(0.85 — 밸런스 게이트 · 옛 0.9 · 무회피 전략 0) — 알아챔은 **공격 한 번(출처 · 시작 틱이 같은 예고 묶음)에 한 번** 굴린다(잿불 비 원 다섯을 따로 굴리면 다섯 중 하나는 늘 놓쳤다).
+- **피하기**: 알아챈 적대 예고가 플레이어 자리(+0.5m 여유)를 덮고 `hitAt − 지금 ≤ 걸어 나가는 시간 + 0.2초 + 자기 동작의 남은 잠김 + dodgeLead 0.8초`면 — 16방향 × 1~7m 표본 중 걷기 가능하고(직선으로 닿고) 진행 중인 모든 적대 예고 밖(몸 + 0.3m · 그런 점이 없으면 몸만)이며 **정예 · 챔피언 · 수호자 · 구조물의 몸을 지나지 않고 · 지금 서 있지 않은 다른 예고를 가로지르지 않는** 점 중 대상에 가까운 점으로 이동(좌클릭 땅). 걸어서 못 나가면 이동 스킬(도약 · 순간이동 · 돌진)을 그 점으로. (밸런스 게이트 — 옛 「12방향 × 2~5m · 걸어 나가는 시간 + 0.2초」는 그 사이 새 공격의 잠김에 걸려 감옥 70% · 화염 강화 폭발 55~100% 를 맞았다 · 수치는 `BOT_RULES.dodge*`.)
 - **대상**: 점수 = `priority[종류 또는 등급] / 거리` (주술사 5 · 둥지 4 · 정예 3 · 챔피언 2 · 일반 1) · 대상이 죽거나 12m 넘게 멀어지거나 `chaseGiveUpSec`(6초) 동안 못 때리면 다시 고른다.
 - **스킬 — 가능한 한 모든 수단**: 바의 스킬을 **동작(behavior)별 사용 규칙**으로 쓴다(노드 ID가 아니라 — 무작위 배분 빌드도 같은 규칙으로 돈다):
 
@@ -3312,6 +3335,8 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 - **마을 정비**: 대장장이 → 가방 전부 팔기(`sellMany` · 장착 후보로 남길 것 없음) → 일괄 수리 → 잡화상 → 포션 `potionsTo`(10) · 두루마리 `scrollsTo`(5)까지 → 스킬(프리셋 순서대로 남은 포인트) → 균열석 → 레벨 선택 → 열기. 도박 · 재굴림 · 제작 · 보관함은 쓰지 않는다(측정의 한계 — §12.6). 상점마다 명령 뒤 `BOT.townSec`(대장장이 20 · 잡화상 8 · 균열석 4초)만큼 마을에서 서서 step한다(사람이 패널을 보는 시간의 모델 — `playSec`에 들어간다).
 - **레벨 선택**(전략): `basic` — 첫 판 1 · 직전 판이 완료 · 사망 0 · `timeSec ≤ upMaxSec`(360)이면 +1(해금 안에서) · 사망 ≥ `downDeaths`(2) 또는 붕괴면 −1(최소 1) · 그 밖은 같은 레벨 / `noDodge` — basic과 같고 피하지 않는다 / `challenge` — 늘 해금된 최고. 「적정 레벨」 = basic이 고르는 레벨.
 - **결정성**: 봇의 난수는 자기 `{s}`(생성자의 seed) — sim의 줄기를 쓰지 않는다.
+- **W2 확정(P15)**: 마법사 카이팅 = 몰려들면(근접 종 `kiteCount` 이상이 `kiteFrom` 안) **한 번** `kiteSec`(0.5초) 물러서고 그 자리에서 싸운다 · 몰림이 `kiteRearmSec`(1초) 풀린 뒤에야 다시 · 최소 간격 `kiteGapSec`(1.5초) · 보이는 잠든 몬스터 14m 안으로는 물러서지 않는다(문자 그대로 매번 물러서면 화력을 잃었다 — 균열 1 7.3~9.2분 → 5.0~6.5분). 깨어 있는 몬스터가 화면에서 사라진 뒤 `fightMemorySec`(4초) 동안 마지막으로 본 자리로 돌아선다. 봇은 자기 플레이어의 `readyAt` · `potionReadyAt` · `actEnd`(HUD 쿨다운 · 자기 동작)와 미니맵에 보이는 장비 드랍(40m)을 읽는다. 수치는 `BOT_RULES`(`data/bot.js`).
+- **밸런스 게이트 확정(NOTES-BALANCE)**: 「보통 사람」 설정(위 반응 · 실수 · 알아챔)이 측정 기준이다. 가방이 차도 수호자 단계에서는 귀환하지 않는다(원거리 마법사가 `lootSafeR` 밖에서 보스와 싸우다 귀환했다). 화면 밖 장비(미니맵 · `lootMemoryR` 40m)는 쫓던 것이면 `lootMemoryPad`(8m) 더 멀어도 놓지 않고, 잠깐 다른 일을 해도(`lootTryGapSec` 2초 안) 쫓은 시간을 이어 세어 `lootGiveUpSec` 뒤 포기한다(40m 경계에서 줍기 ↔ 탐색이 틱마다 뒤집혀 30초 ~ 30분 제자리에서 떨었다 — 세션이 끊겼다 · `bot.test`). 나가는 포털이 `exitClickR`(8m) 밖이면 탐색과 같은 타일 경유점으로 걷고 안에서 누른다(완료 뒤 먼 포털을 직접 클릭하면 경로 상한에 걸려 [] → 봇이 그 자리에 섰다 · §7.12 `PATHING.maxNodes` 20000 과 함께). 조준선(궁수 · 주술사 화살)과 날아오는 투사체를 피하는 규칙은 넣었다가 뺐다 — 사람처럼 옆걸음을 치게 했더니 싸움을 끊어 첫 판이 길어지고 사망이 늘었다(실측 첫 판 두 클래스 × 시드 12: 투사체 피하기를 켜면 완료 21/24 · 최대 20분 → 끄면 24/24 · 최대 10.3분). 봇은 투사체를 피하지 않는다(측정의 한계 §12.6).
 
 ### 12.2 파일별 테스트 (패키지마다 자기 파일 — `node --test`)
 
@@ -3329,8 +3354,8 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 | `effects.test.js` | P2 | 예고 → 판정 틱 · spec null(표시 전용)은 판정 없음 · tickSpec · 첫 지속 판정 = hitAt + tickT · 출처 사망 시 취소 규칙(역병 덩어리는 한 번만 맞힌다 · 돌진 선은 피해 0) · 위협 간격 H1~H4(감옥 + 역병 + 몰타르 동시 시도 → 묶인 채 맞는 판정 0) · 투사체 벽 · 관통 · 튕김 · 폭발 |
 | `drops.test.js` | P2 | 흩뿌림(걷기 가능 · 간격) · 자동 줍기 반경 · 포션 상한 · 가방 가득 → 드랍 남음 + `PICKUP_FAIL` · 업그레이드 집계 · 골드 음수 없음 |
 | `rift.test.js` | P2 | 게이지 → 수호자 예고 → 출현 · 완료 → 요약 · 해금 +1/+2 · 사망 → 생명 −1 · 0에서 사망 → 붕괴 · 부활 → 마을 · 복귀 → `returnPos`/`checkpoint` · 도착 보호 · 귀환 포털 · 같은 틱 충돌 §5.16 1~8 · **마을에 다녀와도 예고 · 공격 · 속성 주기 · 시체 시간이 멈춰 있다**(shiftTicks) · complete 단계 사망은 lives를 깎지 않는다 · 반복 중 제거 0(표시 → removeMarked) · (W1 수정 3) 사망한 틱에 플레이어 투사체 · 효과 · 화상 · 감전 지움 · (W1 수정 4) 출현 예고 중 사망 → `settleOnRespawn`이 수호자를 잠든 채 세우고 예고 효과를 끝낸다(원래 출현 시각에 다시 세우지 않는다) |
-| `gameSim.test.js` | P2 | 틱 순서 · 재진입 안전 플러시 · 명령의 Result · `pendingTravel` 동안 step · `commitTravel` 전부 · `debugLoadState` · 마을/균열 왕복 상태 보존 · newCharacter/loadCharacter 뒤 생명 가득 · 첫 마을 재고 있음 · `unloadCharacter` · 균열 장면이면 ctx.flow가 늘 있다 |
-| `balance.test.js` | W1 수정 | 시작 캐릭터 두 클래스가 균열 1 첫 판을 완료(사망 ≤ 1 · 9분 안 · 최저 생명 < 60% · 시드 6 · 7 — 수호자 뼈 거인 · `scriptedClear` learn) · 사망 → 부활 → 복귀(강제 사망 전사 5 · 마법사 3 · 마법사 7 떼 12(날아가는 화살) · 자연 사망 개발 캐릭터 균열 8 마법사 9(두 번) · 12 · 전사 9): 그 틱에 진정 · (W1 수정 3) 플레이어 투사체 · 효과 · 화상 · 감전 없음 · 부활로 떠날 때 `rift.homes`로 · 복귀 뒤 3초 동안 깬 팩 0 · 복귀 지점 aggro 안에 깨어 있는 몬스터 0 · (W1 수정 3) 수호자 단계 사망(마법사 10): 복귀 지점은 수호자 시야 밖 · 생명 그대로 · 다가가면 다시 깬다 · (W1 수정 4) 출현 예고 중 사망 → 그 안에 부활(마법사 시작 캐릭터 시드 21 · 균열 1 · 게이지 100% 20틱 뒤 · 9틱 뒤 부활): 수호자는 부활 commit에서 잠든 채 · 생명 가득 · 복귀 3초 동안 aggro 안에 깨어 있는 몬스터 0 · 복귀 지점은 그 시야 밖 · 다가가면 깬다 · (W1 수정 2) 개발 캐릭터(L10 · 장비 ilvl 5)가 균열 8(해금 최고 + 3)에서 피하기 없이 2번 이상 쓰러진다 · 시드 3(뼈 거인) 첫 판 사망 ≤ 2(민감도) — 첫 판 완화(`RIFT.earlyDmg`)가 균열 5 이상으로 새지 않는다(NOTES-W1FIX) |
+| `gameSim.test.js` | P2 | 틱 순서 · 재진입 안전 플러시 · 명령의 Result · `pendingTravel` 동안 step · `commitTravel` 전부 · `debugLoadState` · 마을/균열 왕복 상태 보존 · newCharacter/loadCharacter 뒤 생명 가득 · 첫 마을 재고 있음 · `unloadCharacter` · 균열 장면이면 ctx.flow가 늘 있다 · (밸런스 게이트) 완료 마무리 전에 귀환해도 요약 · 해금이 남는다 |
+| `balance.test.js` | W1 수정 · 밸런스 게이트 | (밸런스 게이트) **basic 봇**이 시작 캐릭터 두 클래스로 균열 1 첫 판을 완료(사망 ≤ 1 · 9분 안 · 시드 6 · 7 — 브리프 「처음 성공까지」) · `scriptedClear` learn(피하기 없음)은 느슨하게(완료 · 사망 ≤ 2 · 12분 안 · 최저 생명 < 60%) · 강제 · 자연 사망 시나리오의 개발 캐릭터는 균열 10(수호자 단계 사망은 마법사 균열 14) — 몬스터 피해 × 7 뒤에도 같은 경로를 탄다 · (W1 수정) 시작 캐릭터 두 클래스가 균열 1 첫 판을 완료(사망 ≤ 1 · 9분 안 · 최저 생명 < 60% · 시드 6 · 7 — 수호자 뼈 거인 · `scriptedClear` learn) · 사망 → 부활 → 복귀(강제 사망 전사 5 · 마법사 3 · 마법사 7 떼 12(날아가는 화살) · 자연 사망 개발 캐릭터 균열 8 마법사 9(두 번) · 12 · 전사 9): 그 틱에 진정 · (W1 수정 3) 플레이어 투사체 · 효과 · 화상 · 감전 없음 · 부활로 떠날 때 `rift.homes`로 · 복귀 뒤 3초 동안 깬 팩 0 · 복귀 지점 aggro 안에 깨어 있는 몬스터 0 · (W1 수정 3) 수호자 단계 사망(마법사 10): 복귀 지점은 수호자 시야 밖 · 생명 그대로 · 다가가면 다시 깬다 · (W1 수정 4) 출현 예고 중 사망 → 그 안에 부활(마법사 시작 캐릭터 시드 21 · 균열 1 · 게이지 100% 20틱 뒤 · 9틱 뒤 부활): 수호자는 부활 commit에서 잠든 채 · 생명 가득 · 복귀 3초 동안 aggro 안에 깨어 있는 몬스터 0 · 복귀 지점은 그 시야 밖 · 다가가면 깬다 · (W1 수정 2) 개발 캐릭터(L10 · 장비 ilvl 5)가 균열 8(해금 최고 + 3)에서 피하기 없이 2번 이상 쓰러진다 · 시드 3(뼈 거인) 첫 판 사망 ≤ 2(민감도) — 첫 판 완화(`RIFT.earlyDmg`)가 해금 최고 + 3 의 위협을 지우지 않는다(NOTES-W1FIX · 밸런스 게이트: 경사는 균열 1~11) |
 | `monsters.test.js` | P3 | `monsterStats`(§5.6) · 잠/깨움 · 팩 연결 · 상한 120 · 흐름장 · 직선 추적 · 밀어내기(겹침 해소 · 플레이어 원) · 다시 잠 · 공격 진행(예비 facing 고정 · 판정 틱 · 후딜 · 시작 관용 없음 · 판정 관용 0.3) · 빠름이 바닥 예고를 줄이지 않는다 · 상태 관문(사라짐이 actEnd에 끝난다) · 팩 대표만 hazard onAwakeTick · prevPos 전부 · 생명 ≤ 0이면 행동 없음 |
 | `behaviors.test.js` | P3 | 9 행동: 소인 도망(팩당 한 번) · 주술사 부활(끊김 · 되살린 것 flags) · 궁수 거리 유지 · 조준 고정 0.2초(옆걸음으로 빗나감) · 방패 정면 · 짐승 돌진 · 벽 기절 · 역병 덩어리 폭발/웅덩이 · 둥지 상한 · 「닿지 않는 거리에서 헛동작 없음」 |
 | `affixes.test.js` | P3 | 프레임워크(mods 적용 · 훅 호출 지점 · 배제 규칙 · 하수인 공유 · 챔피언 팩 보호막 엇갈림 · 수호자 저항 없음) + 속성 6(fast · tough · fireEnchanted · coldEnchanted · vampiric · shielding) 각각의 효과 |
@@ -3355,7 +3380,7 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 | `analytics.test.js` | P12 | `toJson` · `toCsv`(이스케이프) · 히스토그램 · 조각 실행기(가짜 스케줄러로 시간 예산 · 취소) |
 | `view.fx.test.js` | P13 | 효과 모양 → 데칼 치수(§9.6 표의 0 칸) · 적대 = 붉은 테두리 · 풀 상한 |
 | `audio.test.js` | P14 | 가짜 WebAudio: unlock 전 무시 · 리미터 있음 · 발음 상한 · 지속음 정리 · 일시정지 |
-| `bot.test.js` | P15 | 반응 지연 · 피하기(예고 밖으로) · 무회피 · 레벨 선택 규칙 · 마을 정비 · 스킬 사용 규칙(동작별) |
+| `bot.test.js` | P15 | 반응 지연 · 피하기(예고 밖으로) · 무회피 · 레벨 선택 규칙 · 마을 정비 · 스킬 사용 규칙(동작별) · (밸런스 게이트) 피하기 dodgeLead · 화면 밖 장비 쫓기의 거리 여유 · 끊겨도 이어 세는 포기 시계 |
 | `headless.test.js` · `measure.test.js` · `perf.test.js` | P15 | §12.4 · §12.5 |
 | `content.test.js` | P16 | 속성 6(번개 강화 · 순간이동 · 감옥 · 분열 · 역병 · 몰타르) 각각 + 잿빛 마녀(잿불 비 배치 · 하수인 상한 · 순간이동) · 위협 간격과 함께 |
 
@@ -3385,9 +3410,11 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 
 `npm test` 전체 3분 안(브리프 §8.8) — S1 두 판 + S2 세 판 × 2 + S3 + S4 + S5.
 
+- **W2 확정(P15)**: S1의 둘째 판은 하네스가 `levelOverride = 2`로 연다(첫 판이 5~7분이라 +1 조건 `upMaxSec` 6분이 갈린다 — 봇의 레벨 규칙은 그대로) · S4의 시스템 시간은 계약 상수(`DEATH.panelDelay` + 막 넷)로 계산하고 봇의 결정 시간을 실제 틱으로 더한다(헤드리스에는 막이 없다) · `measure.test`의 「떼 순간 ≥ 1」은 클래스마다 세 판의 합.
+
 ### 12.5 측정 — `npm run measure` → `docs/MEASURE.md` (P15 `scripts/measure.mjs` + `bot/measure.js`)
 
-- 실행: 두 클래스 × (basic 6시간 분량 · noDodge 같은 레벨 경로 20판 · challenge 20판) + 속성 탐침(12종 × 두 클래스 · 각 5회) + 빌드 비교(같은 장비 · 레벨 · 프리셋 A/B · 무작위 배분 3시드 × 10판) + 장비 비교(시작 장비로 균열 8 · 봇 장비로 균열 8 · 각 10판) + 드랍 표(10만 회). 시간은 틱으로 민다(실제 몇 분 ~ 수십 분).
+- 실행: 두 클래스 × (basic 9시간 분량 · noDodge 같은 레벨 경로 40판 · 해금 + 3 40판 · challenge 20판) + 속성 탐침(12종 × 두 클래스 · 각 8회) + 빌드 비교(같은 장비 · 레벨 · 프리셋 A/B · 무작위 배분 3시드 × 15판) + 장비 비교(시작 장비로 균열 8 · 봇 장비로 균열 8 · 각 20판) + 드랍 표(10만 회). 판 수는 `BOT_MEASURE`(`data/bot.js`)가 정본이다(밸런스 게이트 — 20판 · 10판 비율이 측정마다 크게 흔들려 늘렸다 · `scripts/measure.mjs`가 그 값을 읽는다). 시간은 틱으로 민다(실제 몇 분 ~ 수십 분).
 - 출력 표(균열 레벨별 행): 판 수 · 클리어 시간 평균/중앙 · 사망/판 · 붕괴율 · 처치 구성(등급별) · 분당 처치 · 떼 순간/판 · 드랍 등급별/판 · 골드/판 · 경험치/판 · 업그레이드 판 비율 · 도중 귀환 비율 · 수리비/골드 수입 · 캐릭터 레벨 도달 시간(5 · 10 · 20 · 30) · 균열 레벨 도달 시간(5 · 10 · 20). · 상승 조건 충족 비율(무사망 · 6분 안 — 목표 40~60%) · 「보상(L)」 = √(E[업그레이드 드랍의 powerScore 증가 · 캐릭터 고정] × 골드/판)(§7.14와 같은 정의) · 9시간 시점 도달 균열 레벨. 그리고 브리프 §7의 각 목표를 **목표 · 측정값 · 판정** 세 열로.
 - `measure.test.js`(npm test 안 · 60초 이하): 각 클래스 균열 1~3 세 판 — 한 판 3~9분(느슨) · 게이지 100% 도달 · 떼 순간 ≥ 1 · 드랍 장비 20~70 · 분당 처치 25~100 — 밸런스가 크게 무너졌는지만 본다(정밀한 판정은 MEASURE.md).
 
@@ -3415,11 +3442,12 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 | 성능 · 결정성 · 견고성 · 데이터 완결성 | perf · headless · data.schema | |
 
 - 봇의 마을 시간은 `BOT.townSec` 모델(§12.1) · 사람의 마을 패널 시간은 `addPlaySec`로 플레이 시간에 들어간다 — 진행 속도 목표는 이 둘을 포함한 `playSec`로 잰다.
-- **측정의 한계**(MEASURE.md에 적는다): 봇은 도박 · 재굴림 · 제작 · 보관함을 쓰지 않는다 · 수동 조준의 정밀함(봇은 커서를 정확히 둔다 — 실수율로 흐린다) · 소리 · 화면 읽기는 재지 못한다.
+- **측정의 한계**(MEASURE.md에 적는다): 봇은 도박 · 재굴림 · 제작 · 보관함을 쓰지 않는다 · 수동 조준의 정밀함(봇은 커서를 정확히 둔다 — 실수율로 흐린다) · 소리 · 화면 읽기는 재지 못한다 · (밸런스 게이트) 봇은 날아오는 투사체와 조준선을 피하지 않고 · 스킬 바를 프리셋대로만 · 레벨을 basic 규칙대로만 고른다(NOTES-BALANCE §6).
 
 ### 12.7 밸런스 게이트 (마지막 웨이브 — 오케스트레이터 워크플로)
 
 - `npm run measure`를 돌려 MEASURE.md의 판정 열을 본다. 벗어난 목표는 **조정 손잡이**로 맞춘다: 몬스터 생명/피해(`MON.hpBase` · `RANKS.*.hp` · `GROWTH.hp`) · 처치 시간(`RANKS.champion.hp` 3.5~4.0) · 위협(속성 `params`의 주기 · 예고) · 드랍(`TREASURE.*.w.gear` · `RARITY.base`) · 첫 판(`XP.reqEarly` · `RIFT.earlyGaugeMul`) · 진행(`XP.req` · `BOT.upMaxSec`) · 경제(`PRICES` · `PRICES.repairBase` · `GOLD.base` · `CRAFT` · `REROLL`) · 후반(`GROWTH.hpLate` · `GROWTH.dmgLate`) · 맵 밀도(`MAPGEN.normalPerArea`) · (W1 수정 — NOTES-W1FIX §5) 받는 피해(`MON.dmgBase` · 궁수 `dmg` — 균열 5 이상) · 첫 판 받는 피해(`RIFT.earlyDmg` — 균열 1~4만) · 파도(`MON.linkRadius` · `MON.linkMinDepth`) · 회복(`TREASURE` globe). 🔒 값을 바꾸면 §7.14 표를 같이 고친다.
+- **밸런스 게이트 실행 기록**: `docs/NOTES-BALANCE.md`(측정 표 · 바꾼 값과 이유 · 남은 문제 · 측정의 한계) · 손잡이에 더해 쓴 것: `RIFT.earlyHp`(첫 판 생명 경사 · §7.3) · 정예 속성 · 수호자 · 돌진 · 폭발의 피해 배율 × 3(배율은 dmgBase 에 곱하므로 예고된 공격이 일반 공격보다 3배 더 무거워졌다 — 피하기의 값 · 무회피 2배 목표) · 스킬 계수(§7.2) · 마법사 생명 · `PATHING.maxNodes`.
 
 ### 12.8 브라우저 스모크 (화면 패키지 · 통합 게이트)
 
@@ -3596,3 +3624,4 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 - `riftStone.*`: `level` 균열 {n} · `monLevel` 몬스터 레벨 {n} · `hp` 몬스터 생명 ×{v} · `dmg` 몬스터 피해 ×{v} · `ilvl` 아이템 레벨 {n} · `rarity` 등급 보정 · `gold` 골드 ×{v} · `xp` 경험치 ×{v} · `affixes` 챔피언 속성 {a} · 정예 속성 {b} · `best` 최고 기록 {t} · `none` 기록 없음 · `locked` 잠김 · `open` Enter — 균열 열기 · `closeOpen` 열린 균열을 닫는다 · `unlockRule` 클리어 +1 · 무사망 +2 · `leftLoot` 남은 전리품 {n}개 · `recommended` 추천.
 - `analytics.*`: `tab.sim` 드랍 시뮬레이터 · `tab.tables` 표 보기 · `tab.session` 세션 기록 · `tab.bot` 봇 · `run` 굴리기 · `cancel` 취소 · `n` 횟수 · `theory` 이론값 · `sim` 시뮬값 · `err` 오차 · `killsToLegend` 전설 하나까지 처치 수 · `json` JSON 내려받기 · `csv` CSV 내려받기 · `botOn` 봇 자동 사냥 켜기 · `botOff` 끄기 · `strategy.<id>` 기본 · 무회피 · 도전 · `meter.<key>`(DPS · 받은 피해/초 · 분당 처치 · 시간당 경험치 · 시간당 골드 · 이번 판 장비 · 경과 · 게이지 속도 · 노리는 수).
 - `confirm.yes` 예 Enter · `confirm.no` 아니오 Esc · `fatal.webglTitle` 그래픽을 시작하지 못했다 · `fatal.webglBody` 이 브라우저나 기기에서 WebGL을 쓸 수 없다 — 다른 브라우저로 열어 본다 · `audio.hint` 클릭하거나 키를 누르면 소리가 켜진다.
+- **W2 확정(통합 게이트)**: `strings.ko.js`에 더한 키 — P10 W2 단락(`hud.status.slow|root` · `hud.immune` · `hud.portal.recall|exit` · `hud.gaugeDone` · `hud.collapsed` · `label.gold|potion|material` · `notice.potionFull|noPotion|lifeFull|recallCancel|skillEmpty|saveFuture` · `title.charLine|slot|deleteHint|back|navHint|version|continueNone` · `newChar.*` · `pause.quitConfirm|hint` · `settings.on|off|hint` · `help.hint|affixes.intro|rules.potion|rules.recall` · `death.summary` · `complete.other` · `hint.close|openHelp` · `map.hint`) · P12 단락(`analytics.f.*` · `analytics.sec.*` · `analytics.state.*` · `analytics.hist.*` · `analytics.hint.*` · `analytics.tbl.*` · `analytics.ses.*` · `analytics.result.complete|collapse|abandon` · `analytics.bot.*` · `analytics.log.*` · `analytics.gearPerKill|goldPerKill|legPerKill|killsToLegendMean|maxGap|errNote` — 59개) · `shop.salvageConfirm` {name}을(를) 분해한다 — 되돌릴 수 없다(전설 · 세트 한 개 분해 확인). `reason.level` 문면은 「레벨 {n} 이상이어야 한다」(숫자 뒤 조사가 수마다 달라서 — 꼴만 고정). `notice.saveFuture`는 §11.6의 「미래 버전 세이브 — 읽기 전용 안내」.

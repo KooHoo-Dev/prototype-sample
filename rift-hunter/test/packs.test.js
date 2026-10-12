@@ -8,7 +8,7 @@ import { hashState } from '../src/core/hash.js';
 import { makeRng, seedRng } from '../src/core/rng.js';
 import { getMonDef, getRank, PACKS_BY_ID } from '../src/data/index.js';
 import { ELITE_NAMES, ELITE_PACK, PACKS } from '../src/data/packs.js';
-import { RIFT, riftRow } from '../src/data/rift.js';
+import { RIFT, earlyGaugeMulOf, riftRow } from '../src/data/rift.js';
 import { STRINGS } from '../src/data/strings.ko.js';
 import { onMonDamaged, onMonDeath, onMonHitPlayer, onMonSpawn } from '../src/sim/monsters/monsters.js';
 import { eliteName, minionAffixes, populateRift, slotKinds, spawnPack } from '../src/sim/monsters/packs.js';
@@ -56,7 +56,7 @@ const membersOf = (rift, pk) => pk.memberIds.map(id => rift.mons.find(m => m.id 
 function gaugeSum(rift) {
   let g = 0;
   for (const m of rift.mons) {
-    const early = rift.level <= RIFT.earlyGaugeTo && (m.rank === 'normal' || m.rank === 'minion') ? RIFT.earlyGaugeMul : 1;
+    const early = (m.rank === 'normal' || m.rank === 'minion') ? earlyGaugeMulOf(rift.level) : 1;
     g += getRank(m.rank).gauge * getMonDef(m.typeId).gauge * early;
   }
   return g;

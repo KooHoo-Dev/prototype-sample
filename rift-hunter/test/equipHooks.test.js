@@ -8,6 +8,8 @@ import { makeInput } from '../src/core/inputFrame.js';
 import { ticks } from '../src/core/time.js';
 import { getNode } from '../src/data/index.js';
 import { LEGENDARIES } from '../src/data/legendaries.js';
+import { MON } from '../src/data/monsters.js';
+import { earlyHpMul } from '../src/data/rift.js';
 import { makeItem } from '../src/sim/loot/rollItem.js';
 import { computeStats } from '../src/sim/loot/stats.js';
 import { updatePlayer } from '../src/sim/player/controller.js';
@@ -138,7 +140,7 @@ test('피의 서약(killExplode): 처치마다 chance(10%)로 시체 폭발(r 3.
   assert.ok(a.length > 2000 * 0.07 && a.length < 2000 * 0.13, `약 10% — ${a.length}`);
   const e = a[0];
   assert.equal(e.shape.r, 3.0);
-  assert.ok(Math.abs(e.spec.flat - 19 * 0.2) < 1e-9, '구울 최대 생명 19 × 0.2');
+  assert.ok(Math.abs(e.spec.flat - MON.hpBase * earlyHpMul(1) * 0.2) < 1e-9, '균열 1 구울 최대 생명(hpBase × 첫 판 생명 경사 — 밸런스 게이트) × 0.2');
   assert.equal(e.spec.type, 'phys');
   assert.equal(e.spec.noProcs, true);
 });

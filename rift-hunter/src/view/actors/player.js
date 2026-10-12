@@ -4,7 +4,7 @@
 // 양손 무기(전사)는 왼손을 손잡이에 IK 로 붙인다(무기가 손을 떠나지 않는다).
 
 import { Matrix4, Mesh, Vector3 } from 'three';
-import { DT } from '../../core/constants.js';
+import { CAM_AZIMUTH, DT } from '../../core/constants.js';
 import { ticks } from '../../core/time.js';
 import { BASES_BY_ID, getSkillDef } from '../../data/index.js';
 import { weaponVisual } from '../../sim/loot/stats.js';
@@ -247,6 +247,9 @@ export class PlayerPoser {
     if (p.dead) {
       const td = Math.max(0, (now - p.deadAt) * DT);
       bipedFall(out, td, 0.6, 0.12);
+      // 화면 패스: 시선 방향(카메라 쪽 ↔ 먼 쪽)으로 누우면 55° 카메라에서 몸이 세로로 길게 보여 「서 있는 T자」로 읽혔다 —
+      // 쓰러지는 동안 몸을 화면 가로(머리가 화면 왼쪽 또는 오른쪽 — 지금 방향에서 가까운 쪽)로 돌려 눕힌다
+      out[BP.RYAW] = deadYawOffset(f) * ease(Math.min(1, td / 0.6));
       return 1;
     }
     if (this.amt > 0.001) bipedWalk(out, d, PLAYER_GAIT, this.phase, stepL, this.mdx, this.mdz, this.amt, armL, armR);
@@ -326,6 +329,18 @@ function leapLand() {
 }
 
 /** 무릎 꿇기(귀환 시전) */
+/**
+ * 쓰러진 몸의 yaw 보정 — 등으로 넘어진 몸(머리 = 등 쪽)이 화면 가로로 눕게 하는 facing 의 덧셈값(가까운 쪽 · [−π/2, π/2]).
+ * 화면 가로 = 카메라 방위 ± π/2 의 방향(§0.2) — 그 축에 몸이 놓이면 55° 카메라에서도 키 그대로의 길이로 「누운 몸」이 보인다.
+ * @param {number} facing @returns {number}
+ */
+export function deadYawOffset(facing) {
+  const wrap = (a) => a - 2 * PI * Math.round(a / (2 * PI));
+  const a = wrap(CAM_AZIMUTH + PI / 2 - facing);
+  const b = wrap(CAM_AZIMUTH - PI / 2 - facing);
+  return Math.abs(a) <= Math.abs(b) ? a : b;
+}
+
 function kneel(out, d, k) {
   const tgt = {
     HIPY: d.hipY * 0.55, LFZ: -0.42, LFY: d.ankleY + 0.02, RFZ: 0.32, RFY: d.ankleY, SPITCH: 0.2, HPITCH: 0.3,

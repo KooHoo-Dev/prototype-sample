@@ -251,7 +251,7 @@ test('노드 상한 — maxNodes 가 작으면 탐색한 칸 중 가장 가까�
   assert.notDeepEqual(end, to);
   assert.ok(Math.hypot(end.x - to.x, end.z - to.z) < Math.hypot(from.x - to.x, from.z - to.z));
   assert.ok(pathOk(WALL_MAP, from, part, R));
-  assert.equal(PATHING.maxNodes, 6000);
+  assert.equal(PATHING.maxNodes, 20000);   // 밸런스 게이트: 6000 → 20000(NOTES-BALANCE — 벽 너머 먼 클릭이 씹혔다)
   // 상한 1 — 더 갈 곳이 없으면 [](서 있는다)
   const none = findPath(WALL_MAP, from, to, { r: R, maxNodes: 1 });
   assert.ok(Array.isArray(none));

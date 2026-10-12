@@ -15,7 +15,8 @@ import { CHAR_DIMS, WEAPON_LEN, charParts, weaponGeo } from '../src/view/actors/
 import { makeCharMaterials, makeInstanceMaterials } from '../src/view/actors/materials.js';
 import { MAX_DRAWN, MonsterInstancer, compileType, poseMonster } from '../src/view/actors/monsters.js';
 import { PART_MESHES } from '../src/view/actors/parts.js';
-import { CharRig, PLAYER_GAIT, PlayerPoser, leftHandToGrip, playerLook, styleOf } from '../src/view/actors/player.js';
+import { CharRig, PLAYER_GAIT, PlayerPoser, deadYawOffset, leftHandToGrip, playerLook, styleOf } from '../src/view/actors/player.js';
+import { CAM_AZIMUTH } from '../src/core/constants.js';
 import { SWING_AT, attackPhase, bipedBase, bipedWalk, footCycle, phaseStep, quadBase, quadWalk, stepLenOf } from '../src/view/actors/poses.js';
 import { BJ, BP, QJ, fkBiped, fkQuad, ikLeg, makeJoints, pointOf, posOf } from '../src/view/actors/rig.js';
 import { VARIANTS } from '../src/view/actors/variants.js';
@@ -640,4 +641,20 @@ test('view.actors: 플레이어 리그 — 무기는 오른손 · 방패는 왼 
   assert.ok(rig.meshes.map((e) => e.j).includes(BJ.wL));
   rig.dispose();
   assert.equal(group.children.length, 0);
+});
+
+test('view.actors: 쓰러진 플레이어는 화면 가로로 눕는다(화면 패스 — 55° 카메라에서 세로로 누워 「서 있는 T자」로 읽힌 회귀)', () => {
+  const poser = new PlayerPoser();
+  const P = new Float32Array(Object.keys(BP).length + 8);
+  for (let k = 0; k < 24; k++) {
+    const f = -Math.PI + (k / 24) * 2 * Math.PI;
+    const off = deadYawOffset(f);
+    assert.ok(Math.abs(off) <= Math.PI / 2 + 1e-9, `보정은 가까운 쪽(${off})`);
+    // 몸의 앞뒤 축(yaw) 이 카메라 시선(방위) 과 직각 — 화면 가로
+    assert.ok(Math.abs(Math.cos(f + off - CAM_AZIMUTH)) < 1e-9, `facing ${f.toFixed(2)}`);
+    const p = { pos: { x: 0, z: 0 }, prevPos: { x: 0, z: 0 }, facing: f, act: 'dead', dead: true, deadAt: 100, actStart: 100, actHit: 100, actEnd: 100, speed: 0, moving: false, air: null };
+    poser.pose(P, p, 'warrior', 'oneHand', 100 + ticks(0.6), 0, 0, 0);
+    assert.ok(Math.abs(P[BP.RYAW] - off) < 1e-6, '쓰러짐이 끝나면 보정이 다 들어간다');
+    assert.ok(P[BP.RPITCH] < -1.3, '누웠다');
+  }
 });

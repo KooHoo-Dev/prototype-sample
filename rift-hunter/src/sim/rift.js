@@ -11,7 +11,7 @@ import { ticks } from '../core/time.js';
 import { DEATH, GAUGE, METER } from '../data/combat.js';
 import { XP } from '../data/economy.js';
 import { getMonDef, getRank } from '../data/index.js';
-import { RIFT, riftRow } from '../data/rift.js';
+import { RIFT, earlyGaugeMulOf, riftRow } from '../data/rift.js';
 import { spawnDrops } from './drops.js';
 import { spawnEffect } from './effects.js';
 import { getMonster } from './entities.js';
@@ -339,7 +339,7 @@ export function resolveDeaths(ctx) {
       if (Number.isFinite(amount) && amount > 0) noteXp(ctx, grantXp(ctx, Math.round(amount), 'kill'));
     }
     if (rift.phase === 'active' && !f.noGauge) {
-      const early = rift.level <= RIFT.earlyGaugeTo && EARLY_RANKS.has(m.rank) ? RIFT.earlyGaugeMul : 1;
+      const early = EARLY_RANKS.has(m.rank) ? earlyGaugeMulOf(rift.level) : 1;   // 밸런스 게이트: 균열별 배열(data/rift.js)
       const pct = rk.gauge * def.gauge * early;
       if (pct > 0) addGauge(ctx, pct);
     }

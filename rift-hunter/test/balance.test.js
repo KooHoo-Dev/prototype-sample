@@ -2,7 +2,8 @@
 // 회귀: ① 시작 캐릭터 두 클래스가 균열 1 첫 판을 사망 ≤ 1 로 끝낸다(고정 시드 · scriptedClear 수준 — 피하기 · 우선 대상 없음)
 //       ② 사망 → 부활 → 복귀: 그 틱에 진정 · 부활로 떠날 때 처음 자리로 · 복귀 뒤 3초 동안 복귀 지점의 aggro 안에서 깨는 몬스터가 없다(NOTES-W1 §7-3).
 //       (W1 수정 3 · 4) 사망 → 부활 → 복귀를 강제 사망 · 자연 사망 · 수호자 단계 · 수호자 출현 예고 중 사망(W1 수정 4 — 부활 commit 에서 수호자를 잠든 채 세운다)으로.
-//       ③ W1 수정 2: 첫 판 완화(RIFT.earlyDmg)가 균열 5 이상으로 새지 않는다 — 개발 캐릭터가 해금 최고 + 3(균열 8)에서 쓰러진다.
+//       ③ W1 수정 2: 첫 판 완화(RIFT.earlyDmg)가 해금 최고 + 3 의 위협을 지우지 않는다 — 개발 캐릭터가 균열 8 에서 쓰러진다(밸런스 게이트: 경사는 균열 1~11 · §7.3).
+//       ④ 밸런스 게이트: basic 봇(「보통 사람」)이 시작 캐릭터로 균열 1 첫 판을 사망 ≤ 1 · 9분 안에 완료한다(브리프 「처음 성공까지」).
 // 실제 GameSim 으로 돈다(봇은 W2 P15 — 봇의 밸런스 측정은 measure 가 다시 잰다).
 
 import assert from 'node:assert/strict';
@@ -15,6 +16,8 @@ import { GameSim } from '../src/sim/GameSim.js';
 import { losClear } from '../src/sim/world/nav.js';
 import { makeDevCharacter } from '../src/sim/progression/dev.js';
 import { assertFiniteDeep, scriptedClear } from './helpers.js';
+import { Bot } from '../src/bot/bot.js';
+import { runRift } from '../src/bot/measure.js';
 
 const MIN = 30 * 60;
 
@@ -42,7 +45,23 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const alive = (m) => !m.dead && !m.gone && m.hp > 0;
 
 // 시드 6 · 7 — 수호자가 뼈 거인인 판(잿빛 마녀는 W1 에서 P16 스텁이라 공격하지 않는다 — P16 이 들어와도 이 검사가 흔들리지 않게)
-test('W1 수정: 시작 캐릭터(전사 · 마법사)가 균열 1 첫 판을 완료한다 — 사망 ≤ 1 · 9분(sim) 안 · 시드 6 · 7 · scriptedClear(프리셋 A · 피하기 없음)', () => {
+// 밸런스 게이트(NOTES-BALANCE): 예고 기술 피해 × 3 · 챔피언 · 정예 생명이 늘어 피하지 않는 하네스(scriptedClear)는 첫 판에서 0~3번 쓰러진다(시드 1~16 실측) —
+//   브리프 「처음 성공까지」는 봇(basic · 사람 설정)으로 잰다(아래 봇 검사 · headless S1). 하네스는 「피하지 않아도 붕괴하지 않고 끝난다」만 본다.
+test('밸런스 게이트: 시작 캐릭터(전사 · 마법사)가 균열 1 첫 판을 basic 봇으로 완료한다 — 사망 ≤ 1 · 9분(sim) 안 · 시드 6 · 7', () => {
+  for (const [cls, seed] of /** @type {const} */ ([['warrior', 6], ['mage', 6], ['warrior', 7], ['mage', 7]])) {
+    const { sim } = newSim(seed);
+    assert.equal(sim.newCharacter({ slot: 0, cls, name: cls }).ok, true);
+    const bot = new Bot({ sim, cls, seed });
+    const s = runRift({ sim, bot, maxSec: 15 * 60 });
+    const why = `${cls} 시드 ${seed}: ${JSON.stringify(s && { level: s.level, result: s.result, deaths: s.deaths, timeSec: s.timeSec })}`;
+    assert.ok(s && s.level === 1 && s.result === 'complete', why);
+    assert.ok(s.deaths <= 1, why);
+    assert.ok(s.timeSec <= 9 * 60, why);
+    assertFiniteDeep(sim.state, cls);
+  }
+});
+
+test('W1 수정: 시작 캐릭터(전사 · 마법사)가 균열 1 첫 판을 피하지 않고도 붕괴 없이 끝낸다 — 사망 ≤ 2 · 12분(sim) 안 · 시드 6 · 7 · scriptedClear(프리셋 A · 피하기 없음)', () => {
   for (const [cls, seed] of /** @type {const} */ ([['warrior', 6], ['mage', 6], ['warrior', 7], ['mage', 7]])) {
     const { sim, log } = firstRift(cls, seed);
     assert.equal(sim.state.rift.guardianType, 'boneGiant', `${cls} 시드 ${seed}`);
@@ -50,8 +69,8 @@ test('W1 수정: 시작 캐릭터(전사 · 마법사)가 균열 1 첫 판을 �
     const rift = sim.state.rift;
     const why = `${cls} 시드 ${seed}: ${JSON.stringify({ ...r, deaths: rift.deaths, swarm: rift.stats.swarmMoments })}`;
     assert.equal(r.phase, 'complete', why);
-    assert.ok(rift.deaths <= 1, why);
-    assert.ok(r.riftTicks <= MIN * 9, why);
+    assert.ok(rift.deaths <= 2, why);   // 밸런스 게이트: ≤ 1 → ≤ 2(피하지 않으면 예고 기술이 아프다 — 무회피 ≥ 2배 목표의 다른 얼굴)
+    assert.ok(r.riftTicks <= MIN * 12, why);   // 밸런스 게이트: 9 → 12분(피하지 않는 하네스 · 시드 1~16 중앙 8.9분)
     assert.ok(r.minLife < 0.6, `${why} — 긴장이 남는다(완화가 지나치면 포션 문턱 40% 근처까지도 내려가지 않는다)`);
     for (let i = 0; i < 60; i++) sim.step(NEUTRAL_INPUT);   // 완료 마무리(RIFT.completeDelay 1.5초)
     assert.ok(log.some(e => e.name === EV.RIFT_COMPLETE), why);
@@ -125,9 +144,9 @@ function respawnAndReturn(sim, log, why) {
 }
 
 /** 개발 캐릭터(L10 · 장비 ilvl 5 · 프리셋 A)가 균열 8 을 scriptedClear(learn)로 돌다 처음 쓰러진 틱에 멈춘다 @param {'warrior'|'mage'} cls @param {number} seed */
-function devDeath(cls, seed) {
+function devDeath(cls, seed, level = 10) {
   const s = newSim(seed);
-  const ch = makeDevCharacter({ slot: 0, cls, name: cls, level: 10, rift: 5, preset: 0, seed, newId: s.sim.ctx.newItemId });
+  const ch = makeDevCharacter({ slot: 0, cls, name: cls, level, rift: 5, preset: 0, seed, newId: s.sim.ctx.newItemId });
   ch.riftUnlocked = 8;
   assert.equal(s.sim.loadCharacter(0, ch).ok, true);
   assert.equal(s.sim.openRift(8, seed).ok, true);
@@ -181,7 +200,8 @@ test('W1 수정 3: 사망 → 부활 → 복귀(자연 사망 · 개발 캐릭�
 
 test('W1 수정 3: 수호자 단계 사망 → 복귀 — 집으로 돌아간 수호자의 시야 밖으로 돌아오고, 다가가면 싸움이 다시 시작된다(수호자 생명 그대로)', () => {
   // 마법사 시드 10: 처음 사망이 수호자 단계(옛 규칙이면 복귀 지점이 수호자 7.6m 앞 · 3틱 만에 다시 깼다)
-  const { sim, log } = devDeath('mage', 10);
+  // 밸런스 게이트: 몬스터 수치가 바뀌어 레벨 10 개발 캐릭터는 수호자 전에 쓰러진다 — 레벨 14 · 시드 1(처음 사망이 수호자 단계 — 시드 1 · 3 · 13 · 27 · 40)
+  const { sim, log } = devDeath('mage', 1, 14);
   const st = sim.state;
   const rift = st.rift;
   assert.equal(rift.phase, 'guardian');
@@ -236,7 +256,7 @@ test('W1 수정 4: 수호자 출현 예고(2초) 안에 쓰러져 그 안에 부
 
 // 시드는 W1 수정 2 의 실측(NOTES-W1FIX §3.3): 지금 값이면 붕괴(전사 4 · 3.7분 · 마법사 1 · 6.4분) · 첫 수정의 전역 완화(MON.dmgBase 0.9 · 궁수 0.5)면 사망 0 · 최저 생명 0.90 · 0.67.
 // W2 밸런스 게이트가 위협 수치를 다시 맞추면 시드를 다시 고른다(이 검사는 「완화가 전역으로 새지 않는다」만 본다).
-test('W1 수정 2: 첫 판 완화는 균열 1~4 에만 — 개발 캐릭터(L10 · 장비 ilvl 5 · 프리셋 A)가 균열 8(해금 최고 + 3)에서 피하기 없이 두 번 이상 쓰러진다', () => {
+test('W1 수정 2 · 밸런스 게이트: 첫 판 완화(균열 1~11 경사)가 해금 최고 + 3 의 위협을 지우지 않는다 — 개발 캐릭터(L10 · 장비 ilvl 5 · 프리셋 A)가 균열 8(해금 최고 + 3)에서 피하기 없이 두 번 이상 쓰러진다', () => {
   for (const [cls, seed] of /** @type {const} */ ([['warrior', 4], ['mage', 1]])) {
     const { sim } = newSim(seed);
     const ch = makeDevCharacter({ slot: 0, cls, name: cls, level: 10, rift: 5, preset: 0, seed, newId: sim.ctx.newItemId });

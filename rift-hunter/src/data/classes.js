@@ -26,7 +26,7 @@ export const CLASSES = [
   },
   {
     id: 'mage', mainStat: 'int', resource: 'mana',
-    life: { base: 90, growth: 1.09 },    // 🔒 §7.14
+    life: { base: 100, growth: 1.09 },    // 🔒 §7.14 · 밸런스 게이트: 90 → 100(몬스터 피해 × 7 뒤 마법사 첫 판 사망)
     resourceMax: { base: 100, perLevel: 2 }, regen: { base: 7, perLevel: 0.15 },
     rage: null,
     moveSpeed: 6, radius: 0.40, height: 1.8, basic: 'magicBolt',

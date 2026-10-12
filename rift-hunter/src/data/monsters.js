@@ -9,7 +9,9 @@
 export const MON = {
   // 🔒 §7.14 — dmgBase 는 W1 값 3.5 그대로다. 첫 판(균열 1~4)의 완화는 RIFT.earlyDmg 경사(data/rift.js · monsterStats)로 —
   //   W1 수정이 이 값을 0.9 로 낮췄다가 균열 5 이상의 위협이 사라져 되돌렸다(NOTES-W1FIX §2.0)
-  hpBase: 19, dmgBase: 3.5,
+  // 밸런스 게이트(NOTES-BALANCE): hpBase 19 → 36(× 1.89) · dmgBase 3.5 → 24.5(× 7) — 봇(사람 설정)이 적정 레벨에서 죽지 않았다(사망/판 0.01).
+  //   첫 판들은 RIFT.earlyDmg · earlyHp 경사가 받친다(균열 1 의 실제 피해 배율은 옛 값과 같고 일반 생명은 옛 값의 95% — data/rift.js)
+  hpBase: 36, dmgBase: 24.5,
   wakeCheckT: 6, maxAwake: 120, leash: 36, leashSec: 3, shieldFront: 0.5, frontDeg: 45,
   // W1 수정(NOTES-W1FIX): linkRadius 8 → 11 — 깊은 방(depth ≥ linkMinDepth)의 파도를 크게(25마리 이상 순간) · 초반 방은 linkMinDepth 가 막는다
   stopFrac: 0.8, sepPad: 0.1, sepMaxNeighbors: 6, targetingRange: 15, directChaseR: 3, linkRadius: 11,
@@ -23,14 +25,15 @@ export const MON = {
   linkMinDepth: 2,
 };
 
+// 밸런스 게이트(NOTES-BALANCE): hp champion 3.5 → 8 · elite 7 → 15 · guardian 28 → 32(MON.hpBase 36 과 함께 — 팩 처치 시간 8~20 · 15~35 · 30~70초 목표)
 /** 기절 면역 길이는 STATUS.stunImmune(§7.6) @type {RankDef[]} */
 export const RANKS = [
   { id: 'normal', hp: 1, dmg: 1, xp: 1, gauge: 0.25, tc: 'normal', scale: 1.00, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
-  { id: 'champion', hp: 3.5, dmg: 1.5, xp: 4, gauge: 1.0, tc: 'champion', scale: 1.15, stunMul: 0.6, freezeMul: 0.7, knockMul: 0.5, flinchFrac: 0.30 },   // hp 🔒
-  { id: 'elite', hp: 7, dmg: 1.7, xp: 12, gauge: 3.0, tc: 'elite', scale: 1.30, stunMul: 0.4, freezeMul: 0.5, knockMul: 0, flinchFrac: null },          // hp 🔒
+  { id: 'champion', hp: 8, dmg: 1.5, xp: 4, gauge: 1.0, tc: 'champion', scale: 1.15, stunMul: 0.6, freezeMul: 0.7, knockMul: 0.5, flinchFrac: 0.30 },   // hp 🔒
+  { id: 'elite', hp: 15, dmg: 1.7, xp: 12, gauge: 3.0, tc: 'elite', scale: 1.30, stunMul: 0.4, freezeMul: 0.5, knockMul: 0, flinchFrac: null },          // hp 🔒
   { id: 'minion', hp: 2, dmg: 1.2, xp: 2, gauge: 0.5, tc: 'minion', scale: 1.05, stunMul: 0.7, freezeMul: 0.8, knockMul: 0.5, flinchFrac: 0.25 },
   // hp 🔒 · W1 수정(NOTES-W1FIX): hp 35 → 28 — 시작 장비 균열 1 수호자 싸움(강인함 63%)이 35 에서 ~95초 · 사망이 그 싸움에 몰린다(§2.0 · §3.5)
-  { id: 'guardian', hp: 28, dmg: 2.0, xp: 60, gauge: 0, tc: 'guardian', scale: 1.00, stunMul: 0.25, freezeMul: 0.3, knockMul: 0, flinchFrac: null },
+  { id: 'guardian', hp: 32, dmg: 2.0, xp: 60, gauge: 0, tc: 'guardian', scale: 1.00, stunMul: 0.25, freezeMul: 0.3, knockMul: 0, flinchFrac: null },
   { id: 'split', hp: 0.6, dmg: 0.5, xp: 0.25, gauge: 0.1, tc: 'split', scale: 0.60, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
   { id: 'spawn', hp: 1, dmg: 1, xp: 0, gauge: 0, tc: null, scale: 1.00, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
 ];
@@ -64,7 +67,7 @@ export const MONSTERS = [
     params: { keepMin: 7, keepMax: 10, backoff: 4, backoffMul: 0.3 }, look: { color: '#c26a3e', variant: 'shaman' } },
   // W1 수정(NOTES-W1FIX): backoffMul 0.8 → 0.3(파고들기가 통하게 — 브리프 §3.4 「파고들기 · 옆으로」) · dmg 는 0.8 그대로(첫 판 완화는 RIFT.earlyDmg)
   { id: 'skeletonArcher', template: 'humanoid', tags: ['ranged'], behavior: 'archer', radius: 0.40, height: 1.8, speed: 3.2, turnRate: 8,
-    hp: 0.8, dmg: 0.8, xp: 1.0, gauge: 1.0, res: res({ cold: 0.25 }), aggro: 14, eliteOk: true,
+    hp: 0.8, dmg: 0.6, xp: 1.0, gauge: 1.0, res: res({ cold: 0.25 }), aggro: 14, eliteOk: true,   // 밸런스 게이트: dmg 0.8 → 0.6(받는 피해의 절반이 화살 — 예고된 위협 쪽으로 무게를 옮긴다)
     attacks: [
       { id: 'arrow', kind: 'projectile', windup: 0.60, recover: 0.40, cd: 1.8, range: 11, mul: 1.0, type: 'phys', telegraph: 'aimLine', aimLock: 0.2,
         proj: { speed: 16, r: 0.2, life: 1.2, visual: 'arrow' } },
@@ -80,7 +83,8 @@ export const MONSTERS = [
     hp: 1.3, dmg: 1.2, xp: 1.5, gauge: 1.5, res: res(), aggro: 14, eliteOk: true,
     attacks: [
       { id: 'gore', kind: 'melee', windup: 0.60, recover: 0.60, cd: 0, reach: 1.0, coneDeg: 80, mul: 1.0, type: 'phys', telegraph: 'pose' },
-      { id: 'charge', kind: 'charge', windup: 0.90, recover: 0.80, cd: 5, range: 11, minRange: 5, mul: 2.0, type: 'phys', telegraph: 'groundLine',
+      { id: 'charge', kind: 'charge', windup: 0.90, recover: 0.80, cd: 5, range: 11, minRange: 5, mul: 6.0, type: 'phys', telegraph: 'groundLine',
+        // 밸런스 게이트: charge mul 2.0 → 6.0 · 아래 bloater burst 2.5 → 7.5(예고된 공격 × 3 — 정예 속성 · 수호자와 같은 이유)
         // overshoot = 선 길이 min(maxLen, 거리 + overshoot) · blockFrac = 이번 틱 이동이 계획의 이 비율 미만이면 벽에 박았다(§8.1)
         push: 2.0, escape: 1.0, params: { speed: 14, maxLen: 13, wallStun: 2.0, overshoot: 2, blockFrac: 0.5 } },
     ],
@@ -88,7 +92,7 @@ export const MONSTERS = [
   { id: 'bloater', template: 'blob', tags: ['melee'], behavior: 'bloater', radius: 0.55, height: 1.4, speed: 2.6, turnRate: 6,
     hp: 1.0, dmg: 1.0, xp: 1.0, gauge: 1.0, res: res(), aggro: 12, eliteOk: false,
     attacks: [
-      { id: 'burst', kind: 'explode', windup: 1.00, recover: 0, cd: 0, range: 2.2, mul: 2.5, type: 'phys', telegraph: 'groundCircle',
+      { id: 'burst', kind: 'explode', windup: 1.00, recover: 0, cd: 0, range: 2.2, mul: 7.5, type: 'phys', telegraph: 'groundCircle',
         escape: 2.3, params: { r: 2.8, poolR: 1.6, poolSec: 3, poolTick: 0.5, poolMulPerSec: 0.3 } },
     ],
     params: {}, look: { color: '#9cb24c', variant: 'bloater' } },

@@ -14,7 +14,7 @@ import { STATUS } from '../../data/combat.js';
 import { GUARDIANS, GUARDIAN_SPOT } from '../../data/guardians.js';
 import { MON_AFFIXES_BY_ID, getMonDef, getRank } from '../../data/index.js';
 import { MON } from '../../data/monsters.js';
-import { earlyDmgMul, riftRow } from '../../data/rift.js';
+import { earlyDmgMul, earlyHpMul, riftRow } from '../../data/rift.js';
 import { monsterHitPlayer } from '../combat.js';
 import { addMonster, getMonster } from '../entities.js';
 import { spawnProjectile } from '../projectiles.js';
@@ -45,7 +45,7 @@ const CONE = { type: 'cone', x: 0, z: 0, r: 0, facing: 0, angle: 0 };
 // ───────────────────────── 수치 · 생성 ─────────────────────────
 
 /**
- * 순수 — 몬스터 수치(§5.6): hpMax = MON.hpBase × type.hp × rank.hp × row.hpMul × Π affix.hpMul · dmg = MON.dmgBase × type.dmg × rank.dmg × row.dmgMul × earlyDmgMul(L)(W1 수정 2) ·
+ * 순수 — 몬스터 수치(§5.6): hpMax = MON.hpBase × type.hp × rank.hp × row.hpMul × Π affix.hpMul × earlyHpMul(L)(밸런스 게이트) · dmg = MON.dmgBase × type.dmg × rank.dmg × row.dmgMul × earlyDmgMul(L)(W1 수정 2) ·
  * res[t] = min(MON.resCap, type.res[t] + Σ affix.res[t])(수호자는 속성 res 를 받지 않는다) · r · height = def × rank.scale(이미 곱한 값) ·
  * speed = def.speed × Π speedMul · atkSpeedMul = Π affix.atkSpeedMul · immune = 속성 mods.immune 합집합
  * @param {string} typeId @param {MonRank} rank @param {number} level @param {string[]} [affixes]
@@ -74,7 +74,7 @@ export function monsterStats(typeId, rank, level, affixes = []) {
   const res = {};
   for (const t of DMG_TYPES) res[t] = Math.min(MON.resCap, (def.res?.[/** @type {import('../../types.js').DmgType} */ (t)] ?? 0) + (resAdd[t] ?? 0));
   return {
-    hpMax: MON.hpBase * def.hp * rk.hp * row.hpMul * hpMul,
+    hpMax: MON.hpBase * def.hp * rk.hp * row.hpMul * hpMul * earlyHpMul(row.level),   // 밸런스 게이트: × 첫 판 생명 경사(§7.3)
     dmg: MON.dmgBase * def.dmg * rk.dmg * row.dmgMul * earlyDmgMul(row.level),   // W1 수정 2: × 첫 판 경사(균열 1~4 · §7.3)
     speed: def.speed * speedMul,
     r: def.radius * rk.scale,
