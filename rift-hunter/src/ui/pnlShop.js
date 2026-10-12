@@ -61,8 +61,9 @@ export function createShopFrame(ctx, opts) {
   });
   leftBox.appendChild(list.el);
   const bagBox = body.appendChild(w.el('div', 'area area-bag'));
-  bagBox.appendChild(w.el('div', 'area-head', t('panel.inventory.title')));
+  const bagHead = bagBox.appendChild(w.el('div', 'area-head', t('panel.inventory.title')));
   const bag = createBagGrid(ctx, {
+    head: bagHead,
     onPick: (i) => { if (bag.itemAt(i)) done(sim.equip({ where: 'bag', idx: i })); },
     onFocus: () => { areas.pointer(1); focusChanged(); },
     onEdge: (dir) => areas.cross(dir),

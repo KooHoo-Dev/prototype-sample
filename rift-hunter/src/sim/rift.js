@@ -17,7 +17,7 @@ import { spawnEffect } from './effects.js';
 import { getMonster } from './entities.js';
 import { rollDrops } from './loot/rollDrops.js';
 import { findGuardianSpot, spawnGuardian, spawnMonster } from './monsters/monsters.js';
-import { applyDeathPenalty } from './progression/inventory.js';
+import { applyDeathPenalty, isBagFull } from './progression/inventory.js';
 import { completeRun, grantXp, recordRun, unlockAfter, xpForKill } from './progression/progress.js';
 import { emitHint, syncTown } from './town.js';
 import { isWalkable, isWalkableR, losClear, nearestWalkable } from './world/nav.js';
@@ -90,7 +90,7 @@ export function openRecallPortal(ctx, pos) {
   rift.portals.push(portal);
   rift.returnPos = { x, z };
   rift.stats.recalls += 1;
-  if (st.char && !st.char.bag.includes(null)) rift.stats.bagFullRecall = true;
+  if (st.char && isBagFull(st.char)) rift.stats.bagFullRecall = true;   // 피드백 2 D4: 든 아이템 ≥ BAG_SIZE(넘친 옛 세이브 포함)
   ctx.emit(EV.PORTAL_OPENED, { id: portal.id, kind: portal.kind, x, z });
   return requestTravel(ctx, { to: 'town', reason: 'recall' });
 }

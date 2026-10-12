@@ -818,7 +818,10 @@ function fxRiftComplete(seed) {
   return { state: st, map, riftMap: map };
 }
 
-/** 마을 · 가방 38칸(전 등급 · 부서진 장비 · 못 끼는 레벨) · 장착 10 · 보관함 20 */
+/**
+ * 마을 · 가방 38개(전 등급 · 부서진 장비 · 못 끼는 레벨) · 장착 10 · 보관함 20.
+ * 피드백 2 D4: 가방은 30칸 — 31~38번째는 칸 밖(넘친 옛 세이브의 화면 · 고정 상태는 loadCharacter 의 보관함 이동을 거치지 않는다)
+ */
 function fxBag(seed) {
   const map = townMapFromData();
   const fx = base(seed, { cls: 'warrior', level: 12, scene: 'town', riftLevel: 8, map });

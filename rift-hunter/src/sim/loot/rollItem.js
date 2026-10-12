@@ -220,7 +220,7 @@ function assemble({ id, base, baseId, rarity, ilvl, tier, values, affixes, name,
     cls,
     rarity,
     ilvl,
-    reqLevel: ilvl,
+    reqLevel: Math.min(ilvl, ITEM.reqLevelCap),   // 피드백 2 D2: 상한 = 캐릭터 레벨 캡(30)
     tier,
     base: values,
     affixes,

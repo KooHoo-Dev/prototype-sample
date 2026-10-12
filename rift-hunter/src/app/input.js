@@ -6,7 +6,7 @@
 // 마우스 이벤트의 shiftKey 로도 제자리(Shift)를 읽는다 — Alt 를 누른 채 누른 Shift 는 조합이라 keydown 이 버려진다(Shift+클릭은 키 조합이 아니다) · false 면 남은 Shift 눌림을 바로잡는다.
 // 키 처리 순서(§10.5): 텍스트 칸 포커스 → ui 만 / ui.handleKey(e) 먼저(true 면 게임 입력이 아니다) / app 키(onAppKey — Escape · 토글 · Enter 복귀) / 게임 키.
 //   · 모달이 먹은 「누르고 있는」 게임 키(스킬 · Shift)는 눌림으로 남긴다(에지 없이) — 모달이 닫힌 뒤 「눌림」으로 잡힌다(QUALITY §1).
-//   · 겹쳐 보는 패널이 자기 keys 로 먹은 키는 뗄 때까지 게임 입력이 아니다(스킬 창에서 Digit1 을 누른 채 닫아도 스킬이 나가지 않게).
+//   · 겹쳐 보는 패널이 자기 keys 로 먹은 키 · 모달이 자기 keys 로 쓴 키(ui.ownsKey — 스킬 트리의 1~4 · 피드백 2 D6)는 뗄 때까지 게임 입력이 아니다(스킬 창에서 Digit1 을 누른 채 닫아도 스킬이 나가지 않게).
 // 마우스: window 에서 받는다(#ui-root 가 캔버스를 덮어도) · ui.blocksPointer(x, y) 이거나 상호작용 요소(버튼 · 입력 칸 …) 위의 누름은 게임 입력이 아니다 ·
 //   누르고 있던 이동은 패널 위로 지나가도 유지 · 떼면 끝 · 창 밖 · 포커스 없음이면 cursor null(누르고 있던 이동이 멈춘다).
 // hover 조합(§11.5): (이름표 켬 ? labelHover : null) ?? 몬스터 광선 ?? labelHover ?? 드랍 · 물체 광선 — 몬스터 원기둥이 이름표보다 앞선다(Alt 일 때만 이름표가 앞선다).
@@ -196,7 +196,8 @@ export class InputCollector {
     if (this.ui.handleKey(e)) {
       e.preventDefault();
       if (!e.repeat && this._isHoldKey(code)) {
-        if (modal) this.held.add(code);
+        // 모달이 자기 키로 쓴 것(스킬 트리의 1~4 칸 배정 — 피드백 2 D6)은 겹쳐 보는 패널처럼 뗄 때까지 먹는다 · 그 밖의 모달이 먹은 것은 눌림으로 남긴다
+        if (modal && !(typeof this.ui.ownsKey === 'function' && this.ui.ownsKey(code))) this.held.add(code);
         else this.captured.add(code);
       }
       return;

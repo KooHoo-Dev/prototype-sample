@@ -17,6 +17,8 @@ export const ITEM = {
   setAffixes: [3, 4],
   /** (P5 W1) 희귀 이름 조각 수 — strings.ko.js 의 rare.a.0..23 · rare.b.0..23(§5.13-4 「rng.int(0, 23)」) */
   rareNames: 24,
+  /** 피드백 2 D2(Jay 결정 2026-10-12) — 요구 레벨 = min(ilvl, reqLevelCap). 캐릭터 레벨 캡(LEVEL_CAP 30)과 같다 — 균열 30 위에서 주운 장비도 낄 수 있다(브리프 「끝이 없다」) */
+  reqLevelCap: 30,
 };
 
 export const BASE_TIERS = [
@@ -32,8 +34,12 @@ export const FIST = {
   mage: { dmg: [3, 6], aps: 1.40, type: 'lightning' },
 };
 
-/** 업그레이드 판정 · 봇 장착의 최소 powerScore 증가(0.5%) */
-export const COMPARE = { minGain: 0.005 };
+/**
+ * 업그레이드 판정 · 봇 장착의 최소 powerScore 증가(0.5% — 화면의 비교 화살표 ▲ 「조금이라도 나으면」).
+ * upgradeGain(피드백 2 D5 · Jay 결정 2026-10-12): 「업그레이드」로 세는 문턱 3% — 균열 기록 rift.stats.upgrades(완료 패널 「그중 더 나은 장비」) ·
+ *   봇 측정(MEASURE.md 업그레이드 판 비율)이 같은 값을 읽는다(0.5% 는 늦게까지 거의 늘 하나가 넘었다 — NOTES-BALANCE §6-3)
+ */
+export const COMPARE = { minGain: 0.005, upgradeGain: 0.03 };
 
 /** ilvl 1 · 단계 0 의 값 @type {BaseDef[]} */
 export const BASES = [

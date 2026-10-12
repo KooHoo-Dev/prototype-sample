@@ -401,7 +401,7 @@ test('화염구: 투사체 r 0.35 · 18 m/s · 16m · 폭발 원 2.5 · 판정 �
   assert.ok(Math.abs(Math.hypot(pr[0].vel.x, pr[0].vel.z) - 18) < 1e-9);
   assert.equal(pr[0].until - pr[0].born, Math.max(1, ticks(16 / 18)));
   assert.equal(pr[0].explode.r, 2.5);
-  assert.ok(Math.abs(pr[0].spec.coef - 1.40) < 1e-9);   // 밸런스 게이트: 1.25 / +0.15(랭크 2)
+  assert.ok(Math.abs(pr[0].spec.coef - 1.455) < 1e-9);   // 밸런스 게이트: 1.25 / +0.15 · 피드백 2: 1.30 / +0.155(랭크 2)
   assert.equal(pr[0].pierce, 0);
   assert.equal(pr[0].spec.type, 'fire');
 });
@@ -418,7 +418,7 @@ test('메테오: 커서(18m 로 자름) · 효과 하나(예고 1.2 · 원 3.5 �
   assert.equal(e[0].shape.r, 3.5);
   assert.equal(e[0].end - e[0].hitAt, ticks(3));
   assert.equal(e[0].tickT, ticks(0.5));
-  assert.ok(Math.abs(e[0].spec.coef - 2.7) < 1e-9);   // 밸런스 게이트: 2.70 / +0.30(랭크 1)
+  assert.ok(Math.abs(e[0].spec.coef - 2.4) < 1e-9);   // 밸런스 게이트: 2.70 / +0.30 · 피드백 2: 2.40 / +0.27(랭크 1)
   assert.ok(Math.abs(e[0].tickSpec.coef - 0.35 * 0.5) < 1e-9);
   assert.equal(e[0].hostile, false);
   assert.ok(e[0].from && Number.isFinite(e[0].from.x));
@@ -546,7 +546,7 @@ test('변형 — 피의 회오리 · 분열 화염구(±15° 셋 · 70%) · 얼�
   assert.equal(pr.length, 3);
   const ang = pr.map(x => Math.atan2(x.vel.x, x.vel.z)).sort((a, b) => a - b);
   assert.ok(Math.abs(ang[0] + deg2rad(15)) < 1e-9 && Math.abs(ang[1]) < 1e-9 && Math.abs(ang[2] - deg2rad(15)) < 1e-9);
-  for (const x of pr) { assert.equal(x.visual, 'fireballSplit'); assert.ok(Math.abs(x.spec.coef - 1.25 * 0.7) < 1e-9); }   // 밸런스 게이트: 화염구 1.25(랭크 1)
+  for (const x of pr) { assert.equal(x.visual, 'fireballSplit'); assert.ok(Math.abs(x.spec.coef - 1.3 * 0.7) < 1e-9); }   // 밸런스 게이트: 화염구 1.25 · 피드백 2: 1.30(랭크 1)
   const n = setup({ cls: 'mage', ranks: { frostNova: 1, iceShards: 1 }, bar: ['frostNova'] });
   cast(n.ctx, { x: n.p.pos.x + 1, z: n.p.pos.z });
   toHit(n.ctx);

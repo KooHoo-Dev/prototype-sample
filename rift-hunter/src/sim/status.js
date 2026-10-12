@@ -191,6 +191,16 @@ export function applyKnock(ctx, mon, fromX, fromZ, dist) {
 }
 
 /**
+ * 피드백 2 D10 — 그 몬스터의 마지막 넉백이 끝난(끝날) 틱 · 넉백을 받은 적이 없으면 -1. applyKnock 이 knockImmuneUntil = 끝 + ticks(STATUS.knockImmune)로
+ * 두므로 거기서 되돌린다(상태 필드를 더하지 않는다 — conds.targetDisabled 가 「넉백 직후 COND.knockSec」를 본다)
+ * @param {MonsterState} mon @returns {number}
+ */
+export function knockEndTick(mon) {
+  const u = mon?.st?.knockImmuneUntil;
+  return Number.isFinite(u) && u >= 0 ? u - ticks(STATUS.knockImmune) : -1;
+}
+
+/**
  * 경직 — act flinch STATUS.flinchSec · 끝 + flinchImmune 면역 · 강인함(mods.immune 'flinch') · rank.flinchFrac null 면역 · 기절 · 빙결 중이면 안 걸림.
  * 「한 적중 ≥ hpMax × flinchFrac」 검사는 부르는 쪽(combat.playerHit)
  * @param {SimCtx} ctx @param {MonsterState} mon @returns {boolean} 걸렸다

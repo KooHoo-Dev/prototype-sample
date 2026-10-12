@@ -26,8 +26,9 @@ export const SAVE_KEYS = {
 };
 
 export const CHAR_SLOTS = 4;
-export const BAG_SIZE = 40;
-export const BAG_COLS = 8;
+// 피드백 2 D4(Jay 결정 2026-10-12): 가방 40(8 × 5) → 30(6 × 5) — 도중 귀환이 쓰이게. 옛 세이브의 31~40번째는 보관함으로(save · GameSim.loadCharacter)
+export const BAG_SIZE = 30;
+export const BAG_COLS = 6;
 export const STASH_SIZE = 60;
 export const SKILL_BAR = 5;
 export const LEVEL_CAP = 30;

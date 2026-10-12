@@ -329,3 +329,124 @@ test('app.game: Alt 를 누른 채 게임 키(Q · T · 1~4)를 누르면 「Alt
   assert.equal(g.ui.notices.filter((n) => n === 'notice.altBlocked').length, 2);
   void DT;
 });
+
+// ───────────────────────── 피드백 2 다듬기: 세이브 쓰기 순서(보관함) ─────────────────────────
+
+/** 가짜 localStorage — fail(key) 가 참이면 그 키 쓰기에서 던진다(용량 초과 흉내 · 같은 저장소의 다른 키는 그대로) */
+function flakyLs() {
+  const ls = /** @type {any} */ (fakeLs());
+  ls.fail = null;
+  const set = ls.setItem;
+  ls.setItem = (k, v) => { if (ls.fail && ls.fail(k)) throw new Error('QuotaExceededError'); set(k, v); };
+  return ls;
+}
+
+/** 저장소(계정 보관함 · 캐릭터 가방 · 장착)에서 그 아이템 ID 가 몇 번 나오는가 @param {any} ls @param {string} id */
+function storedCount(ls, id) {
+  const acc = JSON.parse(ls.m.get(SAVE_KEYS.account));
+  const ch = stored(ls);
+  let n = 0;
+  for (const it of acc.stash) if (it && it.id === id) n++;
+  for (const it of ch.bag) if (it && it.id === id) n++;
+  for (const it of Object.values(ch.equip)) if (it && /** @type {any} */ (it).id === id) n++;
+  return n;
+}
+
+test('피드백 2 다듬기: 보관함을 오간 아이템은 세이브 한쪽 쓰기가 실패해도 사라지지 않는다 — 계정 먼저 · 캐릭터가 실패하면 계정을 되돌린다 · 계정이 실패하면 캐릭터를 쓰지 않는다 · 보관함 이동은 1초를 기다리지 않는다', () => {
+  const ls = flakyLs();
+  const g = makeGame({ ls });
+  assert.equal(g.actions.newChar({ slot: 0, cls: 'warrior', name: 'Pair' }).ok, true);
+  settle(g);
+  const st = g.sim.state;
+  assert.equal(st.scene, 'town');
+  const had = new Set(st.char.bag.filter(Boolean).map((it) => it.id));
+  g.sim.debugGrant({ items: ['rare'] });
+  g.debugStep(1);
+  const idx = st.char.bag.findIndex((it) => it && !had.has(it.id));
+  assert.ok(idx >= 0);
+  const id = st.char.bag[idx].id;
+  g._persistNow();
+  assert.equal(storedCount(ls, id), 1, '처음 — 가방에');
+  const isChar = (k) => k === charKey(0);
+  const isAcc = (k) => k === SAVE_KEYS.account;
+  const stashIdx = () => st.account.stash.findIndex((it) => it && it.id === id);
+  const bagIdx = () => st.char.bag.findIndex((it) => it && it.id === id);
+
+  // ① 가방 → 보관함 · 캐릭터 쓰기 실패 — 계정을 되돌린다(둘 다 옛 세이브: 가방에 1개)
+  ls.fail = isChar;
+  assert.equal(g.sim.moveItem({ where: 'bag', idx: bagIdx() }, { where: 'stash' }).ok, true);
+  g.debugStep(1);
+  assert.equal(storedCount(ls, id), 1, '① 사라지지 않는다');
+  assert.equal(stored(ls).bag.some((it) => it && it.id === id), true, '① 옛 캐릭터 세이브 그대로(가방)');
+  assert.equal(JSON.parse(ls.m.get(SAVE_KEYS.account)).stash.some((it) => it && it.id === id), false, '① 계정을 쓰기 전 값으로 되돌렸다(복제도 없다)');
+  assert.equal(g.ui.sticky, 'notice.saveBlocked');
+  // 다시 쓸 수 있게 되면 다음 저장이 둘 다 — 보관함에 1개
+  ls.fail = null;
+  g._persistNow();
+  assert.equal(storedCount(ls, id), 1);
+  assert.equal(JSON.parse(ls.m.get(SAVE_KEYS.account)).stash.some((it) => it && it.id === id), true, '보관함에');
+
+  // ② 보관함 → 가방(바로 앞의 저장에서 1초 안) · 캐릭터 쓰기 실패 — 계정만 앞서 쓰이면 어느 세이브에도 없다 → 되돌려 보관함에 1개
+  ls.fail = isChar;
+  assert.equal(g.sim.moveItem({ where: 'stash', idx: stashIdx() }, { where: 'bag' }).ok, true);
+  g.debugStep(1);
+  assert.equal(storedCount(ls, id), 1, '② 사라지지 않는다');
+  assert.equal(JSON.parse(ls.m.get(SAVE_KEYS.account)).stash.some((it) => it && it.id === id), true, '② 보관함(옛 계정)에 남는다');
+  ls.fail = null;
+  g._persistNow();
+  assert.equal(stored(ls).bag.some((it) => it && it.id === id), true, '가방에');
+  assert.equal(storedCount(ls, id), 1);
+
+  // ③ 가방 → 보관함 · 계정 쓰기 실패(첫 쓰기) — 캐릭터를 쓰지 않는다(쓰면 가방에서 빠진 캐릭터 + 옛 계정 = 0개)
+  ls.fail = isAcc;
+  assert.equal(g.sim.moveItem({ where: 'bag', idx: bagIdx() }, { where: 'stash' }).ok, true);
+  g.debugStep(1);
+  assert.equal(storedCount(ls, id), 1, '③ 사라지지 않는다');
+  assert.equal(stored(ls).bag.some((it) => it && it.id === id), true, '③ 캐릭터 세이브는 옛 것(가방)');
+  ls.fail = null;
+  g._persistNow();
+  assert.equal(storedCount(ls, id), 1);
+  assert.equal(JSON.parse(ls.m.get(SAVE_KEYS.account)).stash.some((it) => it && it.id === id), true);
+
+  // ④ 실패 없는 보관함 이동은 그 프레임에 둘 다(1초 간격을 기다리지 않는다)
+  assert.equal(g.sim.moveItem({ where: 'stash', idx: stashIdx() }, { where: 'bag' }).ok, true);
+  g.debugStep(1);
+  assert.equal(stored(ls).bag.some((it) => it && it.id === id), true, '④ 캐릭터 세이브에 바로');
+  assert.equal(JSON.parse(ls.m.get(SAVE_KEYS.account)).stash.some((it) => it && it.id === id), false, '④ 계정 세이브에서 빠졌다');
+  assert.equal(g.ui.sticky, null, '저장 막힘 알림이 걷혔다');
+});
+
+test('피드백 2 다듬기: 옛 세이브의 넘친 가방을 붙일 때 보관함으로 옮긴 직후(SAVE_REQUEST{all, stash}) 계정 · 캐릭터 어느 쪽 쓰기가 실패해도 그 아이템이 사라지지 않는다(옛 순서는 계정 실패에서 잃었다)', () => {
+  const ls = flakyLs();
+  const g = makeGame({ ls });
+  assert.equal(g.actions.newChar({ slot: 0, cls: 'mage', name: 'Over' }).ok, true);
+  settle(g);
+  g.actions.quitToTitle();
+  // 저장소의 캐릭터 가방을 옛 세이브처럼 넘치게(30칸 + 칸 밖 3)
+  const raw = JSON.parse(ls.m.get(charKey(0)));
+  const acc = JSON.parse(ls.m.get(SAVE_KEYS.account));
+  let n = acc.nextItemId;
+  const proto = { ...raw.char.equip.chest };
+  raw.char.bag = [];
+  const ids = [];
+  for (let i = 0; i < 33; i++) { const id = 'i' + n++; ids.push(id); raw.char.bag.push({ ...proto, id }); }
+  acc.nextItemId = n;
+  ls.m.set(charKey(0), JSON.stringify(raw));
+  ls.m.set(SAVE_KEYS.account, JSON.stringify(acc));
+  const h = makeGame({ ls });
+  // 옛 순서(캐릭터 → 계정)는 계정 쓰기가 실패하면 칸 밖 3개가 어느 세이브에도 없었다(검증자 실측) — 계정이 먼저라 실패하면 캐릭터도 옛 것 그대로
+  ls.fail = (k) => k === SAVE_KEYS.account;
+  assert.deepEqual(h.actions.continueGame(), { ok: true });
+  h.debugStep(1);
+  assert.equal(h.sim.state.char.bag.length, 30, '붙일 때 칸 밖 3개를 보관함으로');
+  for (const id of ids) assert.equal(storedCount(ls, id), 1, `계정 실패 — 잃지 않았다 ${id}`);
+  assert.equal(stored(ls).bag.length, 33, '캐릭터 세이브는 옛 것(칸 밖 그대로)');
+  // 캐릭터 쓰기가 실패하면 계정을 되돌린다(보관함 정렬 — SAVE_REQUEST{all, stash})
+  ls.fail = (k) => k === charKey(0);
+  assert.equal(h.sim.sortStash().ok, true);
+  h.debugStep(1);
+  for (const id of ids) assert.equal(storedCount(ls, id), 1, `캐릭터 실패 — 잃지 않았다 ${id}`);
+  ls.fail = null;
+  h._persistNow();
+  for (const id of ids) assert.equal(storedCount(ls, id), 1, `한 번만 ${id}`);
+});

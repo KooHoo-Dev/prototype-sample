@@ -51,11 +51,11 @@ function blockedByTwoHand(char, slot) {
   return slot === 'offhand' && isTwoHanded(char.equip?.mainHand);
 }
 
-/** 오른 비율이 COMPARE.minGain 을 넘는가 @param {number} before @param {number} after */
-function gains(before, after) {
+/** 오른 비율이 minGain(기본 COMPARE.minGain)을 넘는가 @param {number} before @param {number} after @param {number} [minGain] */
+function gains(before, after, minGain = COMPARE.minGain) {
   if (!(after > 0)) return false;
   if (!(before > 0)) return true;
-  return after > before * (1 + COMPARE.minGain);
+  return after > before * (1 + minGain);
 }
 
 /**
@@ -120,19 +120,20 @@ export function compareEquip(char, item, { riftLevel = null, slot = null } = {})
 }
 
 /**
- * 업그레이드 판정(§5.13-5): 클래스가 맞고(null 또는 같은 클래스) · reqLevel ≤ level · 그 부위에 꼈을 때의 powerScore 가 지금보다 COMPARE.minGain 넘게 크다
+ * 업그레이드 판정(§5.13-5): 클래스가 맞고(null 또는 같은 클래스) · reqLevel ≤ level · 그 부위에 꼈을 때의 powerScore 가 지금보다 minGain 넘게 크다
  * (반지는 낮은 쪽을 바꾼 것 = 더 크게 오르는 칸 · 양손 무기는 보조를 뺀 것 · 보조는 양손 무기를 끼고 있으면 false).
  * stats = 지금 시트(ctx.stats — computeStats(char)와 같은 레벨 기준) · 없거나 유한수가 아니면 다시 계산한다.
- * @param {PlayerStats|null} stats @param {CharacterState} char @param {Item} item @returns {boolean}
+ * minGain(피드백 2 D5): 기본 COMPARE.minGain(0.5% — 화면의 비교 화살표) · 균열 기록 · 측정은 COMPARE.upgradeGain(3%)을 넘긴다(sim/drops.js)
+ * @param {PlayerStats|null} stats @param {CharacterState} char @param {Item} item @param {number} [minGain] @returns {boolean}
  */
-export function isUpgrade(stats, char, item) {
+export function isUpgrade(stats, char, item, minGain = COMPARE.minGain) {
   if (!char || !item) return false;
   if (gateReason(char, item)) return false;
   if (equippedSlotOf(char, item)) return false;
   const fit = bestFit(char, item, null, null);
   if (!fit) return false;
   const now = stats && Number.isFinite(stats.sheetDps) && Number.isFinite(stats.ehp) ? powerScore(stats) : powerScore(computeStats(char));
-  return gains(now, fit.power);
+  return gains(now, fit.power, Number.isFinite(minGain) && minGain >= 0 ? minGain : COMPARE.minGain);
 }
 
 /**

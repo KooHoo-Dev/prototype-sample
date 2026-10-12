@@ -257,7 +257,7 @@
 .notice-big-body { font-size: 13px; }
 .notice-big-more { margin-top: 4px; font-size: 11px; color: var(--ui-dim); }
 .notice-col { position: absolute; right: 16px; top: calc(50% + 80px); width: 320px; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.notice { max-width: 320px; padding: 5px 10px; font-size: 13px; background: rgba(14, 12, 18, 0.88); border-right: 3px solid var(--ui-accent); border-radius: 3px; }
+.notice { max-width: 320px; padding: 5px 10px; font-size: 13px; word-break: keep-all; background: rgba(14, 12, 18, 0.88); border-right: 3px solid var(--ui-accent); border-radius: 3px; }
 .hud-banner { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); max-width: 80%; padding: 6px 28px; font-size: 26px; font-weight: 800;
   color: #ffe2b0; text-align: center; white-space: nowrap; text-shadow: 0 2px 6px #000, 0 0 2px #000;
   background: linear-gradient(90deg, transparent, rgba(10, 8, 12, 0.7) 20%, rgba(10, 8, 12, 0.7) 80%, transparent); }
@@ -353,6 +353,7 @@
 .sum-value { font-variant-numeric: tabular-nums; }
 .sum-parts b { margin-right: 6px; }
 .sum-part { margin-right: 8px; font-size: 12px; white-space: nowrap; }
+.sum-note { color: var(--ui-dim); font-size: 11px; }   /* 피드백 2 D5 — 「그중 더 나은 장비」의 문턱(측정과 같은 값) */
 .pnl-complete { width: 540px; }
 .pnl-complete .panel-title { font-size: 22px; color: #7fe08a; }
 .complete-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }

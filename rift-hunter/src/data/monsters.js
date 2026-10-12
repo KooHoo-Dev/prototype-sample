@@ -11,7 +11,9 @@ export const MON = {
   //   W1 수정이 이 값을 0.9 로 낮췄다가 균열 5 이상의 위협이 사라져 되돌렸다(NOTES-W1FIX §2.0)
   // 밸런스 게이트(NOTES-BALANCE): hpBase 19 → 36(× 1.89) · dmgBase 3.5 → 24.5(× 7) — 봇(사람 설정)이 적정 레벨에서 죽지 않았다(사망/판 0.01).
   //   첫 판들은 RIFT.earlyDmg · earlyHp 경사가 받친다(균열 1 의 실제 피해 배율은 옛 값과 같고 일반 생명은 옛 값의 95% — data/rift.js)
-  hpBase: 36, dmgBase: 24.5,
+  // 피드백 2 D1 · D9(Jay 결정 2026-10-12): dmgBase 24.5 → 22 — 입문 구간이 균열 1~6 으로 줄어 균열 7 부터 본 곡선이고, 일반 팩이 ~1.35배 촘촘해져(맵 밀도 — 판 길이)
+  //   같은 레벨의 받는 피해가 늘었다(19 는 후반이 쉬워 9시간에 균열 42~44 · 캐릭터 레벨 30 이 4.4시간 — 실험). 균열 1 의 실제 피해(dmgBase × earlyDmg[0])는 그대로(0.717)
+  hpBase: 36, dmgBase: 22,
   wakeCheckT: 6, maxAwake: 120, leash: 36, leashSec: 3, shieldFront: 0.5, frontDeg: 45,
   // W1 수정(NOTES-W1FIX): linkRadius 8 → 11 — 깊은 방(depth ≥ linkMinDepth)의 파도를 크게(25마리 이상 순간) · 초반 방은 linkMinDepth 가 막는다
   stopFrac: 0.8, sepPad: 0.1, sepMaxNeighbors: 6, targetingRange: 15, directChaseR: 3, linkRadius: 11,
@@ -28,12 +30,15 @@ export const MON = {
 // 밸런스 게이트(NOTES-BALANCE): hp champion 3.5 → 8 · elite 7 → 15 · guardian 28 → 32(MON.hpBase 36 과 함께 — 팩 처치 시간 8~20 · 15~35 · 30~70초 목표)
 /** 기절 면역 길이는 STATUS.stunImmune(§7.6) @type {RankDef[]} */
 export const RANKS = [
-  { id: 'normal', hp: 1, dmg: 1, xp: 1, gauge: 0.25, tc: 'normal', scale: 1.00, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
+  // 피드백 2 D9: normal hp 1 → 1.6(회전 베기 정타 — 봇이 모은 장비 기준 1.5번 → 2~3번) · gauge 0.25 → 0.27(× 1.08 — 처치가 길어진 만큼 판 길이를 맞춘다 ·
+  //   더 올리면 판당 장비가 줄어 도중 귀환이 30% 아래로 — 실험) · 판 길이는 팩 밀도(data/packs.js)와 입문 구간 게이지(RIFT.earlyGaugeMul)가 함께 맞춘다
+  //   guardian hp 32 → 27 · dmg 2.0 → 1.4(D3 — 입문 구간이 균열 6 에서 끝나 균열 7~11 수호자 생명이 옛 경사보다 최대 1.44배 · 수호자가 사망의 중심이 되지 않게)
+  { id: 'normal', hp: 1.6, dmg: 1, xp: 1, gauge: 0.27, tc: 'normal', scale: 1.00, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
   { id: 'champion', hp: 8, dmg: 1.5, xp: 4, gauge: 1.0, tc: 'champion', scale: 1.15, stunMul: 0.6, freezeMul: 0.7, knockMul: 0.5, flinchFrac: 0.30 },   // hp 🔒
   { id: 'elite', hp: 15, dmg: 1.7, xp: 12, gauge: 3.0, tc: 'elite', scale: 1.30, stunMul: 0.4, freezeMul: 0.5, knockMul: 0, flinchFrac: null },          // hp 🔒
   { id: 'minion', hp: 2, dmg: 1.2, xp: 2, gauge: 0.5, tc: 'minion', scale: 1.05, stunMul: 0.7, freezeMul: 0.8, knockMul: 0.5, flinchFrac: 0.25 },
   // hp 🔒 · W1 수정(NOTES-W1FIX): hp 35 → 28 — 시작 장비 균열 1 수호자 싸움(강인함 63%)이 35 에서 ~95초 · 사망이 그 싸움에 몰린다(§2.0 · §3.5)
-  { id: 'guardian', hp: 32, dmg: 2.0, xp: 60, gauge: 0, tc: 'guardian', scale: 1.00, stunMul: 0.25, freezeMul: 0.3, knockMul: 0, flinchFrac: null },
+  { id: 'guardian', hp: 27, dmg: 1.4, xp: 60, gauge: 0, tc: 'guardian', scale: 1.00, stunMul: 0.25, freezeMul: 0.3, knockMul: 0, flinchFrac: null },
   { id: 'split', hp: 0.6, dmg: 0.5, xp: 0.25, gauge: 0.1, tc: 'split', scale: 0.60, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
   { id: 'spawn', hp: 1, dmg: 1, xp: 0, gauge: 0, tc: null, scale: 1.00, stunMul: 1.0, freezeMul: 1.0, knockMul: 1.0, flinchFrac: 0.15 },
 ];
@@ -67,7 +72,7 @@ export const MONSTERS = [
     params: { keepMin: 7, keepMax: 10, backoff: 4, backoffMul: 0.3 }, look: { color: '#c26a3e', variant: 'shaman' } },
   // W1 수정(NOTES-W1FIX): backoffMul 0.8 → 0.3(파고들기가 통하게 — 브리프 §3.4 「파고들기 · 옆으로」) · dmg 는 0.8 그대로(첫 판 완화는 RIFT.earlyDmg)
   { id: 'skeletonArcher', template: 'humanoid', tags: ['ranged'], behavior: 'archer', radius: 0.40, height: 1.8, speed: 3.2, turnRate: 8,
-    hp: 0.8, dmg: 0.6, xp: 1.0, gauge: 1.0, res: res({ cold: 0.25 }), aggro: 14, eliteOk: true,   // 밸런스 게이트: dmg 0.8 → 0.6(받는 피해의 절반이 화살 — 예고된 위협 쪽으로 무게를 옮긴다)
+    hp: 0.8, dmg: 0.45, xp: 1.0, gauge: 1.0, res: res({ cold: 0.25 }), aggro: 14, eliteOk: true,   // 밸런스 게이트: dmg 0.8 → 0.6(받는 피해의 절반이 화살 — 예고된 위협 쪽으로 무게를 옮긴다) · 피드백 2: 0.6 → 0.45(팩이 촘촘해져 화살이 전사 사망의 절반 — 봇은 화살을 피하지 않는다)
     attacks: [
       { id: 'arrow', kind: 'projectile', windup: 0.60, recover: 0.40, cd: 1.8, range: 11, mul: 1.0, type: 'phys', telegraph: 'aimLine', aimLock: 0.2,
         proj: { speed: 16, r: 0.2, life: 1.2, visual: 'arrow' } },

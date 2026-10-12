@@ -3,7 +3,7 @@
 // 상태를 바꾸는 길은 step 과 아래 명령 메서드뿐이다(app · ui · 봇은 상태를 직접 고치지 않는다 — unloadCharacter · returnToRift …).
 // 모든 공개 명령은 끝에서 플러시한다(재진입 안전 — 리스너가 플러시 도중에 부른 명령의 이벤트는 큐 뒤에 쌓였다가 같은 플러시에서 나간다 §4.1).
 
-import { CHAR_SLOTS, CLASS_IDS, DT, HINT_IDS, LEVEL_CAP } from '../core/constants.js';
+import { BAG_SIZE, CHAR_SLOTS, CLASS_IDS, DT, HINT_IDS, LEVEL_CAP } from '../core/constants.js';
 import { EV } from '../core/events.js';
 import { hash32 } from '../core/hash.js';
 import { yawOf } from '../core/math.js';
@@ -110,6 +110,7 @@ export class GameSim {
     }
     // 1 — 플레이 시간 · 보간용 직전 값(값만 복사)
     st.char.playSec += DT;
+    if (st.char.bag.length > BAG_SIZE) inv.settleBag(st.char);   // 피드백 2 D4: 넘친 가방 — 칸이 비었으면 칸 밖의 아이템을 당긴다(팔기 · 분해 · 보관 뒤)
     const p = st.player;
     if (p.prevPos === p.pos) p.prevPos = { x: p.pos.x, z: p.pos.z };
     p.prevPos.x = p.pos.x;
@@ -424,6 +425,12 @@ export class GameSim {
     if (!char || typeof char !== 'object' || !CLASS_IDS.includes(char.cls)) return this._done(fail('invalid'));
     char.slot = slot;
     this._attach(slot, char, false);
+    // 피드백 2 D4: 옛 세이브(가방 40칸 시절)의 칸 밖 아이템 → 칸 안 빈자리 → 보관함 빈칸(둘 다 차면 가방 칸 밖에 남는다 — 정리할 때까지 줍지 못한다)
+    const ov = inv.moveBagOverflowToStash(this.state);
+    if (ov.toBag || ov.toStash) {
+      this.ctx.emit(EV.BAG, { reason: 'stash' });
+      this.ctx.emit(EV.SAVE_REQUEST, { scope: 'all', reason: 'stash' });
+    }
     return this._done({ ok: true });
   }
 

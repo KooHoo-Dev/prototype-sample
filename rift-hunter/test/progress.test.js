@@ -6,6 +6,7 @@ import { EQUIP_SLOTS, LEVEL_CAP } from '../src/core/constants.js';
 import { EV } from '../src/core/events.js';
 import { ECON, XP } from '../src/data/economy.js';
 import { BASES_BY_ID, SKILL_NODES_BY_ID } from '../src/data/index.js';
+import { RANKS } from '../src/data/monsters.js';
 import { PRESETS } from '../src/data/presets.js';
 import { RIFT, earlyDmgMul, earlyHpMul, riftRow } from '../src/data/rift.js';
 import { monsterStats } from '../src/sim/monsters/spawn.js';
@@ -51,23 +52,24 @@ test('xpReq: §7.11 표 그대로(reqEarly 60 · 300 · 700 → round(1300 × 1.
 });
 
 test('xpForKill: round(5 × 종류 × 등급 × xpMul(몬스터 레벨) × 레벨 차 × (1 + xpPct)) · d > 12 감점(최소 0.3) · d < 0 가점(최대 1.5)', () => {
-  assert.equal(xpForKill(mon('ghoul', 'normal', 1), 1, 0), 5);
+  const nx = RANKS.find(r => r.id === 'normal').xp;   // 피드백 2: 데이터의 일반 등급 경험치(RANKS.normal.xp)를 읽는다
+  assert.equal(xpForKill(mon('ghoul', 'normal', 1), 1, 0), Math.round(5 * nx));
   assert.equal(xpForKill(mon('ghoul', 'champion', 1), 1, 0), 20);
   assert.equal(xpForKill(mon('ghoul', 'elite', 1), 1, 0), 60);
   assert.equal(xpForKill(mon('boneGiant', 'guardian', 1), 1, 0), 300, '수호자(GUARDIANS 표)');
   assert.equal(xpForKill(mon('ghoul', 'spawn', 1), 1, 0), 0);
   const L = 7;
-  const base = 5 * riftRow(L).xpMul;
+  const base = 5 * nx * riftRow(L).xpMul;
   assert.equal(xpForKill(mon('ghoul', 'normal', L), L + 12, 0), Math.round(base), 'd = 12 는 감점 없음(정상 경로 d = 9~11)');
   assert.equal(xpForKill(mon('ghoul', 'normal', L), L + 13, 0), Math.round(base * 0.9));
   assert.equal(xpForKill(mon('ghoul', 'normal', L), L + 15, 0), Math.round(base * 0.7));
-  assert.equal(xpForKill(mon('ghoul', 'normal', 1), 30, 0), Math.round(5 * XP.diff.penaltyMin), '최소 0.3');
+  assert.equal(xpForKill(mon('ghoul', 'normal', 1), 30, 0), Math.round(5 * nx * XP.diff.penaltyMin), '최소 0.3');
   assert.equal(xpForKill(mon('ghoul', 'normal', L), L - 2, 0), Math.round(base * 1.2));
-  assert.equal(xpForKill(mon('ghoul', 'normal', 20), 1, 0), Math.round(5 * riftRow(20).xpMul * 1.5), '가점 상한 1.5');
+  assert.equal(xpForKill(mon('ghoul', 'normal', 20), 1, 0), Math.round(5 * nx * riftRow(20).xpMul * 1.5), '가점 상한 1.5');
   assert.equal(xpForKill(mon('ghoul', 'normal', L), L, 0.1), Math.round(base * 1.1), 'xpPct 는 0..1');
   assert.equal(xpForKill(mon('ghoul', 'normal', 1, { noXp: true }), 1, 0), 0);
   assert.equal(xpForKill(mon('nope', 'normal', 1), 1, 0), 0);
-  assert.equal(xpForKill(mon('ghoul', 'normal', 1), 1, NaN), 5);
+  assert.equal(xpForKill(mon('ghoul', 'normal', 1), 1, NaN), Math.round(5 * nx));
   assert.equal(xpForKill(null, 1, 0), 0);
 });
 

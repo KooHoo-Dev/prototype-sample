@@ -2,10 +2,10 @@
 // 패널이 고르는 것(일괄 판매 대상 · 균열석 기본 포커스 · 부분 수리 미리보기 · 스킬 트리 배치 · 노드 수치 전/후 · 제작 분포 · 남은 전리품)을 순수 함수로.
 // DOM 없음 — Node 테스트가 import 한다. 규칙의 정본은 sim(§6.13 조회 함수)이고, 여기는 그것을 화면에 맞게 모은다.
 
-import { EQUIP_SLOTS, ITEM_SLOTS } from '../core/constants.js';
+import { BAG_COLS, BAG_SIZE, EQUIP_SLOTS, ITEM_SLOTS } from '../core/constants.js';
 import { BASES_BY_ID, ITEM_AFFIXES_BY_ID, SKILL_NODES_BY_ID, basesFor, nodesOf } from '../data/index.js';
 import { REPAIR_ORDER } from '../data/economy.js';
-import { ITEM } from '../data/items.js';
+import { COMPARE, ITEM } from '../data/items.js';
 import { RIFT } from '../data/rift.js';
 import { TREE } from '../data/skills.js';
 import { isUpgrade } from '../sim/loot/compare.js';
@@ -21,7 +21,7 @@ import { priceSell } from '../sim/progression/shops.js';
 const UP_CACHE = new WeakMap();
 
 /**
- * isUpgrade(§5.13-5)를 시트 · 아이템별로 기억한다 — 패널이 거래마다 가방 40칸을 다시 계산하지 않게(값은 isUpgrade 그대로)
+ * isUpgrade(§5.13-5)를 시트 · 아이템별로 기억한다 — 패널이 거래마다 가방 칸을 전부 다시 계산하지 않게(값은 isUpgrade 그대로)
  * @param {PlayerStats|null} stats @param {CharacterState|null} char @param {Item|null} item @returns {boolean}
  */
 export function upgradeOf(stats, char, item) {
@@ -353,4 +353,49 @@ export function lostUnlock(level, deaths, riftUnlocked) {
   const L = Math.max(1, Math.floor(Number(level)) || 1);
   const gain = Number(deaths) === 0 ? RIFT.unlockNoDeath : RIFT.unlockClear;
   return Math.max(0, Math.min(RIFT.maxLevel, L + gain) - Math.max(1, Math.floor(Number(riftUnlocked)) || 1));
+}
+
+/**
+ * 피드백 2 D4 — 가방 격자의 크기(칸 수 · 열)는 sim 이 쓰는 값(BAG_SIZE · BAG_COLS) 하나에서 온다(하드코딩 금지).
+ * 열이 0 이하 · 칸 수보다 크면 칸 수로 · 행 = ceil(칸 / 열).
+ */
+export const BAG_GRID = Object.freeze((() => {
+  const size = Math.max(1, BAG_SIZE | 0);
+  const cols = Math.max(1, Math.min(size, BAG_COLS | 0 || size));
+  return { size, cols, rows: Math.ceil(size / cols) };
+})());
+
+/**
+ * 피드백 2 D4 — 가방 넘침(옛 세이브: 40칸 시절의 31~40번째가 보관함에도 못 들어가 가방에 남는다 · 정리할 때까지 줍지 못한다).
+ * count = 든 아이템 수 · over = 칸 수(size) 밖(idx ≥ size)에 든 아이템 수 · last = 마지막으로 찬 칸 + 1 ·
+ * shown = 격자가 그릴 칸 수(넘친 칸이 있으면 그 줄까지 열 단위로 늘린다) · full = 줍지 못한다(count ≥ size — sim isBagFull 과 같다) ·
+ * overflow = 칸 수보다 많이 들었다(count > size — 「가방이 넘쳤다」 문면). 마을에서 패널을 연 채 팔아 칸 안에 빈자리가 생기면 넘친 칸의 아이템은
+ * sim 의 다음 step(settleBag)에서 칸 안으로 당겨진다 — 그 사이 넘친 칸은 보이되 count ≤ size 면 「넘쳤다」는 내지 않는다.
+ * @param {Array<Item|null>|null|undefined} bag @param {number} [size] @param {number} [cols]
+ * @returns {{count:number, over:number, last:number, shown:number, full:boolean, overflow:boolean}}
+ */
+export function bagFill(bag, size = BAG_GRID.size, cols = BAG_GRID.cols) {
+  const list = Array.isArray(bag) ? bag : [];
+  let count = 0;
+  let over = 0;
+  let last = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (!list[i]) continue;
+    count++;
+    if (i >= size) over++;
+    last = i + 1;
+  }
+  const c = Math.max(1, cols | 0);
+  const shown = last > size ? Math.ceil(last / c) * c : Math.ceil(size / c) * c;
+  return { count, over, last, shown, full: count >= size, overflow: count > size };
+}
+
+/**
+ * 피드백 2 D5 — 균열 완료 패널 「그중 더 나은 장비」의 문턱(장비 점수 비율) = data/items.js 의 COMPARE.upgradeGain(3%).
+ * sim 이 rift.stats.upgrades 를 세는 문턱(sim/drops.js)과 측정(봇 · MEASURE.md 업그레이드 판 비율)이 같은 키를 읽는다.
+ * 화면의 비교 화살표(녹 ▲)는 이 값이 아니라 isUpgrade 기본값(COMPARE.minGain 0.5% — 「조금이라도 나으면」) 그대로다.
+ * @returns {number}
+ */
+export function upgradeCountGain() {
+  return COMPARE.upgradeGain;
 }

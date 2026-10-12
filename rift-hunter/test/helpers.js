@@ -60,9 +60,12 @@ export function makeTestChar(overrides = {}) {
 
 /**
  * FIST 가 아닌 시작 무기 · 레벨 1 PlayerStats 리터럴(§7 값으로 손 계산 — 전사: 검 3~7 · 1.40 · 생명 120 · 방어도 12 · 시트 DPS 7.8925 ·
- * ehp 138 / 마법사({cls:'mage'}): 마법봉 3~6 · 1.40 · 생명 90 · 마나 100 · 7/초 · 시트 DPS 7.1033 · ehp 103.5) + 얕은 덮어쓰기
+ * ehp 138 / 마법사({cls:'mage'}): 마법봉 3~6 · 1.40 · 생명 100 · 마나 100 · 10/초(피드백 2 다듬기 — 옛 7) · 시트 DPS 7.1033 · ehp 103.5) + 얕은 덮어쓰기
  * @param {Partial<PlayerStats>} [overrides] @returns {PlayerStats}
  */
+/** 레벨 1 마법사 마나 재생(초당) — data/classes.js regen.base(레벨 1 은 perLevel × 0) */
+const MAGE_REGEN_L1 = CLASSES.find(c => c.id === 'mage')?.regen.base ?? 0;
+
 export function makeTestStats(overrides = {}) {
   const mage = overrides.cls === 'mage';
   const zero4 = () => ({ phys: 0, fire: 0, cold: 0, lightning: 0 });
@@ -77,7 +80,7 @@ export function makeTestStats(overrides = {}) {
   return {
     cls: mage ? 'mage' : 'warrior', level: 1,
     main: 10, vit: 0,
-    lifeMax, resourceMax: 100, resourceRegen: mage ? 7 : 0,
+    lifeMax, resourceMax: 100, resourceRegen: mage ? MAGE_REGEN_L1 : 0,   // 피드백 2 다듬기: 마법사 regen 7 → 10(+ 0.05/레벨 — data/classes.js)
     weapon,
     aps: 1.4,
     critChance: 0.05, critDamage: 0.5,

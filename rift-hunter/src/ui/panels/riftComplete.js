@@ -5,11 +5,13 @@
 
 import { RARITIES } from '../../core/constants.js';
 import { fmtInt, fmtSec } from '../format.js';
-import { completeBadges } from '../pnlLogic.js';
+import { completeBadges, upgradeCountGain } from '../pnlLogic.js';
 
 /** @typedef {import('../../types.js').Panel} Panel */
 
 const KILL_KEYS = ['normal', 'champion', 'elite', 'minion', 'guardian', 'other'];
+/** 문턱 비율 → 「3」 · 「0.5」(소수 한 자리까지 · 끝의 0 은 뺀다) @param {number} g */
+const fmtPct = (g) => String(Math.round(g * 1000) / 10);
 
 /**
  * 판 요약 표(RunSummary) — host 를 비우고 다시 그린다.
@@ -51,7 +53,11 @@ export function renderSummary(host, s, t, w) {
   row('complete.drops', dv);
   row('complete.gold', fmtInt(s.gold ?? 0));
   row('complete.xp', fmtInt(s.xp ?? 0));
-  row('complete.upgrades', fmtInt(s.upgrades ?? 0));
+  // 피드백 2 D5 — 측정(업그레이드 판 비율)과 같은 문턱을 문면에(세는 것은 sim 의 rift.stats.upgrades — 같은 data 값을 읽는다)
+  const uv = w.el('span', 'sum-parts');
+  uv.appendChild(w.el('b', '', fmtInt(s.upgrades ?? 0)));
+  uv.appendChild(w.el('span', 'sum-part sum-note', t('complete.upgradesNote', { pct: fmtPct(upgradeCountGain()) })));
+  row('complete.upgrades', uv);
 }
 
 /**

@@ -13,6 +13,7 @@ import { ticks } from '../src/core/time.js';
 import { DEATH, METER } from '../src/data/combat.js';
 import { getMonDef } from '../src/data/index.js';
 import { RIFT, earlyGaugeMulOf } from '../src/data/rift.js';
+import { RANKS } from '../src/data/monsters.js';
 import { getMonster, removeMarked } from '../src/sim/entities.js';
 import { meterView, updateMeter } from '../src/sim/meter.js';
 import { unlockAfter } from '../src/sim/progression/progress.js';
@@ -43,13 +44,14 @@ test('게이지: 처치마다 RANKS.gauge × 종류 gauge × 초반 배율(균�
   kill(g);
   kill(c);
   resolveDeaths(ctx);
-  assert.ok(Math.abs(rift.gauge - (0.25 * 1.0 * earlyGaugeMulOf(1) + 1.0 * 1.0)) < 1e-9, String(rift.gauge));
+  const ng = RANKS.find(r => r.id === 'normal').gauge;   // 피드백 2: 0.25 → 0.27(일반 생명 × 1.6 — 판 길이)
+  assert.ok(Math.abs(rift.gauge - (ng * 1.0 * earlyGaugeMulOf(1) + 1.0 * 1.0)) < 1e-9, String(rift.gauge));
   assert.equal(countEvents(ctx.events, EV.GAUGE), 2);
   const s3 = setup({ level: 3 });
   const g3 = addTestMonster(s3.ctx, { x: 10, z: 10 });
   kill(g3);
   resolveDeaths(s3.ctx);
-  assert.ok(Math.abs(s3.rift.gauge - 0.25 * earlyGaugeMulOf(3)) < 1e-9, 'L3 은 균열 3 의 초반 배율(밸런스 게이트 — 균열별 배열)');
+  assert.ok(Math.abs(s3.rift.gauge - ng * earlyGaugeMulOf(3)) < 1e-9, 'L3 은 균열 3 의 초반 배율(밸런스 게이트 — 균열별 배열)');
   // 밸런스 게이트: 초반 배율은 균열별 배열 — 1 이상 · 줄어들고 · 표 끝 다음 레벨부터 1
   const n = Array.isArray(RIFT.earlyGaugeMul) ? RIFT.earlyGaugeMul.length : RIFT.earlyGaugeTo;
   for (let L = 1; L <= n; L++) {

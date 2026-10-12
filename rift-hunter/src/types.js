@@ -297,7 +297,7 @@
  * @property {ClassId|null} cls
  * @property {Rarity} rarity
  * @property {number} ilvl          1..
- * @property {number} reqLevel      = ilvl (캐릭터 레벨이 이보다 낮으면 장착 불가 · 툴팁 붉게)
+ * @property {number} reqLevel      = min(ilvl, ITEM.reqLevelCap 30 — 피드백 2 D2) (캐릭터 레벨이 이보다 낮으면 장착 불가 · 툴팁 붉게)
  * @property {0|1|2} tier           기본형 단계(일반 · 고급 · 정예)
  * @property {{dmg?:[number, number], aps?:number, armor?:number, block?:number, bonus?:[number, number], mana?:number}} base
  *                                  굴린 기본 값(ilvl · 단계 배율 · ±편차까지 곱한 결과 · dmg/armor/bonus는 정수)
@@ -400,7 +400,7 @@
  * @property {number} potions       0..ECON.potionMax @property {number} scrolls   0..ECON.scrollMax
  * @property {{ranks:Object<string, number>, bar:Array<string|null>}} skills   bar 길이 5(0 = 우클릭)
  * @property {Record<EquipSlot, Item|null>} equip
- * @property {Array<Item|null>} bag         길이 40(8 × 5 · 인덱스 = 행 × 8 + 열)
+ * @property {Array<Item|null>} bag         길이 BAG_SIZE 30(6 × 5 · 인덱스 = 행 × 6 + 열 — 피드백 2 D4 · 옛 40) · 넘친 옛 세이브는 길이 > 30(idx ≥ 30 = 칸 밖 · 빈자리 없이 끝에 붙는다 — §6.11 settleBag)
  * @property {number} riftUnlocked          고를 수 있는 최고 균열 레벨(1부터)
  * @property {Object<string, {timeSec:number, deaths:number}>} best   균열 레벨 → 최고 기록(완료한 것만)
  * @property {RunRecord[]} records          최근 RECORDS_MAX(200)개

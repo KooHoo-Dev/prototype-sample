@@ -1,5 +1,5 @@
 // OWNER: P11 — 계약 §10.1 · §10.2 · §10.5 · §10.6
-// 인벤토리(겹쳐 보는 패널 · KeyI): 왼쪽 장비 10칸(인형 배치) · 오른쪽 가방 8 × 5 · 골드 · 재료.
+// 인벤토리(겹쳐 보는 패널 · KeyI): 왼쪽 장비 10칸(인형 배치) · 오른쪽 가방(BAG_GRID — 피드백 2: 6 × 5 · 넘친 칸 줄) · 골드 · 재료.
 // 칸을 고르면(마우스 위 · 방향키) 툴팁(장착 중인 것과 나란히 · 변화 줄). Enter(또는 클릭) = 장착/해제 · L = 잠금 · Z = 정렬 · E = 영역 바꾸기.
 // 끌어서 놓기: 가방 → 가방(자리 바꿈) · 가방 → 장비 칸(그 칸에 장착) · 장비 → 가방(해제). 실패는 패널 안에 reason 문면.
 
@@ -31,7 +31,7 @@ export function createInventoryPanel(ctx) {
   const dollBox = body.appendChild(w.el('div', 'area area-doll'));
   dollBox.appendChild(w.el('div', 'area-head', t('inv.compare')));
   const bagBox = body.appendChild(w.el('div', 'area area-bag'));
-  bagBox.appendChild(w.el('div', 'area-head', t('panel.inventory.title')));
+  const bagHead = bagBox.appendChild(w.el('div', 'area-head', t('panel.inventory.title')));
   const foot = el.appendChild(w.el('div', 'panel-foot'));
   const wallet = createWallet(ctx);
   const btns = w.el('div', 'btn-row btn-row-left');
@@ -58,6 +58,7 @@ export function createInventoryPanel(ctx) {
     onDrop: (src, dst) => drop(src, dst),
   });
   const bag = createBagGrid(ctx, {
+    head: bagHead,
     onPick: (i) => equipAt(i),
     onFocus: () => { areas.pointer(1); showTip(); err.clear(); },
     onEdge: (dir) => areas.cross(dir),

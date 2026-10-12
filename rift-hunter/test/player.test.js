@@ -688,7 +688,9 @@ test('분노: 강타 적중 +onBasicHit · 피격 +onHitTaken(초당 상한) · 
 test('마나: 초당 resourceRegen 으로 차고 최대에서 멈춘다', () => {
   const { ctx, p } = setup({ cls: 'mage', resource: 10 });
   for (let i = 0; i < 30; i++) step(ctx, {});
-  assert.ok(Math.abs(p.resource - 17) < 1e-6);
+  // 1초 = 10 + ctx.stats.resourceRegen(makeTestStats 레벨 1 — 데이터의 마법사 regen.base · 피드백 2 다듬기 7 → 10)
+  assert.ok(ctx.stats.resourceRegen > 0);
+  assert.ok(Math.abs(p.resource - (10 + ctx.stats.resourceRegen)) < 1e-6, `${p.resource}`);
   for (let i = 0; i < 600; i++) step(ctx, {});
   assert.equal(p.resource, p.resourceMax);
 });

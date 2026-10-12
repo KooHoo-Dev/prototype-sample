@@ -16,7 +16,7 @@ import { rerollAffix } from '../loot/rollItem.js';
 import { specialCandidates } from '../loot/theory.js';
 import { emptyArray } from '../state.js';
 import {
-  addConsumable, addGold, addMaterials, addToBag, findItem, hasMaterials, itemAt, itemIdNum, itemRepairRaw, repairCost, spendGold, spendMaterials,
+  addConsumable, addGold, addMaterials, addToBag, findItem, freeBagIdx, hasMaterials, itemAt, itemIdNum, itemRepairRaw, repairCost, spendGold, spendMaterials,
 } from './inventory.js';
 import { pointsSpent } from './progress.js';
 
@@ -163,7 +163,7 @@ export function buy(ctx, shop, idx) {
   if (!Array.isArray(list) || !Number.isInteger(idx) || idx < 0 || idx >= list.length) return fail('noItem');
   const item = list[idx];
   if (!item) return fail('noItem');
-  if (ch.bag.indexOf(null) < 0) return fail('bagFull');
+  if (freeBagIdx(ch) < 0) return fail('bagFull');   // 피드백 2 D4: 넘친 가방(옛 세이브)에는 새로 넣지 못한다
   const cost = priceBuy(item);
   if (!(ch.gold >= cost)) return fail('gold');
   spendGold(ctx, cost, 'buy');
@@ -238,7 +238,7 @@ export function buyback(ctx, idx) {
   if (!Number.isInteger(idx) || idx < 0 || idx >= ch.buyback.length) return fail('noItem');
   const entry = ch.buyback[idx];
   if (!entry?.item) return fail('noItem');
-  if (ch.bag.indexOf(null) < 0) return fail('bagFull');
+  if (freeBagIdx(ch) < 0) return fail('bagFull');   // 피드백 2 D4: 넘친 가방(옛 세이브)에는 새로 넣지 못한다
   const cost = Math.max(0, Math.round(Number(entry.price) || 0));
   if (!(ch.gold >= cost)) return fail('gold');
   spendGold(ctx, cost, 'buyback');
@@ -370,7 +370,7 @@ export function craft(ctx, slot) {
   const g = townGate(ctx); if (g) return g;
   const ch = /** @type {CharacterState} */ (ctx.state.char);
   if (!ITEM_SLOT_SET.has(slot)) return fail('invalid');
-  if (ch.bag.indexOf(null) < 0) return fail('bagFull');
+  if (freeBagIdx(ch) < 0) return fail('bagFull');   // 피드백 2 D4: 넘친 가방(옛 세이브)에는 새로 넣지 못한다
   const cost = priceCraft(ch);
   if (!(ch.gold >= cost)) return fail('gold');
   if (!hasMaterials(ch, CRAFT_MATS)) return fail('materials');
@@ -422,7 +422,7 @@ export function gamble(ctx, slot) {
   const g = townGate(ctx); if (g) return g;
   const ch = /** @type {CharacterState} */ (ctx.state.char);
   if (!ITEM_SLOT_SET.has(slot)) return fail('invalid');
-  if (ch.bag.indexOf(null) < 0) return fail('bagFull');
+  if (freeBagIdx(ch) < 0) return fail('bagFull');   // 피드백 2 D4: 넘친 가방(옛 세이브)에는 새로 넣지 못한다
   const cost = priceGamble(ch, slot);
   if (!(ch.gold >= cost)) return fail('gold');
   const rarity = gambleRarity(ctx.rng.shop, ch, slot);

@@ -239,6 +239,21 @@ export function createStorage({ ls = undefined, now = () => Date.now() } = {}) {
         return false;
       }
     },
+    /**
+     * 캐릭터 + 계정을 한 쌍으로(피드백 2 다듬기 — §11.6): **계정 먼저** → 캐릭터. 보관함을 오간 아이템이 어느 세이브에도 없는 순간을 만들지 않는다 —
+     * 계정 쓰기가 실패하면 캐릭터를 쓰지 않고(둘 다 옛 세이브), 캐릭터 쓰기가 실패하면 계정을 쓰기 전 값으로 되돌린다(둘 다 옛 세이브).
+     * 되돌리기마저 실패하면 계정만 새 것 — 보관함에 넣은 것은 많아야 복제(다시 읽을 때 dedupeItemIds 가 새 ID 를 준다)이고,
+     * 계정의 nextItemId 가 캐릭터의 아이템 번호보다 뒤처지지 않는다.
+     * @param {import('../types.js').GameState} state @param {CharacterState} char @returns {boolean} 둘 다 썼다
+     */
+    writeCharAndAccount(state, char) {
+      const prev = get(SAVE_KEYS.account);
+      if (!api.writeAccount(state)) return false;
+      if (api.writeChar(char)) return true;
+      if (prev === null) del(SAVE_KEYS.account);
+      else set(SAVE_KEYS.account, prev);
+      return false;
+    },
     /** 저장소에 그 칸의 캐릭터 키가 있는가(계정 요약이 아니라 — §11.2 newChar) @param {number} slot */
     hasChar(slot) { return get(charKey(slot)) !== null; },
     /** 백업 뒤 지운다 @param {number} slot @returns {boolean} */
@@ -256,7 +271,7 @@ export function createStorage({ ls = undefined, now = () => Date.now() } = {}) {
 
 /**
  * SAVE_REQUEST 묶기 — 프레임 끝에 take() 로 이번에 쓸 것을 정한다.
- *  · 캐릭터를 쓸 때는 계정도 같이(scope 'char' 도) · 캐릭터는 최소 gapMs 간격 · IMMEDIATE_REASONS 면 바로
+ *  · 캐릭터를 쓸 때는 계정도 같이(scope 'char' 도) · 캐릭터는 최소 gapMs 간격 · IMMEDIATE_REASONS 면 바로 · scope 'all' 도 바로(계정 · 캐릭터 한 쌍 — 피드백 2 다듬기)
  *  · force(탭 숨김 · pagehide)면 캐릭터가 있을 때 무조건 캐릭터 + 계정(밀린 것이 없어도 — 경험치 · 플레이 시간)
  *  · 캐릭터가 없어졌으면(타이틀로) 캐릭터 요청은 계정 쓰기로 바꾼다
  * @param {{gapMs?:number, immediate?:string[]}} [o]
@@ -269,7 +284,9 @@ export function createSaveScheduler({ gapMs = CHAR_SAVE_GAP_MS, immediate = IMME
     request(scope, reason = '') {
       if (scope === 'char' || scope === 'all') {
         wantChar = true;
-        if (immediate.includes(reason)) urgent = true;
+        // 피드백 2 다듬기: 'all'(보관함 · 캐릭터 생성 — 계정과 캐릭터가 함께 바뀐다)은 바로 한 쌍으로 — 계정만 먼저 쓰고 캐릭터를 1초 뒤로 미루면
+        //   보관함에서 꺼낸 아이템이 그 사이 어느 세이브에도 없다(탭이 죽으면 사라진다)
+        if (immediate.includes(reason) || scope === 'all') urgent = true;
       }
       if (scope === 'account' || scope === 'all') wantAccount = true;
       if (scope !== 'char' && scope !== 'account' && scope !== 'all') { wantChar = true; wantAccount = true; }

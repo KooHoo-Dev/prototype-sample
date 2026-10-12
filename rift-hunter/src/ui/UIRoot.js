@@ -14,6 +14,7 @@ import { t, tName } from './i18n.js';
 import { createLabels } from './labels.js';
 import { createMinimap } from './minimap.js';
 import { PANELS } from './panels/index.js';
+import { BAG_GRID, bagFill } from './pnlLogic.js';
 import * as widgets from './widgets.js';
 
 /** 겹쳐 보는 패널의 토글 키(§10.5-4) — modal 이 열려 있으면 무시 */
@@ -86,6 +87,8 @@ export class UIRoot {
     this.failAt = {};
     /** 피드백 1 — 이 세션에 저생명 포션 안내를 냈다(캐릭터가 바뀌면 다시) */
     this.potionNudged = false;
+    /** 피드백 2 D4 — 넘친 가방 알림을 이번 캐릭터 읽기에서 냈다 */
+    this.overflowNoticed = false;
 
     const layer = (cls) => {
       const e = document.createElement('div');
@@ -148,7 +151,7 @@ export class UIRoot {
       if (e.kind === 'gold' && p && e.amount > 0) this.labels.addGold(p.pos.x, p.pos.z, e.amount);
     });
     on(EV.PICKUP_FAIL, (e) => {
-      if (e.reason === 'bagFull') { if (this._gap('bagFull', BAGFULL_GAP_SEC)) this.notices.push(t('notice.bagFull')); }
+      if (e.reason === 'bagFull') { if (this._gap('bagFull', BAGFULL_GAP_SEC)) this.notices.push(this._bagFullText()); }
       else if (this._gap('pickFull', BAGFULL_GAP_SEC)) this.notices.push(t('notice.potionFull'));
     });
     on(EV.DURABILITY, (e) => {
@@ -203,7 +206,7 @@ export class UIRoot {
     this._autoPanels(state, dt, rdt);
     const visible = this._hudVisible(state);
     this.hud.update(state, dt, { visible, bot: this.botOn });
-    if (visible) this._potionNudge(state);
+    if (visible) { this._potionNudge(state); this._overflowNotice(state); }
     this.minimap.update(state, dt);
     this.labels.update(state, dt, { visible, alpha });
     if (this.meterHud) {
@@ -269,6 +272,14 @@ export class UIRoot {
   /** @returns {import('../types.js').PanelId|null} */
   topPanel() { return this.stack.length ? /** @type {any} */ (this.stack[this.stack.length - 1].id) : null; }
   isModal() { return this.stack.some(p => p.modal); }
+  /**
+   * 맨 위 모달 패널이 그 키를 자기 키(keys)로 쓰는가 — 피드백 2 D6: 스킬 트리의 1~4(칸 배정)는 모달이 닫혀도 「눌림」으로 남기지 않는다(app 입력이 뗄 때까지 먹는다)
+   * @param {string} code
+   */
+  ownsKey(code) {
+    const top = this.stack.length ? this.stack[this.stack.length - 1] : null;
+    return !!top && top.modal && Array.isArray(top.keys) && top.keys.includes(code);
+  }
   anyOpen() { return this.stack.length > 0; }
   /** @param {string} id */
   isOpen(id) { return this.stack.some(p => p.id === id); }
@@ -321,6 +332,8 @@ export class UIRoot {
       if (top.handleKey(e)) return true;
       if (code === KEYBINDS.pause) { if (!e.repeat) this.closePanel(null, 'esc'); return true; }
       if (code === KEYBINDS.analytics && top.id === 'analytics') { if (!e.repeat) this.closePanel('analytics', 'key'); return true; }
+      // 피드백 2 D6 — 모달이 된 스킬 트리(S)는 자기 토글 키로도 닫힌다
+      if (TOGGLES[code] === top.id) { if (!e.repeat) this.closePanel(null, 'key'); return true; }
       widgets.dispatchFallback(top.el, e);
       return true;
     }
@@ -579,7 +592,25 @@ export class UIRoot {
     });
   }
 
+  /** 줍기 실패(가방 가득)의 문면 — 옛 세이브의 넘친 가방이면 「가방이 넘쳤다 — 정리할 때까지 줍지 못한다」(피드백 2 D4) */
+  _bagFullText() {
+    const f = bagFill(this.sim?.state?.char?.bag);
+    return f.overflow ? t('inv.overflow', { n: f.count, max: BAG_GRID.size }) : t('notice.bagFull');
+  }
+
+  /**
+   * 피드백 2 D4 — 캐릭터를 읽은 뒤 가방이 넘쳐 있으면(옛 세이브 · 보관함도 가득) 한 번 알린다(비모달 · 캐릭터를 읽을 때마다 다시)
+   * @param {any} state
+   */
+  _overflowNotice(state) {
+    if (this.overflowNoticed || this.botOn || !state.char) return;
+    this.overflowNoticed = true;
+    const f = bagFill(state.char.bag);
+    if (f.overflow) this.notices.push(t('inv.overflow', { n: f.count, max: BAG_GRID.size }), 8);
+  }
+
   _onCharLoaded() {
+    this.overflowNoticed = false;
     this.potionNudged = false;
     this.hud.reset();
     this.labels.reset();

@@ -1,5 +1,5 @@
 // OWNER: P11 — 계약 §10.1 · §10.2 · §10.5-8 · §10.6
-// 보관함(모달 · INTERACT{stash} — 계정 공유 60칸): 위 보관함 10 × 6 · 아래 가방 8 × 5(pnlBagGrid). 영역 둘 — 방향키가 위 · 아래 끝을 넘으면 옆 영역 · E 로 바꾸기.
+// 보관함(모달 · INTERACT{stash} — 계정 공유 60칸): 왼쪽 보관함 10 × 6 · 오른쪽 가방(pnlBagGrid — 피드백 2: 6 × 5 · 넘친 칸 줄). 영역 둘 — 방향키가 왼쪽 · 오른쪽 끝을 넘으면 옆 영역 · E 로 바꾸기.
 // Enter · F = 옮기기(반대쪽의 빈 첫 칸) · Z = 포커스 영역 정렬 · L = 잠금 · 끌어서 놓기(가방 ↔ 보관함 · 같은 격자 안 자리 바꿈).
 
 import { STASH_SIZE } from '../../core/constants.js';
@@ -25,9 +25,11 @@ export function createStashPanel(ctx) {
   el.dataset.panel = 'stash';
   el.classList.add('pnl-stash');
   const tip = createTooltip(ctx);
-  const stashBox = el.appendChild(w.el('div', 'area'));
+  // 피드백 2 D4 — 가방이 6 × 5 로 좁아져 보관함 | 가방을 나란히(넘친 칸 줄이 생겨도 1280 × 720 에 들어간다)
+  const body = el.appendChild(w.el('div', 'two-col'));
+  const stashBox = body.appendChild(w.el('div', 'area'));
   const stashHead = stashBox.appendChild(w.el('div', 'area-head'));
-  const bagBox = el.appendChild(w.el('div', 'area'));
+  const bagBox = body.appendChild(w.el('div', 'area area-bag'));
   const bagHead = bagBox.appendChild(w.el('div', 'area-head'));
   const foot = el.appendChild(w.el('div', 'panel-foot'));
   const err = createErrorLine(ctx);
@@ -43,6 +45,7 @@ export function createStashPanel(ctx) {
     onDrop: (src, dst) => drop(src, dst),
   });
   const bag = createBagGrid(ctx, {
+    head: bagHead,
     onPick: (i) => move(1, i),
     onFocus: () => { areas.pointer(1); showTip(); },
     onEdge: (dir) => areas.cross(dir),
@@ -51,20 +54,16 @@ export function createStashPanel(ctx) {
   stashBox.appendChild(stash.el);
   bagBox.appendChild(bag.el);
   const areas = createAreas([
-    { el: stash.el, box: stashBox, axis: 'v', focus: () => stash.focus(), handleKey: (e) => stash.handleKey(e) },
-    { el: bag.el, box: bagBox, axis: 'v', focus: () => bag.focus(), handleKey: (e) => bag.handleKey(e) },
+    { el: stash.el, box: stashBox, axis: 'h', focus: () => stash.focus(), handleKey: (e) => stash.handleKey(e) },
+    { el: bag.el, box: bagBox, axis: 'h', focus: () => bag.focus(), handleKey: (e) => bag.handleKey(e) },
   ], () => showTip());
 
-  /** @param {any} state */
+  /** 보관함 머리(가방 머리 「가방  n/30」은 가방 격자가 쓴다 — 피드백 2 D4: 넘친 세이브에서 배열 길이가 아니라 칸 수로) @param {any} state */
   function heads(state) {
     const st = state?.account?.stash ?? [];
-    const bg = state?.char?.bag ?? [];
     let a = 0;
-    let b = 0;
     for (const x of st) if (x) a++;
-    for (const x of bg) if (x) b++;
     stashHead.textContent = `${t('shop.stashTitle')}  ${a}/${st.length || STASH_SIZE}`;
-    bagHead.textContent = `${t('panel.inventory.title')}  ${b}/${bg.length}`;
   }
 
   function focused() {

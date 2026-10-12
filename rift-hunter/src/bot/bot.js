@@ -10,7 +10,7 @@ import { makeRng, seedRng } from '../core/rng.js';
 import { ticks } from '../core/time.js';
 import { BOT, BOT_RULES } from '../data/bot.js';
 import { DEATH } from '../data/combat.js';
-import { isWalkableR, nearestWalkable } from '../sim/world/nav.js';
+import { isWalkableR, losClear, nearestWalkable } from '../sim/world/nav.js';
 import { allocatePoints, RANDOM_BUILD } from './build.js';
 import { currentTarget, dodgeInput, fightInput, globeInput, rangedBasic } from './combat.js';
 import { awakeWithin, checkEquip, lootTarget } from './loot.js';
@@ -71,7 +71,7 @@ export class Bot {
     this._cursor = { x: 0, z: 0 };
     this._hover = { kind: /** @type {'monster'|'drop'|'object'} */ ('monster'), id: /** @type {any} */ (0), src: /** @type {'pick'} */ ('pick') };
     this.sv = createSense();
-    this.sit = { px: 0, pz: 0, life: 1, resource: 0, combat: false, mons: [], target: null, meleeNear: 0, kiteCount: this.params.kiteCount, walkable: null };
+    this.sit = { px: 0, pz: 0, life: 1, resource: 0, combat: false, mons: [], target: null, meleeNear: 0, kiteCount: this.params.kiteCount, walkable: null, visible: null };
     this.sitPool = [];
     this.skScratch = { cost: 0, angleDeg: 120, radius: /** @type {number|undefined} */ (undefined), reserve: 0 };
     this.dodgeCand = [];
@@ -114,6 +114,11 @@ export class Bot {
       return !!map && isWalkableR(map, x, z, p.r) && !inThreat(this.sv, x, z, p.r + this.rules.dodgeSafePad);
     };
     this.sit.walkable = this.walkable;
+    // 피드백 2 D8: 메테오 목표는 플레이어 자리에서 벽(타일)에 가려지지 않은 몬스터만 — sim 이 가려진 목표를 이쪽 벽 앞에서 자른다(sightClip)
+    this.sit.visible = (x, z) => {
+      const map = this.sim.ctx.map;
+      return !map || losClear(map, this.sit.px, this.sit.pz, x, z);
+    };
   }
 
   _freshMem() {

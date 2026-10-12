@@ -10,6 +10,8 @@ export const COMBAT = {
   bigHitFrac: 0.25, hitstop: { sec: 0.05, gap: 0.4 }, launchSpeed: 7, dmgTakenCap: 0.5,
   /** P2 W1 — 효과 판정이 내는 SHAKE 의 길이(초 · 진폭은 효과 spec.shake) */
   shakeSec: 0.3,
+  /** 피드백 2 D8 — 지점 스킬(메테오 · 작은 메테오)의 목표가 벽(타일)에 가려지면 플레이어 → 목표 선 위의 마지막 보이는 바닥에서 이만큼(m) 이쪽으로 */
+  sightBack: 0.3,
 };
 
 export const STATUS = {
@@ -38,8 +40,11 @@ export const BUFFER = { sec: 0.5, tail: 0.1 };
 /** 균열 게이지 — 단위는 %(0..max). 등급 · 종류 배율은 RANKS · MONSTERS, 초반 배율은 RIFT.earlyGauge* */
 export const GAUGE = { max: 100 };
 
-/** P2 W1 — 조건부 패시브의 문턱(§5.7): rage50 = 분노 ≥ rageAt · lifeBelow35 = 생명 ≤ 최대 × lifeFrac */
-export const COND = { rageAt: 50, lifeFrac: 0.35 };
+/**
+ * P2 W1 — 조건부 패시브의 문턱(§5.7): rage50 = 분노 ≥ rageAt · lifeBelow35 = 생명 ≤ 최대 × lifeFrac ·
+ * knockSec(피드백 2 D10 · Jay 결정 2026-10-12): targetDisabled 는 넉백이 끝난 뒤 이 초까지도 「무력화」로 센다(밀려나는 동안 포함 — 회전 베기 넉백으로 분쇄자가 켜진다)
+ */
+export const COND = { rageAt: 50, lifeFrac: 0.35, knockSec: 0.5 };
 
 /** P2 W1 — 투사체 이동의 벽 검사 간격(m · 한 틱 이동을 이 길이 이하로 잘라 본다 — 얇은 소품을 뚫지 않게) */
 export const PROJ = { step: 0.25 };

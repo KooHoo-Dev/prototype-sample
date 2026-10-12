@@ -8,6 +8,7 @@ import { BAG_SIZE } from '../src/core/constants.js';
 import { EV } from '../src/core/events.js';
 import { GLOBE, PICKUP } from '../src/data/combat.js';
 import { ECON } from '../src/data/economy.js';
+import { COMPARE } from '../src/data/items.js';
 import { pickupDrop, spawnDrops, updatePickups } from '../src/sim/drops.js';
 import { removeMarked } from '../src/sim/entities.js';
 import { isUpgrade } from '../src/sim/loot/compare.js';
@@ -62,10 +63,10 @@ test('흩뿌림: 걷기 가능 · 서로 scatterSep 넘게 · 떨어진 자리�
   assert.equal(spawnDrops(c2, [{ kind: 'gold', item: null, amount: -5, mat: null }, { kind: 'item', item: null, amount: 1, mat: null }], 20, 20).length, 0);
 });
 
-test('장비 드랍 집계: rift.stats.drops[rarity] · 업그레이드 = isUpgrade(P5) 가 참인 것의 수 · 첫 장비면 HINT labels(한 번)', () => {
+test('장비 드랍 집계: rift.stats.drops[rarity] · 업그레이드 = isUpgrade(P5 · 문턱 COMPARE.upgradeGain 3% — 피드백 2 D5) 가 참인 것의 수 · 첫 장비면 HINT labels(한 번)', () => {
   const { state, ctx, ch } = setup();
   const items = [newItem({ rarity: 'rare' }), newItem({ rarity: 'magic', baseId: 'boots' }), newItem({ rarity: 'normal', baseId: 'sword' })];
-  const want = items.filter(it => isUpgrade(ctx.stats, ch, it)).length;
+  const want = items.filter(it => isUpgrade(ctx.stats, ch, it, COMPARE.upgradeGain)).length;
   spawnDrops(ctx, items.map(item => ({ kind: 'item', item, amount: 1, mat: null })), 20, 20);
   assert.equal(state.rift.stats.drops.rare, 1);
   assert.equal(state.rift.stats.drops.magic, 1);

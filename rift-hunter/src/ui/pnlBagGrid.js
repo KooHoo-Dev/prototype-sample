@@ -1,16 +1,16 @@
 // OWNER: P11 — 계약 §10.5-8 · §10.6
 // 가방 격자 조각 — 인벤토리 · 대장장이 · 잡화상 · 보관함 · 신비술사가 같이 쓴다(gridNav 위 — 방향키 · Enter · 포커스 고리 · 마우스).
-//  createItemGrid(ctx, opts) — 아이템 칸 격자 하나(가방 40 · 보관함 60 · 장비 인형 10 — 빈 자리 칸은 건너뛴다)
-//  createBagGrid(ctx, opts)  — 가방(8 × 5 · char.bag)
+//  createItemGrid(ctx, opts) — 아이템 칸 격자 하나(가방 30 · 보관함 60 · 장비 인형 10 — 빈 자리 칸은 건너뛴다)
+//  createBagGrid(ctx, opts)  — 가방(BAG_SIZE · BAG_COLS — 피드백 2 D4: 6 × 5 · char.bag). 옛 세이브의 넘친 아이템(idx ≥ BAG_SIZE)은 격자 아래 「넘친 칸」 줄로
+//                              보이고(꺼내기만 — 놓는 자리가 아니다) 격자 밑에 「가방이 넘쳤다 — 정리할 때까지 줍지 못한다」 한 줄.
 //  createAreas(areas)        — 포커스 영역 둘 이상(§10.5-8: 방향키가 끝을 넘으면 옆 영역 · KeyE 로 바꾸기 · 포커스 영역에 고리)
 //  createItemList(ctx, opts) — 아이템 · 행 목록(listNav 위 — 상점 재고 · 되사기 · 부위 고르기 · 균열 레벨)
 // 끌어서 놓기: 아이템 칸을 누른 채 다른 칸(같은 패널의 다른 격자 포함)에서 떼면 opts.onDrop(src, dst) — 패널이 명령을 고른다(클릭과 같은 명령).
 // 매 프레임 update(state)는 칸의 아이템 참조만 비교한다 — 바뀐 칸 · 이벤트(BAG · EQUIPPED · STATS · LEVEL_UP)가 있을 때만 DOM 을 고친다.
 
 import { EV } from '../core/events.js';
-import { BAG_COLS, BAG_SIZE } from '../core/constants.js';
 import { KEYBINDS } from '../data/keybinds.js';
-import { baseNameKey, upgradeOf } from './pnlLogic.js';
+import { BAG_GRID, bagFill, baseNameKey, upgradeOf } from './pnlLogic.js';
 
 /** @typedef {import('../types.js').Item} Item */
 
@@ -40,27 +40,42 @@ export function canWear(char, item) {
  * @param {{t:(k:string, p?:Object) => string, widgets:any, sim:any, bus?:any, tooltip?:any}} ctx
  * @param {{kind:string, cols:number, rows:number, items:(state:any) => Array<Item|null>, slots?:Array<string|null>, cellLabel?:(i:number) => string,
  *          onPick?:(i:number, via:string) => void, onFocus?:(i:number) => void, onEdge?:(dir:string) => boolean, onDrop?:(src:{kind:string, idx:number}, dst:{kind:string, idx:number}) => void,
- *          upgrades?:boolean, tipOpts?:(i:number, item:Item) => Object, className?:string}} opts
+ *          upgrades?:boolean, tipOpts?:(i:number, item:Item) => Object, className?:string, overflowAt?:number}} opts
+ *   overflowAt = 칸 수(피드백 2 D4 — 가방): 그 밖(idx ≥ overflowAt)에 아이템이 있으면 그 줄까지 「넘친 칸」(is-over)을 더 그린다 · 비면 다시 줄인다
  */
 export function createItemGrid(ctx, opts) {
   const { t, widgets: w } = ctx;
   const el = w.el('div', 'grid ' + (opts.className ?? ''));
   el.style.setProperty('--cols', String(opts.cols));
-  const total = opts.cols * opts.rows;
+  const base = opts.cols * opts.rows;
+  const overAt = Number.isInteger(opts.overflowAt) && /** @type {number} */ (opts.overflowAt) > 0 ? /** @type {number} */ (opts.overflowAt) : Infinity;
+  let total = 0;
   /** @type {HTMLElement[]} */
   const cells = [];
   /** @type {Array<{item:Item|null, stamp:string}>} */
   const last = [];
-  for (let i = 0; i < total; i++) {
-    const blank = opts.slots ? opts.slots[i] === null || opts.slots[i] === undefined : false;
-    const c = w.el('div', blank ? 'cell is-blank' : 'cell is-empty');
-    c.dataset.idx = String(i);
-    if (!blank && opts.cellLabel) c.appendChild(w.el('span', 'cell-slot', opts.cellLabel(i)));
-    el.appendChild(c);
-    cells.push(c);
-    last.push({ item: null, stamp: '' });
+  /** 칸 수를 n 으로(넘친 칸은 is-over — 그 밖의 칸은 처음 만든 그대로) @param {number} n */
+  function resize(n) {
+    while (cells.length < n) {
+      const i = cells.length;
+      const blank = opts.slots ? opts.slots[i] === null || opts.slots[i] === undefined : false;
+      const c = w.el('div', blank ? 'cell is-blank' : 'cell is-empty');
+      c.dataset.idx = String(i);
+      if (i >= overAt) c.classList.add('is-over');
+      if (!blank && opts.cellLabel) c.appendChild(w.el('span', 'cell-slot', opts.cellLabel(i)));
+      el.appendChild(c);
+      cells.push(c);
+      last.push({ item: null, stamp: '' });
+    }
+    while (cells.length > n) {
+      cells.pop()?.remove();
+      last.pop();
+    }
+    total = n;
   }
+  resize(base);
   const blankAt = (i) => cells[i]?.classList.contains('is-blank') ?? true;
+  const overCell = (i) => i >= overAt;
   let dirty = true;
   /** @type {any} */
   let lastChar = null;
@@ -83,6 +98,10 @@ export function createItemGrid(ctx, opts) {
     itemAt(i) { return items[i] ?? null; },
     /** @param {number} i */
     isBlank(i) { return blankAt(i); },
+    /** 넘친 칸인가(피드백 2 D4 — 꺼내기만 · 놓는 자리가 아니다) @param {number} i */
+    isOver(i) { return overCell(i); },
+    /** 지금 그린 칸 수 */
+    get size() { return total; },
     markDirty() { dirty = true; },
     /** @param {any} state */
     update(state) {
@@ -90,6 +109,14 @@ export function createItemGrid(ctx, opts) {
       const list = char || opts.kind === 'stash' ? opts.items(state) : null;
       items = Array.isArray(list) ? list : [];
       if (char !== lastChar) { lastChar = char; dirty = true; }
+      if (overAt !== Infinity) {
+        const need = Math.max(base, bagFill(items, overAt, opts.cols).shown);
+        if (need !== total) {
+          resize(need);
+          nav.setSize(opts.cols, Math.ceil(need / opts.cols));
+          dirty = true;
+        }
+      }
       if (!dirty) {
         for (let i = 0; i < total; i++) if ((items[i] ?? null) !== last[i].item) { dirty = true; break; }
       }
@@ -151,7 +178,7 @@ export function createItemGrid(ctx, opts) {
   /** @param {HTMLElement} c @param {Item|null} it @param {{up:boolean, wear:boolean}} f @param {number} i */
   function paint(c, it, f, i) {
     c.textContent = '';
-    c.className = 'cell';
+    c.className = overCell(i) ? 'cell is-over' : 'cell';
     if (opts.cellLabel) c.appendChild(w.el('span', 'cell-slot', opts.cellLabel(i)));
     if (!it) { c.classList.add('is-empty'); return; }
     c.classList.add('c-' + (it.rarity ?? 'normal'));
@@ -204,6 +231,7 @@ function onUp(ev) {
   const j = Number(c.dataset.idx);
   if (!Number.isInteger(j) || dst.isBlank(j)) return;
   if (dst === d.grid && j === d.idx) return;
+  if (dst.isOver?.(j)) return;                                   // 넘친 칸은 놓는 자리가 아니다(피드백 2 D4)
   const fn = dst.opts?.onDrop ?? d.grid.opts?.onDrop;
   fn?.({ kind: d.grid.kind, idx: d.idx }, { kind: dst.kind, idx: j });
 }
@@ -215,15 +243,41 @@ function endDrag() {
 }
 
 /**
- * 가방 격자(8 × 5 · char.bag) — 칸을 고르면 opts.onPick · 업그레이드 표시(▲) · 잠김 · 부서짐 · 못 끼는 것
- * @param {any} ctx @param {Partial<Parameters<typeof createItemGrid>[1]>} [opts]
+ * 가방 격자(BAG_GRID — 피드백 2 D4: 6 × 5 · char.bag) — 칸을 고르면 opts.onPick · 업그레이드 표시(▲) · 잠김 · 부서짐 · 못 끼는 것.
+ * 옛 세이브의 넘친 아이템(idx ≥ BAG_SIZE)은 넘친 칸 줄로 보이고, 격자 바로 밑(패널에 붙은 뒤 첫 update 에 grid.el 다음 형제로)에 넘침 줄(grid.note)이 뜬다.
+ * opts.head(있으면) = 영역 머리 — 「가방  n/30」(넘치면 is-over).
+ * @param {any} ctx @param {Partial<Parameters<typeof createItemGrid>[1]> & {head?:HTMLElement}} [opts]
  */
 export function createBagGrid(ctx, opts = {}) {
-  return createItemGrid(ctx, {
-    kind: 'bag', cols: BAG_COLS, rows: Math.ceil(BAG_SIZE / BAG_COLS), upgrades: true,
+  const grid = createItemGrid(ctx, {
+    kind: 'bag', cols: BAG_GRID.cols, rows: BAG_GRID.rows, upgrades: true, overflowAt: BAG_GRID.size,
     items: (state) => state?.char?.bag ?? [],
     ...opts,
   });
+  /** 머리 줄(「가방  n/30」 — 있으면) @type {HTMLElement|null} */
+  const head = /** @type {any} */ (opts).head ?? null;
+  const note = ctx.widgets.el('div', 'bag-over');
+  note.hidden = true;
+  let noteKey = '';
+  const update = grid.update;
+  /** @param {any} state */
+  grid.update = (state) => {
+    const r = update(state);
+    if (!note.isConnected && grid.el.parentElement) grid.el.after(note);
+    const f = bagFill(state?.char?.bag, BAG_GRID.size, BAG_GRID.cols);
+    const key = `${f.count}|${f.over}`;
+    if (key !== noteKey) {
+      if (head) head.textContent = `${ctx.t('panel.inventory.title')}  ${f.count}/${BAG_GRID.size}`;
+      head?.classList.toggle('is-over', f.overflow);
+      noteKey = key;
+      note.hidden = !f.overflow;
+      note.textContent = f.overflow ? ctx.t('inv.overflow', { n: f.count, max: BAG_GRID.size }) : '';
+      grid.el.classList.toggle('has-over', f.overflow);
+    }
+    return r;
+  };
+  /** @type {any} */ (grid).note = note;
+  return grid;
 }
 
 /**

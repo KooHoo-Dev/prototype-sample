@@ -94,9 +94,10 @@ test('monsterStats(§5.6): 등급 · 레벨 · 속성 배율 · 저항 상한 0.
   const row = riftRow(5);
   const rk = (id) => RANKS.find(r => r.id === id);
   // 밸런스 게이트: 🔒 hpBase 36 · dmgBase 24.5 · champion 8 · elite 15 · guardian 32 — 식은 데이터를 읽고 첫 판 경사(생명 · 피해)를 곱한다(균열 5 는 경사 안)
+  // 피드백 2: dmgBase 24.5 → 22 · guardian 32 → 27(입문 구간 균열 1~6 · 일반 생명 × 1.6 · 팩 밀도 — NOTES-FEEDBACK 라운드 2)
   assert.ok(Math.abs(s.hpMax - MON.hpBase * 1.0 * rk('champion').hp * row.hpMul * 1.5 * earlyHpMul(5)) < 1e-9);
   assert.ok(Math.abs(s.dmg - MON.dmgBase * 1.0 * rk('champion').dmg * row.dmgMul * earlyDmgMul(5)) < 1e-9);
-  assert.deepEqual([MON.hpBase, MON.dmgBase, rk('champion').hp, rk('elite').hp, rk('guardian').hp], [36, 24.5, 8, 15, 32]);
+  assert.deepEqual([MON.hpBase, MON.dmgBase, rk('champion').hp, rk('elite').hp, rk('guardian').hp], [36, 22, 8, 15, 27]);
   assert.ok(Math.abs(row.hpMul - 1.14 ** 4) < 1e-9 && Math.abs(row.dmgMul - 1.1 ** 4) < 1e-9);
   assert.ok(Math.abs(s.speed - 2.6 * 1.3) < 1e-9);
   assert.ok(Math.abs(s.r - 0.45 * 1.15) < 1e-9 && Math.abs(s.height - 1.7 * 1.15) < 1e-9 && s.scale === 1.15);
@@ -163,15 +164,48 @@ test('밸런스 게이트: 첫 판 생명 경사 — 몬스터 생명은 × RIFT
   for (const L of [0, -1, NaN, 99]) assert.equal(earlyHpMul(L), 1);
 });
 
-test('W1 수정 3(NOTES-W1FIX §2.0): 첫 판 경사의 레벨 비 — 균열 L → L+1 의 어려움 √(생명 × 피해) 증가 ÷ 보상 증가(계약 §7.14 +9.4%/레벨)가 0.8~1.25', () => {
+test('피드백 2 D1: 레벨 비 — 입문 구간(균열 1~6 · L → L+1 이 6 → 7 까지)은 어려움이 오르기만(단조 증가) · 균열 7 부터는 어려움 √(생명 × 피해) 증가 ÷ 보상 증가(계약 §7.14 +9.4%/레벨)가 0.8~1.25', () => {
   const REWARD = 1.094;   // 계약 §7.14 「보상(L)」 = √(powerScore × 골드/판) +9.4%/레벨
-  // 밸런스 게이트: 생명 경사(earlyHp)도 함께 — 두 경사를 합친 레벨당 증가가 비 1.25 안
-  for (let L = 1; L <= Math.max(RIFT.earlyDmg.length, RIFT.earlyHp.length) + 2; L++) {
+  // 피드백 2 D1(Jay 결정 2026-10-12): 입문 구간을 균열 1~6 으로 줄인다 — 균열 1 의 실제 피해 · 생명은 그대로 두고 균열 7 에서 본 곡선(경사 1)에 닿으므로
+  //   그 사이의 레벨당 어려움은 상한 1.25 를 넘는다(브리프 §7 「입문 구간 균열 1~6 은 예외」). 상한 검사는 균열 7 → 8 부터.
+  const intro = Math.max(RIFT.earlyDmg.length, RIFT.earlyHp.length);
+  assert.equal(intro, 6, '입문 구간 = 균열 1~6');
+  assert.equal(earlyDmgMul(intro + 1), 1, '균열 7 에서 본 곡선');
+  assert.equal(earlyHpMul(intro + 1), 1, '균열 7 에서 본 곡선(생명)');
+  const hardStep = (L) => {
     const a = riftRow(L), b = riftRow(L + 1);
-    const hard = Math.sqrt(((b.hpMul * earlyHpMul(L + 1)) / (a.hpMul * earlyHpMul(L))) * ((b.dmgMul * earlyDmgMul(L + 1)) / (a.dmgMul * earlyDmgMul(L))));
-    const ratio = hard / REWARD;
-    assert.ok(ratio <= 1.25 && ratio >= 0.8, `L${L}→${L + 1}: ${ratio.toFixed(4)}`);   // 옛 표 [0.2, 0.3, 0.45, 0.67] 은 L1→2 1.2537
+    return Math.sqrt(((b.hpMul * earlyHpMul(L + 1)) / (a.hpMul * earlyHpMul(L))) * ((b.dmgMul * earlyDmgMul(L + 1)) / (a.dmgMul * earlyDmgMul(L))));
+  };
+  for (let L = 1; L <= intro; L++) {
+    assert.ok(earlyDmgMul(L + 1) * riftRow(L + 1).dmgMul > earlyDmgMul(L) * riftRow(L).dmgMul, `피해 L${L}→${L + 1} 오른다`);
+    assert.ok(earlyHpMul(L + 1) * riftRow(L + 1).hpMul > earlyHpMul(L) * riftRow(L).hpMul, `생명 L${L}→${L + 1} 오른다`);
+    assert.ok(hardStep(L) > 1, `어려움 L${L}→${L + 1}`);
   }
+  for (let L = intro + 1; L <= 40; L++) {
+    const ratio = hardStep(L) / REWARD;
+    assert.ok(ratio <= 1.25 && ratio >= 0.8, `L${L}→${L + 1}: ${ratio.toFixed(4)}`);
+  }
+});
+
+// 피드백 2 다듬기(검증자 실측): 입문 경사 꼬리 — 옛 표는 균열 6 → 7 의 피해 걸음(× 1.65)이 그 앞(× 1.25 ~ 1.48)보다 커서 균열 7 이 벽이었다(사망/판 0.5~0.6 → 1.0).
+//   걸음은 앞이 무겁고 뒤로 갈수록 줄어든다 — 피해 · 생명 · 둘을 합친 어려움(성장 GROWTH 포함) 모두 6 → 7 이 입문 구간에서 가장 작다.
+test('피드백 2 다듬기: 입문 경사의 꼴 — 피해 · 생명 · 합친 어려움의 레벨당 걸음이 뒤로 갈수록 줄어든다(늘지 않는다) · 6 → 7 이 가장 작다', () => {
+  const intro = Math.max(RIFT.earlyDmg.length, RIFT.earlyHp.length);
+  const step = (f, L) => f(L + 1) / f(L);
+  const dmg = (L) => earlyDmgMul(L) * riftRow(L).dmgMul;
+  const hp = (L) => earlyHpMul(L) * riftRow(L).hpMul;
+  const hard = (L) => Math.sqrt(dmg(L) * hp(L));
+  for (const [name, f] of /** @type {const} */ ([['피해 경사', earlyDmgMul], ['생명 경사', earlyHpMul], ['피해', dmg], ['생명', hp], ['어려움', hard]])) {
+    const steps = [];
+    for (let L = 1; L <= intro; L++) steps.push(step(f, L));
+    for (let i = 1; i < steps.length; i++) assert.ok(steps[i] <= steps[i - 1] + 1e-9, `${name}: 걸음 ${steps.map(x => x.toFixed(3)).join(' → ')} — L${i + 1}→${i + 2} 가 앞보다 크다`);
+    assert.equal(Math.min(...steps), steps[steps.length - 1], `${name}: 6 → 7 이 가장 작다`);
+  }
+  // 균열 7 로 들어서는 걸음은 입문 구간 평균 걸음보다 작다(벽이 아니다) — 어려움 기준
+  const all = [];
+  for (let L = 1; L <= intro; L++) all.push(step(hard, L));
+  const geo = Math.exp(all.reduce((a, b) => a + Math.log(b), 0) / all.length);
+  assert.ok(all[intro - 1] < geo, `6 → 7 ${all[intro - 1].toFixed(3)} < 평균 ${geo.toFixed(3)}`);
 });
 
 test('spawnMonster: 수치 · r 은 그대로(다시 곱하지 않는다) · reason 이 있을 때만 MON_SPAWNED · 깨어 나오면 행동 상태가 있다', () => {

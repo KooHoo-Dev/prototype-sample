@@ -41,7 +41,7 @@ function richState({ cls = 'warrior' } = {}) {
   ch.bag[0].name = ['rare.a.3', 'rare.b.7'];
   ch.bag[0].flags.locked = true;
   ch.bag[17] = mk('belt', { ilvl: 3 });
-  ch.bag[39] = mk('shield', { ilvl: 5, rarity: 'magic', affixes: [{ id: 'armor', tier: 1, value: 5 }] });
+  ch.bag[BAG_SIZE - 1] = mk('shield', { ilvl: 5, rarity: 'magic', affixes: [{ id: 'armor', tier: 1, value: 5 }] });
   ch.riftUnlocked = 9;
   ch.lastRiftLevel = 8;
   ch.best = { 7: { timeSec: 380.5, deaths: 0 }, 8: { timeSec: 410, deaths: 1 } };
@@ -122,13 +122,15 @@ test('드랍 100개 → 캐릭터 저장(계정 함께) → 다시 읽기 → �
   state.char = createCharacter({ slot: 0, cls: 'mage', name: 'D', newId: ctx.newItemId, seed: 3 });
   const ch = state.char;
   let n = 0;
-  for (let k = 0; k < 100; k++) {
+  // 가방 + 보관함을 꽉(피드백 2 D4: 가방 30 — 옛 40 + 60 = 100 은 이제 30 + 60 = 90)
+  for (let k = 0; k < BAG_SIZE + STASH_SIZE; k++) {
     const it = makeItem({ baseId: ['helm', 'wand', 'ring', 'boots'][k % 4], id: ctx.newItemId(), ilvl: 1 + (k % 5) });
     if (k < BAG_SIZE) ch.bag[k] = it;
     else state.account.stash[k - BAG_SIZE] = it;
     n++;
   }
-  assert.equal(n, 100);
+  assert.equal(n, BAG_SIZE + STASH_SIZE);
+  assert.equal(state.account.stash.length, STASH_SIZE, '보관함 밖에 쓰지 않았다');
   // 계정만 먼저 저장되고(낡음), 그 뒤 캐릭터가 10개를 더 주운 채 저장된 경우까지
   const accountOld = JSON.stringify(serializeAccount(state));
   for (let k = 0; k < 10; k++) { ch.bag[k] = null; ch.bag[k] = makeItem({ baseId: 'belt', id: ctx.newItemId() }); }

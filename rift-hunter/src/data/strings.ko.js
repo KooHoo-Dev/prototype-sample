@@ -113,7 +113,7 @@ export const STRINGS = {
   'node.aftershock.name': '연속 회전',
   'node.aftershock.desc': '회전 베기 0.5초 뒤 한 번 더 돈다 — 그때 서 있는 자리에서 약하게',
   'node.crusher.name': '분쇄자',
-  'node.crusher.desc': '기절 · 빙결 · 냉기 · 감속 중인 대상에게 주는 피해가 늘어난다',
+  'node.crusher.desc': '기절 · 빙결 · 냉기 · 감속 중이거나 막 밀려난(넉백 뒤 0.5초) 대상에게 주는 피해가 늘어난다',   // 피드백 2 D10
   'node.charge.name': '돌진',
   'node.charge.desc': '지점까지 돌진하며 지나는 적에게 피해를 주고 옆으로 밀친다',
   'node.bloodthirst.name': '피의 갈증',
@@ -139,7 +139,7 @@ export const STRINGS = {
   'node.combustion.name': '연소',
   'node.combustion.desc': '화염 피해가 3초 동안 타는 화상을 남긴다',
   'node.meteor.name': '메테오',
-  'node.meteor.desc': '잠시 뒤 지점에 운석이 떨어지고 바닥이 불탄다',
+  'node.meteor.desc': '잠시 뒤 지점에 운석이 떨어지고 바닥이 불탄다 — 벽 너머를 누르면 이쪽 벽 앞에 떨어진다',   // 피드백 2 D8
   'node.splitFireball.name': '분열 화염구',
   'node.splitFireball.desc': '화염구가 세 갈래로 나간다',
   'node.heartOfFire.name': '불의 심장',
@@ -371,7 +371,7 @@ export const STRINGS = {
   'hint.death.title': '쓰러졌다',
   'hint.death.body': '균열마다 목숨은 셋 — 다 쓴 뒤 또 쓰러지면 균열이 무너진다. 장비 내구도가 10% 깎인다.',
   'hint.skills.title': '스킬 포인트',
-  'hint.skills.body': '배운 스킬은 빈 칸에 자동으로 놓인다 · S — 스킬 트리.',
+  'hint.skills.body': '배운 스킬은 빈 칸에 자동으로 놓인다 · S — 스킬 트리(여는 동안 게임이 멈춘다).',   // 피드백 2 D6
   'hint.gauge.title': '균열 수호자',
   'hint.gauge.body': '게이지가 가득 찼다. 곧 균열 수호자가 나타난다.',
   // 피드백 1 — 첫 몇 판에서 처음 생명이 낮아졌을 때의 비모달 안내(ui 가 낸다 · 안내 카드 HINT 가 아니다) · 조작 카드의 포션 줄(실제 개수)
@@ -538,6 +538,7 @@ export const STRINGS = {
   'complete.gold': '주운 골드',   // 피드백 1 — 이번 판에 실제로 주운 골드(rift.stats.gold · 수호자 처치 순간까지)
   'complete.xp': '경험치',
   'complete.upgrades': '그중 더 나은 장비',
+  'complete.upgradesNote': '장비 점수 +{pct}% 넘게',   // 피드백 2 D5 — 측정(업그레이드 판 비율)과 같은 문턱(pnlLogic.upgradeCountGain) · 판정은 초과(compare.js gains — after > before × (1 + 문턱)) → 「넘게」(피드백 2 다듬기)
   'complete.unlock': '균열 {n} 해금',
   'complete.noDeathBonus': '무사망 +2',
   'complete.record': '최고 기록',
@@ -566,6 +567,7 @@ export const STRINGS = {
   'inv.area': 'E — 왼쪽 목록 ↔ 가방',
   'inv.areaEquip': 'E — 장비 ↔ 가방',
   'inv.areaStash': 'E — 보관함 ↔ 가방',
+  'inv.overflow': '가방이 넘쳤다 ({n}/{max}) — 정리할 때까지 줍지 못한다',   // 피드백 2 D4 — 옛 세이브(40칸 시절)의 넘친 아이템 · 가방 격자 밑 줄 · 줍기 실패 알림 · 캐릭터를 읽었을 때(한 키)
   'skill.points': '남은 포인트 {n}',
   'skill.rank': '{r}/{m}',
   'skill.learn': '찍기 Enter',
