@@ -716,9 +716,8 @@ export class Game {
     const plan = this.saves.take(this._now(), { force, hasChar: !!st.char });
     if (!plan.char && !plan.account) return;
     if (!this._mayWrite()) return;
-    let ok = true;
-    if (plan.char && st.char) ok = this.storage.writeChar(st.char) && ok;
-    if (plan.account || plan.char) ok = this.storage.writeAccount(st) && ok;
+    // 피드백 2 다듬기: 캐릭터를 쓸 때는 계정과 한 쌍(storage.writeCharAndAccount — 계정 먼저 · 캐릭터가 실패하면 계정을 되돌린다 · §11.6)
+    const ok = plan.char && st.char ? this.storage.writeCharAndAccount(st, st.char) : this.storage.writeAccount(st);
     this._seenAt = this.storage.accountSavedAt();
     this._sticky('notice.saveBlocked', !ok);
   }
@@ -728,9 +727,7 @@ export class Game {
     if (!this._mayWrite()) return;
     const st = this.sim.state;
     const ch = char ?? st.char;
-    let ok = true;
-    if (ch) ok = this.storage.writeChar(ch) && ok;
-    ok = this.storage.writeAccount(st) && ok;
+    const ok = ch ? this.storage.writeCharAndAccount(st, ch) : this.storage.writeAccount(st);
     this._seenAt = this.storage.accountSavedAt();
     this.saves.markWritten(this._now());
     this._sticky('notice.saveBlocked', !ok);

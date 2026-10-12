@@ -288,7 +288,11 @@ test('app.storage: 저장 시점 묶기 — 캐릭터는 1초 간격 · 바로 �
   s.request('account', 'delete');
   assert.deepEqual(s.take(1003), { char: false, account: true }, '계정만은 묶지 않는다');
   s.request('all', 'stash');
-  assert.deepEqual(s.take(1004), { char: false, account: true }, '전부 — 캐릭터는 간격을 지킨다 · 계정은 지금');
+  // 피드백 2 다듬기: 'all'(보관함 — 계정 · 캐릭터가 함께 바뀐다)은 간격을 기다리지 않고 한 쌍으로 — 계정만 먼저 쓰면 보관함에서 꺼낸 아이템이 그 사이 어느 세이브에도 없다
+  assert.deepEqual(s.take(1004), { char: true, account: true }, '전부 — 캐릭터와 계정을 지금 함께');
+  assert.deepEqual(s.take(1005), { char: false, account: false }, '밀린 것 없음');
+  s.request('char', 'xp');
+  assert.deepEqual(s.take(1500), { char: false, account: false }, '보통 캐릭터 저장은 다시 1초 간격');
   assert.deepEqual(s.take(2005), { char: true, account: true });
   assert.deepEqual(s.take(2006, { force: true }), { char: true, account: true }, '강제 — 밀린 것이 없어도(경험치 · 플레이 시간)');
   assert.deepEqual(s.take(2007, { force: true, hasChar: false }), { char: false, account: false });

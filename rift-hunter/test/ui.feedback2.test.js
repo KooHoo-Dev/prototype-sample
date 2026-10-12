@@ -176,6 +176,9 @@ test('피드백 2 D5: 「그중 더 나은 장비」의 문턱은 data 의 측�
   assert.equal(COMPARE.upgradeGain, 0.03);
   assert.ok(COMPARE.minGain < COMPARE.upgradeGain);
   assert.match(STRINGS['complete.upgradesNote'], /\{pct\}/);
+  // 피드백 2 다듬기: 판정은 초과(compare.js gains — after > before × (1 + 문턱)) — 문면도 「이상」이 아니라 「넘게」(MEASURE 의 행과 같은 뜻)
+  assert.match(STRINGS['complete.upgradesNote'], /넘게/);
+  assert.doesNotMatch(STRINGS['complete.upgradesNote'], /이상/);
   assert.equal(typeof STRINGS['complete.upgrades'], 'string');
 });
 

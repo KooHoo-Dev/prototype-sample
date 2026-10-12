@@ -538,7 +538,7 @@ export const STRINGS = {
   'complete.gold': '주운 골드',   // 피드백 1 — 이번 판에 실제로 주운 골드(rift.stats.gold · 수호자 처치 순간까지)
   'complete.xp': '경험치',
   'complete.upgrades': '그중 더 나은 장비',
-  'complete.upgradesNote': '장비 점수 +{pct}% 이상',   // 피드백 2 D5 — 측정(업그레이드 판 비율)과 같은 문턱(pnlLogic.upgradeCountGain)
+  'complete.upgradesNote': '장비 점수 +{pct}% 넘게',   // 피드백 2 D5 — 측정(업그레이드 판 비율)과 같은 문턱(pnlLogic.upgradeCountGain) · 판정은 초과(compare.js gains — after > before × (1 + 문턱)) → 「넘게」(피드백 2 다듬기)
   'complete.unlock': '균열 {n} 해금',
   'complete.noDeathBonus': '무사망 +2',
   'complete.record': '최고 기록',

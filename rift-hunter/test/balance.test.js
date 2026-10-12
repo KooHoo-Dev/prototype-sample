@@ -219,6 +219,10 @@ test('W1 수정 3: 수호자 단계 사망 → 복귀 — 집으로 돌아간 �
   const rift = st.rift;
   sim.debugSetInvincible(true);
   for (let i = 0; i < 2000 && !(rift.phase === 'guardian' && rift.guardianId !== null); i++) scriptedClear(sim, { maxTicks: 30, learn: true });
+  // 피드백 2 다듬기: scriptedClear 는 게이지 100% 에서 바로 멈춘다(untilComplete 가 아니면) — 출현 예고(RIFT.guardianDelay) 동안은 무적인 채 그대로 민다.
+  //   전에는 무적을 끈 뒤 예고 2초를 버틴 판에서만 수호자 단계 사망이 됐다(마법사 마나 재생을 바꾸자 예고 중 일반 몬스터에게 쓰러져 W1 수정 4 의 길로 갔다)
+  for (let i = 0; i < 300 && rift.phase === 'guardian' && rift.guardianId === null; i++) sim.step(NEUTRAL_INPUT);
+  assert.ok(rift.guardianId !== null, '수호자가 나타났다');
   sim.debugSetInvincible(false);
   scriptedClear(sim, { maxTicks: MIN * 6, untilComplete: true, learn: true, stopOnDeath: true });
   assert.equal(st.player.dead, true, '수호자 단계에서 쓰러진다');

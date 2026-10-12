@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DMG_TYPES, EQUIP_SLOTS } from '../src/core/constants.js';
 import { makeRng, seedRng } from '../src/core/rng.js';
+import { CLASSES } from '../src/data/classes.js';
 import { COMBAT } from '../src/data/combat.js';
 import { COMPARE } from '../src/data/items.js';
 import { ITEM_AFFIXES } from '../src/data/itemAffixes.js';
@@ -120,11 +121,13 @@ test('마법사: 마법구 추가 피해 · 마나 · 마나 재생 % · 번개 
   const s = computeStats(wear(ch, { offhand: orb }));
   close(s.weapon.min, 3 + 0); close(s.weapon.max, 6 + 2);
   assert.equal(s.resourceMax, 100 + 2 * 4 + 10);
-  close(s.resourceRegen, 7 + 0.15 * 4);
+  // 피드백 2 다듬기: 마나 재생은 데이터(CLASSES 마법사 regen — 10 + 0.05/레벨)로 — 레벨 5 = base + perLevel × 4
+  const R = CLASSES.find(c => c.id === 'mage').regen;
+  close(s.resourceRegen, R.base + R.perLevel * 4);
   close(s.dmgPct.lightning, 0.06);
   close(s.sheetDps, ((3 + 8) / 2) * 1.4 * (1 + 18 / 100) * 1.06 * 1.025);
   const ms = computeStats({ ...wear(ch, { offhand: orb }), skills: { ranks: { manaFlow: 2 }, bar: [] } });
-  close(ms.resourceRegen, (7 + 0.6) * 1.2); close(ms.manaRegenPct, 0.2);
+  close(ms.resourceRegen, (R.base + R.perLevel * 4) * 1.2); close(ms.manaRegenPct, 0.2);
 });
 
 test('세트 2/4: 강철 군주 2 → armorPct 25 · str 20 / 4 → + aoePct 40 · dmgTakenReduce 10 · 다른 클래스가 끼면 주 능력치는 0', () => {

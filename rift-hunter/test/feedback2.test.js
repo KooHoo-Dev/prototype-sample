@@ -25,7 +25,7 @@ import { sightClip } from '../src/sim/player/skills.js';
 import { createCharacter } from '../src/sim/progression/character.js';
 import { addToBag, bagCount, equip, freeBagIdx, isBagFull, moveItem, settleBag } from '../src/sim/progression/inventory.js';
 import { loadChar, sanitizeItem, serializeChar } from '../src/sim/progression/save.js';
-import { sell } from '../src/sim/progression/shops.js';
+import { buy, buyback, craft, gamble, sell } from '../src/sim/progression/shops.js';
 import { applyKnock } from '../src/sim/status.js';
 import { losClear } from '../src/sim/world/nav.js';
 import { addTestMonster, makeTestCtx, makeTestState, makeTestStats } from './helpers.js';
@@ -186,6 +186,72 @@ test('피드백 2 D4: 넘친 가방 — 보관함에서 꺼내기 · 양손 무�
   assert.ok(ch.bag[2]);
 });
 
+// 피드백 2 다듬기(검증자의 돌연변이 생존 (a) · (b) · (c)): 위 테스트는 판 뒤마다 step(정리 — settleBag)을 불러 「넘친 가방의 칸 안 구멍」이 남지 않았다.
+//   여기서는 정리 없이 — 칸 안 구멍이 있어도 든 아이템이 BAG_SIZE 이상이면 새로 넣는 길(addToBag · 사기 · 되사기 · 제작 · 도박 · 보관함에서 명시한 빈칸으로)은 모두 'bagFull' ·
+//   골드 · 재고 · 보관함이 그대로다(옛 규칙 bag.indexOf(null) 은 구멍을 빈칸으로 보고 넣었다 — 사기 · 도박은 골드를 받고 아이템을 잃었다).
+test('피드백 2 다듬기 D4: 넘친 가방의 칸 안 구멍(정리 전) — addToBag · buy · buyback · craft · gamble · moveItem(보관함 → 명시한 빈칸)은 bagFull · 골드 · 재고 · 보관함 그대로', () => {
+  const st = makeTestState({ scene: 'town', cls: 'warrior', level: 10 });
+  const ctx = makeTestCtx(st);
+  const ch = st.char;
+  let n = 700;
+  const mk = (baseId, o = {}) => makeItem({ baseId, id: 'i' + n++, ilvl: 1, ...o });
+  ch.bag.length = 0;
+  for (let i = 0; i < BAG_SIZE + 2; i++) ch.bag.push(mk('belt'));
+  ch.bag[3] = null;                                  // 칸 안 구멍 · 칸 밖 2개 — 든 것 31(정리하지 않는다)
+  assert.equal(bagCount(ch), BAG_SIZE + 1);
+  assert.equal(ch.bag.indexOf(null), 3, '칸 안에 빈 자리가 보인다');
+  ch.gold = 1_000_000;
+  ch.materials.scrap = 999;
+  ch.materials.dust = 999;
+  ch.materials.essence = 999;
+  ch.shop.blacksmith = [mk('helm', { rarity: 'magic', affixes: [{ id: 'vit', tier: 1, value: 3 }] })];
+  ch.buyback = [{ item: mk('boots'), price: 5 }];
+  st.account.stash[0] = mk('gloves');
+  const bagIds = () => ch.bag.map(it => it?.id ?? null);
+  const before = { bag: bagIds(), gold: ch.gold, stock: ch.shop.blacksmith.length, buyback: ch.buyback.length, stash0: st.account.stash[0].id, next: st.account.nextItemId };
+  const same = (what) => {
+    assert.deepEqual(bagIds(), before.bag, `${what}: 가방 그대로`);
+    assert.equal(ch.gold, before.gold, `${what}: 골드 그대로`);
+    assert.equal(ch.shop.blacksmith.length, before.stock, `${what}: 재고 그대로`);
+    assert.equal(ch.buyback.length, before.buyback, `${what}: 되사기 목록 그대로`);
+    assert.equal(st.account.stash[0]?.id, before.stash0, `${what}: 보관함 그대로`);
+  };
+  assert.deepEqual(addToBag(ctx, mk('ring')), { ok: false, reason: 'bagFull' }); same('addToBag');
+  assert.deepEqual(buy(ctx, 'blacksmith', 0), { ok: false, reason: 'bagFull' }); same('buy');
+  assert.deepEqual(buyback(ctx, 0), { ok: false, reason: 'bagFull' }); same('buyback');
+  assert.deepEqual(craft(ctx, 'helm'), { ok: false, reason: 'bagFull' }); same('craft');
+  assert.deepEqual(gamble(ctx, 'helm'), { ok: false, reason: 'bagFull' }); same('gamble');
+  assert.equal(st.account.nextItemId, before.next, '도박 · 제작이 아이템을 만들지 않았다');
+  assert.deepEqual(moveItem(ctx, { where: 'stash', idx: 0 }, { where: 'bag', idx: 3 }), { ok: false, reason: 'bagFull' }, '보관함 → 명시한 빈칸'); same('moveItem');
+  assert.deepEqual(moveItem(ctx, { where: 'stash', idx: 0 }, { where: 'bag' }), { ok: false, reason: 'bagFull' }, '보관함 → 빈 첫 칸'); same('moveItem(빈 첫 칸)');
+  // 든 칸과 바꾸는 것은 된다(수 그대로) · 가방 안에서 구멍으로 옮기는 것도 된다(새로 넣는 것이 아니다)
+  assert.equal(moveItem(ctx, { where: 'stash', idx: 0 }, { where: 'bag', idx: 4 }).ok, true);
+  assert.equal(bagCount(ch), BAG_SIZE + 1);
+  assert.equal(moveItem(ctx, { where: 'bag', idx: 5 }, { where: 'bag', idx: 3 }).ok, true);
+  assert.equal(bagCount(ch), BAG_SIZE + 1);
+});
+
+test('피드백 2 다듬기 D4: 칸 안 구멍 둘 + 칸 밖 1개(든 것 29 · 정리 전) — addToBag 은 칸 밖 아이템을 먼저 당긴 뒤 다음 구멍에 · 가방 길이 BAG_SIZE · 사라지는 아이템 0', () => {
+  const st = makeTestState({ scene: 'town', cls: 'warrior' });
+  const ctx = makeTestCtx(st);
+  const ch = st.char;
+  let n = 800;
+  const mk = (baseId) => makeItem({ baseId, id: 'i' + n++, ilvl: 1 });
+  ch.bag.length = 0;
+  for (let i = 0; i < BAG_SIZE + 1; i++) ch.bag.push(mk('belt'));
+  const out = ch.bag[BAG_SIZE].id;
+  ch.bag[0] = null;
+  ch.bag[1] = null;
+  assert.equal(bagCount(ch), BAG_SIZE - 1);
+  const x = mk('ring');
+  assert.deepEqual(addToBag(ctx, x), { ok: true, idx: 1 }, '칸 밖 아이템이 0 으로 · 새 것은 1 로');
+  assert.equal(ch.bag[0].id, out);
+  assert.equal(ch.bag[1], x);
+  assert.equal(ch.bag.length, BAG_SIZE, '칸 밖이 비었다');
+  assert.equal(bagCount(ch), BAG_SIZE);
+  assert.deepEqual(addToBag(ctx, mk('ring')), { ok: false, reason: 'bagFull' });
+});
+
 // ───────────────────────── D5 업그레이드 문턱 ─────────────────────────
 
 test('피드백 2 D5: 「업그레이드」로 세는 문턱 3%(COMPARE.upgradeGain) — 화살표(isUpgrade 기본)는 0.5% 그대로', () => {
@@ -251,6 +317,40 @@ test('피드백 2 D8: 메테오 — 커서가 벽 너머면 플레이어 → 커
   const b = mageAt(null);
   step(b.ctx, { cursor: { x: b.p.pos.x + 9, z: b.p.pos.z + 3 }, slotDown: [true, false, false, false, false] });
   assert.ok(Math.hypot(b.p.actPoint.x - (b.p.pos.x + 9), b.p.actPoint.z - (b.p.pos.z + 3)) < 1e-9);
+});
+
+// 피드백 2 다듬기(돌연변이 생존 (d)): 위 검사는 작은 메테오 자리가 모두 이미 보이는 곳이라 작은 메테오의 sightClip 을 빼도 통과했다.
+//   여기서는 큰 메테오는 트인 곳(그대로)이고 작은 메테오 하나만 벽 기둥 뒤에 떨어지려는 자리다.
+const PILLAR_MAP = [
+  '##############',
+  '#............#',
+  '#............#',
+  '#.....###....#',
+  '#..S.........#',
+  '#............#',
+  '#............#',
+  '##############',
+].join('\n');
+
+test('피드백 2 다듬기 D8: 작은 메테오 — 큰 메테오 자리가 트여 있어도 작은 메테오 자리가 벽 기둥에 가려지면 그 하나만 이쪽 벽 앞으로(sightClip)', () => {
+  const { st, ctx, p } = mageAt(PILLAR_MAP, ['ashenCrown']);
+  const o = { ...p.pos };
+  const tgt = { x: o.x + 6, z: o.z };
+  assert.equal(losClear(ctx.map, o.x, o.z, tgt.x, tgt.z), true, '큰 메테오 자리는 보인다');
+  step(ctx, { cursor: tgt, slotDown: [true, false, false, false, false] });
+  assert.equal(p.act, 'cast');
+  assert.ok(Math.hypot(p.actPoint.x - tgt.x, p.actPoint.z - tgt.z) < 1e-9, '트인 곳은 그대로');
+  while (st.tick < p.actHit) step(ctx, {});
+  const met = st.rift.effects.filter(e => e.kind === 'meteor');
+  assert.equal(met.length, 3);
+  const r = getNode('meteor').skill.radius;
+  // 자르지 않았다면 작은 메테오는 큰 메테오 자리 ± radius(옆으로) — 그중 하나가 기둥(x ∈ [12, 18) · z ∈ [6, 8)) 너머
+  const raw = [{ x: tgt.x, z: tgt.z - r }, { x: tgt.x, z: tgt.z + r }];
+  assert.equal(raw.filter(q => !losClear(ctx.map, o.x, o.z, q.x, q.z)).length, 1, '자르기 전 자리 하나가 가려진다(이 지형이 검사하는 것)');
+  for (const e of met) assert.ok(losClear(ctx.map, p.pos.x, p.pos.z, e.shape.x, e.shape.z), `보이는 곳 (${e.shape.x.toFixed(2)}, ${e.shape.z.toFixed(2)})`);
+  const small = met.filter(e => Math.hypot(e.shape.x - tgt.x, e.shape.z - tgt.z) > 1e-6);
+  assert.equal(small.length, 2);
+  assert.equal(small.filter(e => Math.hypot(e.shape.x - tgt.x, Math.abs(e.shape.z - tgt.z) - r) < 1e-6).length, 1, '가려지지 않은 하나는 제자리');
 });
 
 test('피드백 2 D8: sightClip — 트이면 그대로 · 막히면 첫 벽 앞(back 만큼) · 벽에 붙어 서서 벽을 누르면 제자리 쪽으로', () => {

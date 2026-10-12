@@ -27,7 +27,9 @@ export const CLASSES = [
   {
     id: 'mage', mainStat: 'int', resource: 'mana',
     life: { base: 100, growth: 1.09 },    // 🔒 §7.14 · 밸런스 게이트: 90 → 100(몬스터 피해 × 7 뒤 마법사 첫 판 사망)
-    resourceMax: { base: 100, perLevel: 2 }, regen: { base: 7, perLevel: 0.15 },
+    // 피드백 2 다듬기: regen 7 + 0.15/레벨 → 10.5 고정(레벨 1 · 10 · 20 · 30 에서 × 1.50 · 1.26 · 1.07 · 0.93) — 일반 생명 × 1.6(D9) 뒤 마법사의 광역(화염구 16 마나)이
+    //   마나에 묶여 균열 4~7 에서 판이 6분을 넘고 떼에 쓰러졌다(균열 10 해금 중앙 3.0시간 · 전사와 53% 차). 후반은 조금 낮춘다(마법사 후반 판이 5분 아래 · 해금 + 3 붕괴)
+    resourceMax: { base: 100, perLevel: 2 }, regen: { base: 10.5, perLevel: 0 },
     rage: null,
     moveSpeed: 6, radius: 0.40, height: 1.8, basic: 'magicBolt',
     startGear: [{ baseId: 'wand', tier: 0 }, { baseId: 'chest', tier: 0 }],
