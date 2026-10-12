@@ -9,14 +9,16 @@
 import { CAM_AZIMUTH, CAM_ELEVATION } from '../../core/constants.js';
 import { ticks } from '../../core/time.js';
 import { newFacingTrack, trackFacing } from '../actors/poses.js';
+import { SWING_BEHAVIORS, swingAt } from '../actors/player.js';
 import { hash01 } from './decals.js';
-import { AFFIX_AURA, AURA, CAP, MON_TELE, PLAYER_FX, STATUS_FX, col } from './style.js';
+import { AFFIX_AURA, AURA, CAP, MON_TELE, PLAYER_FX, STATUS_FX, SWING_FX, col } from './style.js';
 
 const TAU = Math.PI * 2;
 const JUMP_MON = 2.0;
 const STAR_RX = -CAM_ELEVATION;
 /** 판정 순간 연출이 있는 플레이어 행동(채널 · 돌진 · 기본 공격은 상태 · 불꽃으로) */
-const HIT_ACTS = ['cast', 'leap', 'blink'];
+const HIT_ACTS = ['cast', 'leap', 'blink', 'attack'];
+const _sa = { k: 0, u: 0, theta: 0, w: 0, r: 0 };
 
 function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 function prog(start, end, now) {
@@ -354,6 +356,9 @@ export function drawPlayerFx(L, state, tick, now) {
     const ax = p.actPoint ? p.actPoint.x : p.pos.x, az = p.actPoint ? p.actPoint.z : p.pos.z;
     L._skillHit(p.actSkill, p.pos.x, p.pos.z, p.facing, ax, az, p.actHit);
   }
+  // 피드백 1 — 횡베기 칼끝 궤적(가르기 · 회전 베기): 행동 시각 · facing · params.swing 으로 칼끝 방위를 계산해(자세와 같은 식 — player.js swingAt)
+  //   휘두름 시작 방위에서 지금 칼끝까지 판정 반지름의 얇은 띠(칼끝 높이) — 휘두름이 끝나면 fadeK 동안 사라진다
+  if (p.act === 'attack' && p.actSkill) swingTrail(L, p, now, x, z);
   // 회오리 — 바람 고리(바깥 = 스킬 radius 정확히) + 도는 바람 기둥
   if (p.act === 'channel' && p.channel) {
     const def = L.skillDef(p.channel.skillId);
@@ -446,4 +451,21 @@ export function drawPlayerFx(L, state, tick, now) {
       L.glyphs.pushC(x + fx * 0.45 - fz * 0.12, 1.25, z + fz * 0.45 + fx * 0.12, 0.15 + PLAYER_FX.windupHand * u, col(hex), 0.55 + 0.4 * u);
     }
   }
+}
+
+/**
+ * 횡베기 칼끝 궤적(피드백 1 — 계약 §9.5 · §9.6) — 바깥 가장자리 = 판정 반지름(가르기 1.9 · 회전 베기 2.5) · 각 = 휘두른 만큼(가르기 180° · 회전 베기 360°)
+ * @param {any} L FxLayer @param {import('../../types.js').PlayerState} p @param {number} now @param {number} x @param {number} z 그린 플레이어 자리
+ */
+function swingTrail(L, p, now, x, z) {
+  const def = L.skillDef(p.actSkill);
+  const sw = def && def.params ? def.params.swing : null;
+  if (!sw || !SWING_BEHAVIORS.includes(def.behavior)) return;
+  const a = swingAt(sw, now, p.actStart, p.actEnd, _sa);
+  if (a.k < sw.from || !(a.u > 0)) return;
+  const fade = a.k <= sw.to ? 1 : 1 - (a.k - sw.to) / SWING_FX.fadeK;
+  if (!(fade > 0)) return;
+  const R = def.behavior === 'cleave' ? L.slashReach(def) : def.radius ?? 0;
+  const f = p.facing;
+  L.sweep(L.swoosh, 'swing', p.actId ?? 0, x, z, R, f + (sw.arcFrom * Math.PI) / 180, f + a.theta, col(PLAYER_FX.slash), SWING_FX.sheetA * fade);
 }

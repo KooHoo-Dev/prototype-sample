@@ -1,5 +1,5 @@
 // OWNER: P1 — 계약 §6.7 · §5.4 · §8.4 · §7.2 · §9.6
-// 스킬 동작 표(SKILL_BEHAVIORS — 동작 14: 기본 공격 2 + 액티브 12) · skillParams(변형 6 · 전설 패치 9 는 params 로만 닿는다) ·
+// 스킬 동작 표(SKILL_BEHAVIORS — 동작 14: 기본 공격 2(가르기 cleave · 마력 화살) + 액티브 12(회전 베기 spinSlash … — 피드백 1)) · skillParams(변형 6 · 전설 패치 9 는 params 로만 닿는다) ·
 // describeSkill · skillReady + 플레이어 쪽 공용 도우미(랭크 · 적중 정의 · 자원 · 적중 집계).
 // 동작은 노드 · 전설 ID 를 모른다 — 차이는 행의 수치(skill · status · params)와 skillParams 가 합친 패치 키로만 낸다(§8.4).
 // 이 파일은 actions.js · controller.js 를 import 하지 않는다(그 둘이 이것을 import 한다 — 순환 없음).
@@ -276,21 +276,12 @@ export function noteHits(ctx, results, basic, actionId) {
   return n;
 }
 
-/** 모양 안의 살아 있는 몬스터 중 (x, z)에서 가장 가까운 것 @param {SimCtx} ctx @param {Shape} shape */
-function nearestIn(ctx, shape, x, z) {
-  let best = null, bestD = Infinity;
-  for (const m of monstersIn(ctx, shape)) {
-    const d = Math.hypot(m.pos.x - x, m.pos.z - z);
-    if (d < bestD) { bestD = d; best = m; }
-  }
-  return best;
-}
-
-/** 플레이어 소유 효과(비적대 — 몬스터만 다친다 §5.4) */
+/** 플레이어 소유 효과(비적대 — 몬스터만 다친다 §5.4) · extra.follow 'player' = 판정 전까지 플레이어를 따라간다(피드백 1 — 연속 회전) */
 function playerEffect(ctx, kind, shape, delay, spec, extra = null) {
   return spawnEffect(ctx, {
     kind, owner: 'player', srcId: -1, packId: -1, hostile: false, shape, delay,
     dur: extra?.dur ?? 0, tick: extra?.tick ?? 0, spec, tickSpec: extra?.tickSpec ?? null, from: extra?.from ?? null, cancelOnSrcDeath: false,
+    follow: extra?.follow ?? null,
   });
 }
 
@@ -417,19 +408,24 @@ const noop = () => {};
 
 /** 동작 표 — 실행부(actions.js)는 노드 ID 를 모르고 이 표와 행만 본다(§8.4) */
 export const SKILL_BEHAVIORS = {
-  /** 강타 — 대상이 r + reach + 관용 안이면 그 하나 · 아니면(제자리 · 대상이 없어짐) 원뿔 70° · reach 안 가장 가까운 하나 · 분노 생성 */
-  meleeBasic: {
+  /**
+   * 가르기(피드백 1 — 옛 meleeBasic 강타) — 판정 틱에 facing(시작 때 대상 · 커서 쪽) 중심 부채꼴(반지름 = 몸 r + reach + 관용 · 전체 각 angleDeg)과
+   * 몸이 겹치는 살아 있는 몬스터 모두 · 대상 고정: 대상이 r + reach + 관용 안이면 부채꼴 밖으로 비켜도 맞는다 · 분노 생성(적중 수 — §5.5)
+   */
+  cleave: {
     act: 'attack',
     start: yes,
     hit(ctx, node, rank, cast) {
       const p = ctx.state.player;
       const def = node.skill;
-      let mon = targetAlive(ctx, cast.targetId);
-      if (mon && Math.hypot(mon.pos.x - p.pos.x, mon.pos.z - p.pos.z) > p.r + mon.r + def.reach + PLAYER.reachTolerance) mon = null;
-      if (!mon) mon = nearestIn(ctx, cone(p.pos.x, p.pos.z, p.r + def.reach, p.facing, deg2rad(def.angleDeg ?? PLAYER.standConeDeg)), p.pos.x, p.pos.z);
-      if (!mon) return;
+      const reach = p.r + def.reach + PLAYER.reachTolerance;
       const spec = hitSpec(node.id, def, rank, cast.actionId, p.pos.x, p.pos.z);
-      noteHits(ctx, [playerHit(ctx, mon, spec)], true, cast.actionId);
+      const results = playerHitShape(ctx, cone(p.pos.x, p.pos.z, reach, p.facing, deg2rad(def.angleDeg ?? PLAYER.standConeDeg)), spec);
+      const mon = targetAlive(ctx, cast.targetId);
+      if (mon && !results.some((r) => r && r.monId === mon.id) && Math.hypot(mon.pos.x - p.pos.x, mon.pos.z - p.pos.z) <= reach + mon.r) {
+        results.push(playerHit(ctx, mon, spec));
+      }
+      if (results.length) noteHits(ctx, results, true, cast.actionId);
     },
   },
 
@@ -450,21 +446,24 @@ export const SKILL_BEHAVIORS = {
     },
   },
 
-  /** 지면 강타 — 원뿔(radius · angleDeg) · 기절 · 흔들림 / aftershock: 같은 자리 · 방향 · delay 뒤 mul / shockwave: 앞으로 선 */
-  cone: {
-    act: 'cast',
+  /**
+   * 회전 베기(피드백 1 — 옛 cone 지면 강타) — 판정 틱에 플레이어 중심 원(radius · 360°) · 넉백(status.knock — 플레이어 → 몬스터 바깥쪽) ·
+   * aftershock(연속 회전): delay 뒤 그때의 플레이어 자리에서 mul 로 한 번 더(플레이어 소유 효과 · follow 'player' · 파생 적중 — 넉백 없음 §5.8) ·
+   * shockwave: facing(시작 때 커서 쪽)으로 선
+   */
+  spinSlash: {
+    act: 'attack',
     start: yes,
     hit(ctx, node, rank, cast) {
       const p = ctx.state.player;
       const def = node.skill, prm = cast.params;
-      const x = p.pos.x, z = p.pos.z, f = cast.facing, ang = deg2rad(def.angleDeg);
+      const x = p.pos.x, z = p.pos.z, f = cast.facing;
       const spec = hitSpec(node.id, def, rank, cast.actionId, x, z);
-      noteHits(ctx, playerHitShape(ctx, cone(x, z, def.radius, f, ang), spec), false, cast.actionId);
+      noteHits(ctx, playerHitShape(ctx, circle(x, z, def.radius), spec), false, cast.actionId);
       shake(ctx, prm.shake);
       if (prm.aftershock) {
         const s2 = derivedSpec(node.id, spec.coef * prm.aftershock.mul, def.type ?? 'phys', TAGS_AOE, ctx.nextId(), x, z);
-        /** @type {any} */ (s2).shake = prm.shake;
-        playerEffect(ctx, prm.fxAftershock, cone(x, z, def.radius, f, ang), prm.aftershock.delay, s2);
+        playerEffect(ctx, prm.fxAftershock, circle(x, z, def.radius), prm.aftershock.delay, s2, { follow: 'player' });
       }
       if (prm.shockwave) {
         const sw = prm.shockwave;

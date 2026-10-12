@@ -8,7 +8,8 @@ import * as THREE from 'three';
 import { EV, EventBus } from '../src/core/events.js';
 import { ticks } from '../src/core/time.js';
 import { BASES } from '../src/data/items.js';
-import { GUARDIANS_BY_ID, MONSTERS_BY_ID, RANKS_BY_ID, getMonDef } from '../src/data/index.js';
+import { GUARDIANS_BY_ID, MONSTERS_BY_ID, RANKS_BY_ID, getMonDef, getSkillDef } from '../src/data/index.js';
+import { deg2rad } from '../src/core/math.js';
 import { ActorLayer } from '../src/view/ActorLayer.js';
 import { DROP_MESHES, DropInstancer, dropMeshId } from '../src/view/actors/drops.js';
 import { CHAR_DIMS, WEAPON_LEN, charParts, weaponGeo } from '../src/view/actors/gear.js';
@@ -259,33 +260,64 @@ test('view.actors: 판정 틱(actHit)에 몬스터의 팔 · 무기 · 뿔 끝�
   }
 });
 
-/** 플레이어 강타의 무기 끝(판정 자세) */
-function bashTip(look, now = 100) {
+/**
+ * 플레이어 횡베기(피드백 1 — 가르기 bash · 회전 베기 groundStomp)의 한 프레임 — sim 과 같은 행동 시각(aps 1.4: 가르기 21틱 · 판정 +10 / 회전 베기 18틱 · 판정 +9)
+ * @returns {{tip:any, grip:any, hand:any, aL:any, aR:any, P:Float32Array, style:string}}
+ */
+function swingFrame(look, skillId, now, poser = new PlayerPoser(), facing = 0) {
   const d = CHAR_DIMS.warrior;
+  const def = getSkillDef(skillId);
+  const T = ticks(def.action), H = Math.max(1, ticks(def.action * def.hitFrac));
   const it = (baseId) => ({ id: 'x' + baseId, baseId, tier: 0, rarity: 'normal' });
-  const char = { cls: 'warrior', equip: { mainHand: it(look) } };
-  const L = playerLook(char);
+  const L = playerLook({ cls: 'warrior', equip: { mainHand: it(look) } });
   const style = styleOf(L);
-  const poser = new PlayerPoser();
   const P = new Float32Array(BP.N);
-  const p = { pos: { x: 0, z: 0 }, prevPos: { x: 0, z: 0 }, facing: 0, act: 'attack', actSkill: 'bash', actStart: 90, actHit: 100, actEnd: 110, dead: false, speed: 0, moving: false };
-  poser.pose(P, p, 'warrior', style, now, 0, 0, 0);
+  const p = { pos: { x: 0, z: 0 }, prevPos: { x: 0, z: 0 }, facing, act: 'attack', actSkill: skillId, actStart: 100, actHit: 100 + H, actEnd: 100 + T, dead: false, speed: 0, moving: false };
+  poser.pose(P, p, 'warrior', style, now, 0, 0, 0, facing);
   const J = makeJoints(18);
-  fkBiped(d, P, 0, 0, 0, J, 1);
+  fkBiped(d, P, 0, 0, facing, J, 1);
   if (style === 'twoHand') leftHandToGrip(J, d, -0.2);
-  return pointOf(J[BJ.wR], 0, WEAPON_LEN[look], 0, {});
+  return {
+    tip: pointOf(J[BJ.wR], 0, WEAPON_LEN[look], 0, {}), grip: pointOf(J[BJ.wR], 0, -0.2, 0, {}), hand: posOf(J[BJ.haL], {}),
+    aL: posOf(J[BJ.anL], {}), aR: posOf(J[BJ.anR], {}), P, style, T, H,
+  };
 }
+const azOf = (v) => Math.atan2(v.x, v.z);
+const deg = (r) => (r * 180) / Math.PI;
+const swingTheta = (sw, k) => { const u = Math.min(1, Math.max(0, (k - sw.from) / (sw.to - sw.from))); return deg2rad(sw.arcFrom + (sw.arcTo - sw.arcFrom) * u * u * (3 - 2 * u)); };
+const WEAPONS = ['sword', 'axe', 'mace', 'greatsword', 'greataxe'];
 
-test('view.actors: 플레이어 강타 — 판정 틱에 무기 끝이 0.4 + 1.1(± 0.35)에 · 예비(뒤로 빼기)에서는 몸 가까이', () => {
-  for (const look of ['sword', 'axe', 'mace', 'greatsword', 'greataxe']) {
-    const p = bashTip(look, 100);
-    const dist = Math.hypot(p.x, p.z);
-    assert.ok(Math.abs(dist - 1.5) <= 0.35, `${look}: 판정 자세 끝 ${dist.toFixed(2)}`);
-    assert.ok(p.z > 0.6 && p.y > 0.1 && p.y < 2.2, `${look}: 앞 · 높이 ${p.y.toFixed(2)}`);
-    // 판정 자세는 actHit 앞뒤 1틱 붙잡는다 · 예비 초반은 무기가 뒤 · 위
-    const w = bashTip(look, 90 + SWING_AT * 9);
-    assert.ok(w.z < p.z - 0.5, `${look}: 예비 끝 z ${w.z.toFixed(2)} < 판정 ${p.z.toFixed(2)}`);
+test('view.actors: 피드백 1 가르기 — 오른쪽 → 앞 → 왼쪽 수평 반원 · 판정 틱 칼끝이 판정 반지름 1.9(± 0.35) · 칼끝 방위 = 계약 swing · 발은 디딘 그대로 · 양손은 왼손이 손잡이에', () => {
+  const def = getSkillDef('bash'), sw = def.params.swing;
+  const R = 0.4 + def.reach + 0.3;
+  for (const look of WEAPONS) {
+    const h = swingFrame(look, 'bash', 100 + swingFrame(look, 'bash', 100).H);
+    const r = Math.hypot(h.tip.x, h.tip.z);
+    assert.ok(Math.abs(r - R) <= 0.35, `${look}: 판정 틱 칼끝 반지름 ${r.toFixed(2)} (판정 ${R})`);
+    assert.ok(h.tip.y > 0.6 && h.tip.y < 1.3, `${look}: 칼끝 높이 ${h.tip.y.toFixed(2)}(몸통 — 내려치기가 아니다)`);
+    const thHit = swingTheta(sw, h.H / h.T);
+    assert.ok(Math.abs(deg(azOf(h.tip) - thHit)) <= 12, `${look}: 판정 틱 칼끝 방위 ${deg(azOf(h.tip)).toFixed(0)}° ≈ ${deg(thHit).toFixed(0)}°`);
+    // 휘두름: 예비 끝(k = from)은 오른쪽 · 판정 틱 전에 가운데(facing)를 지난다 · 방위가 줄곧 늘어난다(왼쪽으로)
+    const w = swingFrame(look, 'bash', 100 + sw.from * h.T);
+    assert.ok(deg(azOf(w.tip)) < -60, `${look}: 예비 끝 칼끝 ${deg(azOf(w.tip)).toFixed(0)}°(오른쪽)`);
+    let prev = -Infinity, crossed = -1, feet = null, grip = 0;
+    for (let s = 0; s <= h.T * 4; s++) {
+      const now = 100 + s / 4;
+      const f = swingFrame(look, 'bash', now);
+      const k = (now - 100) / h.T, a = azOf(f.tip);
+      if (k >= sw.from && k <= sw.to) {
+        assert.ok(a >= prev - 1e-3, `${look}: k ${k.toFixed(2)} 방위가 되돌아간다 ${deg(a)} < ${deg(prev)}`);
+        prev = a;
+        if (crossed < 0 && a >= 0) crossed = now;
+      }
+      feet ??= [f.aL, f.aR];
+      for (const [i, q] of [f.aL, f.aR].entries()) assert.ok(Math.hypot(q.x - feet[i].x, q.y - feet[i].y, q.z - feet[i].z) < 1e-4, `${look}: 발이 움직였다(k ${k.toFixed(2)})`);
+      if (f.style === 'twoHand') grip = Math.max(grip, Math.hypot(f.hand.x - f.grip.x, f.hand.y - f.grip.y, f.hand.z - f.grip.z));
+    }
+    assert.ok(crossed > 100 && crossed <= 100 + h.H, `${look}: 칼끝이 판정 틱(+${h.H}) 전에 가운데를 지난다(+${(crossed - 100).toFixed(2)})`);
+    assert.ok(grip < 0.05, `${look}: 왼손-손잡이 ${grip.toFixed(3)}`);
   }
+  // attackPhase(다른 근접 자세 — 마법봉 찌르기 등)는 그대로
   const ph = { stage: 0, u: 0, r: 0 };
   attackPhase(100, 90, 100, 110, ph);
   assert.equal(ph.stage, 1, 'actHit 은 판정 자세');
@@ -295,6 +327,61 @@ test('view.actors: 플레이어 강타 — 판정 틱에 무기 끝이 0.4 + 1.1
   assert.equal(ph.stage, 0);
   attackPhase(104, 90, 100, 110, ph);
   assert.equal(ph.stage, 2);
+  // 마법사 마법 화살은 찌르기 그대로(횡베기 아님)
+  const P = new Float32Array(BP.N);
+  new PlayerPoser().pose(P, { pos: { x: 0, z: 0 }, prevPos: { x: 0, z: 0 }, facing: 0, act: 'attack', actSkill: 'magicBolt', actStart: 90, actHit: 100, actEnd: 110, dead: false, speed: 0, moving: false }, 'mage', 'wand', 100, 0, 0, 0);
+  assert.equal(P[BP.RYAW], 0);
+  assert.ok(Math.abs(P[BP.SYAW]) < 0.5, '찌르기');
+});
+
+test('view.actors: 피드백 1 회전 베기 — 몸이 칼끝을 따라 한 바퀴(반시계) · 판정 틱에 거의 다 돈다 · 디딘 발은 미끄러지지 않고 끝나면 처음 자리 · 칼끝 높이 몸통', () => {
+  const def = getSkillDef('groundStomp'), sw = def.params.swing;
+  for (const look of WEAPONS) {
+    const poser = new PlayerPoser();
+    const f0 = swingFrame(look, 'groundStomp', 100, poser);
+    const { T, H } = f0;
+    let prevA = null, unwrap = 0, startA = 0, slip = 0, lift = 0, grip = 0, prev = null;
+    for (let s = 0; s <= T * 8; s++) {
+      const now = 100 + s / 8;
+      const f = swingFrame(look, 'groundStomp', now, poser);
+      const k = (now - 100) / T;
+      if (k >= sw.from && k <= sw.to) {
+        const a = azOf(f.tip);
+        if (prevA === null) startA = a;
+        else {
+          let d = a - prevA;
+          d -= 2 * Math.PI * Math.round(d / (2 * Math.PI));
+          assert.ok(d >= -1e-3, `${look}: 회전이 되돌아간다(k ${k.toFixed(2)})`);
+          unwrap += d;
+        }
+        prevA = a;
+      }
+      if (prev) {
+        for (const key of ['aL', 'aR']) {
+          const a = f[key], b = prev[key];
+          lift = Math.max(lift, a.y - CHAR_DIMS.warrior.ankleY);
+          if (a.y <= CHAR_DIMS.warrior.ankleY + 0.005 && b.y <= CHAR_DIMS.warrior.ankleY + 0.005) slip = Math.max(slip, Math.hypot(a.x - b.x, a.z - b.z));
+        }
+      }
+      if (f.style === 'twoHand') grip = Math.max(grip, Math.hypot(f.hand.x - f.grip.x, f.hand.y - f.grip.y, f.hand.z - f.grip.z));
+      prev = f;
+    }
+    assert.ok(deg(startA) < -60, `${look}: 오른쪽에서 시작 ${deg(startA).toFixed(0)}°`);
+    assert.ok(unwrap > deg2rad(330), `${look}: 칼끝이 한 바퀴 ${deg(unwrap).toFixed(0)}°`);
+    assert.ok(slip < 2e-3, `${look}: 디딘 발 미끄러짐 ${slip.toFixed(4)}m / ⅛틱`);
+    assert.ok(lift > 0.05 && lift < 0.2, `${look}: 옮기는 발 높이 ${lift.toFixed(2)}`);
+    assert.ok(grip < 0.05, `${look}: 왼손-손잡이 ${grip.toFixed(3)}`);
+    const h = swingFrame(look, 'groundStomp', 100 + H, poser);
+    const hitTurn = swingTheta(sw, H / T) - deg2rad(sw.arcFrom);
+    assert.ok(hitTurn >= deg2rad(0.9 * (sw.arcTo - sw.arcFrom)), `판정 틱에 ${deg(hitTurn).toFixed(0)}° 돌았다`);
+    assert.ok(Math.abs(deg(Math.atan2(Math.sin(azOf(h.tip) - swingTheta(sw, H / T)), Math.cos(azOf(h.tip) - swingTheta(sw, H / T))))) <= 15, `${look}: 판정 틱 칼끝 방위`);
+    const r = Math.hypot(h.tip.x, h.tip.z);
+    assert.ok(r >= 1.55 && r <= def.radius, `${look}: 판정 틱 칼끝 회전 반지름 ${r.toFixed(2)}(궤적 고리 ${def.radius}가 정본)`);
+    assert.ok(h.tip.y > 0.6 && h.tip.y < 1.4, `${look}: 칼끝 높이 ${h.tip.y.toFixed(2)}`);
+    const e = swingFrame(look, 'groundStomp', 100 + T, poser);
+    for (const key of ['aL', 'aR']) assert.ok(Math.hypot(e[key].x - f0[key].x, e[key].z - f0[key].z) < 1e-3, `${look}: 끝나면 ${key} 처음 자리`);
+    assert.ok(Math.abs(Math.sin(e.P[BP.RYAW])) < 1e-6 && Math.cos(e.P[BP.RYAW]) > 0.999, `${look}: 끝나면 앞을 본다`);
+  }
 });
 
 test('view.actors: 회오리 — 무기 수평 · 끝 회전 반지름 1.4 ~ 2.0(§9.6) · 초당 3바퀴', () => {

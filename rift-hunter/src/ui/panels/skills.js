@@ -148,6 +148,10 @@ export function createSkillsPanel(ctx) {
       const fb = b ? t('skill.dmg', { a: fmtInt(b.dmgMin), b: fmtInt(b.dmgMax) }) : dash;
       rows.push({ label: '', before: fa, after: fb, dir: dirOf(a?.dmgMax, b?.dmgMax, true) });
     }
+    // 피드백 1 — 범위 스킬의 반경(회전 베기 2.5m 「둘레 모두」가 숫자로 보이게 · 화염구 · 서리 노바 …)
+    if ((a?.radius ?? 0) > 0 || (b?.radius ?? 0) > 0) {
+      rows.push({ label: '', before: a ? t('skill.radius', { n: fmtNum(a.radius, 1) }) : dash, after: b ? t('skill.radius', { n: fmtNum(b.radius, 1) }) : dash, dir: dirOf(a?.radius, b?.radius, true) });
+    }
     if ((a?.cost ?? 0) > 0 || (b?.cost ?? 0) > 0) {
       rows.push({ label: '', before: a ? t('skill.cost', { n: fmtNum(a.cost, 1) }) : dash, after: b ? t('skill.cost', { n: fmtNum(b.cost, 1) }) : dash, dir: dirOf(a?.cost, b?.cost, false) });
     }

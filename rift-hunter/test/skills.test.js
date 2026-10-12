@@ -12,7 +12,7 @@ import { EV } from '../src/core/events.js';
 import { makeInput } from '../src/core/inputFrame.js';
 import { deg2rad, wrapAngle } from '../src/core/math.js';
 import { ticks } from '../src/core/time.js';
-import { PLAYER } from '../src/data/classes.js';
+import { CLASSES, PLAYER } from '../src/data/classes.js';
 import { getNode } from '../src/data/index.js';
 import { LEGENDARIES } from '../src/data/legendaries.js';
 import { MONSTERS } from '../src/data/monsters.js';
@@ -21,6 +21,7 @@ import { mapFromAscii } from '../src/debug/fixtureMap.js';
 import { playerHit } from '../src/sim/combat.js';
 import { updatePlayer } from '../src/sim/player/controller.js';
 import { SKILL_BEHAVIORS, describeSkill, skillParams, skillReady } from '../src/sim/player/skills.js';
+import { updateEffects } from '../src/sim/effects.js';
 import { isWalkableR, tileAt } from '../src/sim/world/nav.js';
 import { addTestMonster, countEvents, makeTestCtx, makeTestState, makeTestStats } from './helpers.js';
 
@@ -135,23 +136,84 @@ test('분노 생성(gen): 돌진 +10 · 전투 함성 +30 은 시전 시작에',
 
 // ───────────────────────── 모양 치수(§9.6) ─────────────────────────
 
-test('지면 강타: 원뿔 r 4.0 · 120°(몸 반지름 포함) — 안은 맞고 밖은 안 맞는다 · 기절은 status · 흔들림', () => {
+test('피드백 1 — 회전 베기(groundStomp · spinSlash): 플레이어 중심 원 r 2.5 · 360°(앞 · 옆 · 뒤 모두 · 몸 반지름 포함) — 밖은 안 맞는다 · 넉백은 바깥쪽 · 흔들림 없음', () => {
   const { st, ctx, p } = setup({ ranks: { groundStomp: 1 }, bar: ['groundStomp'] });
+  const gs = getNode('groundStomp').skill;
+  assert.equal(gs.behavior, 'spinSlash');
+  assert.equal(gs.radius, 2.5);
   const o = { ...p.pos };
   const r = 0.45;
-  const inFront = addTestMonster(ctx, { x: o.x + 4.0 + r - 0.05, z: o.z, hp: BIG });
-  const beyond = addTestMonster(ctx, { x: o.x, z: o.z + 4.0 + r + 0.1, hp: BIG });
-  const at = (deg) => { const a = deg2rad(90 + deg); return { x: o.x + Math.sin(a) * 2, z: o.z + Math.cos(a) * 2 }; };
-  const edgeIn = addTestMonster(ctx, { ...at(65), hp: BIG });
-  const edgeOut = addTestMonster(ctx, { ...at(80), hp: BIG });
-  cast(ctx, { x: o.x + 5, z: o.z });   // +X 를 본다
+  const R = gs.radius + r;
+  const at = (deg, d) => { const a = deg2rad(90 + deg); return { x: o.x + Math.sin(a) * d, z: o.z + Math.cos(a) * d }; };
+  const front = addTestMonster(ctx, { ...at(0, R - 0.05), hp: BIG });
+  const side = addTestMonster(ctx, { ...at(90, R - 0.05), hp: BIG });
+  const back = addTestMonster(ctx, { ...at(180, R - 0.05), hp: BIG });
+  const backLeft = addTestMonster(ctx, { ...at(-135, 1.2), hp: BIG });
+  const beyond = addTestMonster(ctx, { ...at(180, R + 0.1), hp: BIG });
+  const beyond2 = addTestMonster(ctx, { ...at(45, R + 0.1), hp: BIG });
+  cast(ctx, { x: o.x + 5, z: o.z });   // +X 를 본다(충격파 · 연출의 시작각)
+  assert.equal(p.act, 'attack');
   assert.ok(Math.abs(p.facing - Math.PI / 2) < 1e-9);
   toHit(ctx);
-  assert.deepEqual([...p.sk.hitIds].sort((a, b) => a - b), [inFront.id, edgeIn.id].sort((a, b) => a - b));
-  assert.ok(!p.sk.hitIds.includes(beyond.id) && !p.sk.hitIds.includes(edgeOut.id));
-  assert.equal(evs(ctx, EV.SHAKE).at(-1).payload.amp, 0.25);
+  assert.deepEqual([...p.sk.hitIds].sort((a, b) => a - b), [front.id, side.id, back.id, backLeft.id].sort((a, b) => a - b), '둘레 360° 안은 모두');
+  assert.ok(!p.sk.hitIds.includes(beyond.id) && !p.sk.hitIds.includes(beyond2.id), '반지름 밖');
+  assert.equal(evs(ctx, EV.SHAKE).length, 0, '횡베기 — 화면 흔들림 없음');
   assert.equal(evs(ctx, EV.ACTION_HIT).at(-1).payload.skillId, 'groundStomp');
-  if (REAL) assert.ok(inFront.st.stunUntil > st.tick, '기절(실제 combat)');
+  if (REAL) {
+    assert.ok(back.knock, '넉백(실제 combat)');
+    const vx = back.knock.vx, vz = back.knock.vz;
+    assert.ok(vx * (back.pos.x - o.x) + vz * (back.pos.z - o.z) > 0, '플레이어에게서 바깥쪽');
+    assert.ok(!(back.st.stunUntil > st.tick), '기절 없음(옛 지면 강타의 기절은 넉백으로 바뀌었다)');
+  }
+});
+
+test('피드백 1 — 가르기(bash · cleave): 대상 쪽 반원(180°) · 반지름 = 몸 r + reach + 관용 — 닿는 적 모두 · 등 뒤 · 부채꼴 밖 · 사거리 밖은 안 맞는다 · 분노 = onBasicHit + 추가 대상(상한)', () => {
+  const { st, ctx, p } = setup({ resource: 0 });
+  const def = BASIC_SKILLS.bash;
+  assert.equal(def.behavior, 'cleave');
+  assert.equal(def.angleDeg, 180);
+  const o = { ...p.pos };
+  const r = 0.45;
+  const R = p.r + def.reach + PLAYER.reachTolerance;
+  assert.ok(Math.abs(R - 1.9) < 1e-9, '판정 부채꼴 반지름 1.9m(§9.6)');
+  const at = (deg, d) => { const a = deg2rad(90 + deg); return { x: o.x + Math.sin(a) * d, z: o.z + Math.cos(a) * d }; };
+  const target = addTestMonster(ctx, { ...at(0, 1.5), hp: BIG });
+  const left = addTestMonster(ctx, { ...at(-60, 1.6), hp: BIG });
+  const right = addTestMonster(ctx, { ...at(80, R + r - 0.05), hp: BIG });
+  const edge = addTestMonster(ctx, { ...at(0, R + r - 0.05), hp: BIG });
+  const behind = addTestMonster(ctx, { ...at(180, 1.2), hp: BIG });
+  const backSide = addTestMonster(ctx, { ...at(-135, 1.6), hp: BIG });
+  const far = addTestMonster(ctx, { ...at(20, R + r + 0.1), hp: BIG });
+  step(ctx, { cursor: { ...target.pos }, hover: { kind: 'monster', id: target.id, src: 'pick' }, lmb: true, lmbDown: true });
+  assert.equal(p.act, 'attack');
+  assert.equal(p.actSkill, 'bash');
+  assert.ok(Math.abs(p.facing - Math.PI / 2) < 1e-9, '대상 쪽을 본다');
+  toHit(ctx, { cursor: { ...target.pos }, hover: { kind: 'monster', id: target.id, src: 'pick' }, lmb: true });
+  const hit = [target.id, left.id, right.id, edge.id].sort((a, b) => a - b);
+  assert.deepEqual([...p.sk.hitIds].sort((a, b) => a - b), hit, '부채꼴 안 모두');
+  for (const m of [behind, backSide, far]) assert.ok(!p.sk.hitIds.includes(m.id), `밖 ${m.id}`);
+  const C = CLASSES.find(c => c.id === 'warrior').rage;
+  assert.equal(p.resource, C.onBasicHit + Math.min(C.extraCap, hit.length - 1) * C.perExtraTarget, '분노 = 8 + min(3, n − 1)');
+  assert.ok(st.tick > 0);
+});
+
+test('피드백 1 — 가르기: 대상 고정 — 휘두르는 사이 대상이 부채꼴 밖(옆 뒤)으로 비켜도 r + reach + 관용 안이면 맞는다 · Shift 제자리는 커서 쪽 반원', () => {
+  const { ctx, p } = setup({ resource: 0 });
+  const o = { ...p.pos };
+  const m = addTestMonster(ctx, { x: o.x + 1.4, z: o.z, hp: BIG });
+  step(ctx, { cursor: { ...m.pos }, hover: { kind: 'monster', id: m.id, src: 'pick' }, lmb: true, lmbDown: true });
+  assert.equal(p.act, 'attack');
+  m.pos = { x: o.x - 0.6, z: o.z - 1.2 };   // 옆 뒤로(부채꼴 밖 · 사거리 안)
+  toHit(ctx, {});
+  assert.deepEqual(p.sk.hitIds, [m.id]);
+  const s = setup({ resource: 0 });
+  const q = { ...s.p.pos };
+  const south = addTestMonster(s.ctx, { x: q.x, z: q.z - 1.5, hp: BIG });
+  const north = addTestMonster(s.ctx, { x: q.x, z: q.z + 1.5, hp: BIG });
+  step(s.ctx, { cursor: { x: q.x, z: q.z - 5 }, lmb: true, lmbDown: true, shift: true });
+  toHit(s.ctx, {});
+  assert.deepEqual(s.p.sk.hitIds, [south.id], '커서(−Z) 쪽 반원만');
+  assert.ok(!s.p.sk.hitIds.includes(north.id));
 });
 
 test('지진: 시전 자리 원 r 6.0 · 파동 셋(판정 틱 + 0.4 · 0.9 · 1.4초) · 비적대 · 파동마다 새 actionId · 흔들림 0.35', () => {
@@ -438,22 +500,31 @@ test('변형 6: 찍었을 때만 skillParams 에 patch 가 합쳐진다 · 기�
   for (const n of SKILL_NODES.filter(x => x.kind === 'active')) for (const k of PATCH_KEYS) assert.ok(!(k in n.skill.params), `${n.id}.${k}`);
 });
 
-test('변형 — 여진: 0.5초 뒤 같은 자리 · 방향 원뿔 60%(stomp · 비적대 · 기절 없음) · 진동 착지: 착지 기절 1.2', () => {
+test('변형 — 연속 회전(aftershock · 피드백 1): 0.5초 뒤 플레이어를 따라가 원 r 2.5 · 60%(spinEcho · 비적대 · 넉백 · 기절 없음) · 진동 착지: 착지 기절 1.2', () => {
   const { st, ctx, p } = setup({ ranks: { groundStomp: 1, aftershock: 1 }, bar: ['groundStomp'] });
+  const gs = getNode('groundStomp').skill;
   cast(ctx, { x: p.pos.x + 3, z: p.pos.z });
   toHit(ctx);
-  const e = st.rift.effects.filter(x => x.kind === 'stomp');
+  const e = st.rift.effects.filter(x => x.kind === gs.params.fxAftershock);
+  assert.equal(gs.params.fxAftershock, 'spinEcho');
   assert.equal(e.length, 1);
   assert.equal(e[0].hitAt - st.tick, ticks(0.5));
-  assert.equal(e[0].shape.type, 'cone');
-  assert.equal(e[0].shape.r, 4.0);
-  assert.ok(Math.abs(e[0].shape.angle - deg2rad(120)) < 1e-9);
-  assert.ok(Math.abs(e[0].shape.facing - p.facing) < 1e-9);
-  assert.ok(Math.abs(e[0].spec.coef - 1.05 * 0.6) < 1e-9);   // 밸런스 게이트: 지면 강타 1.05
+  assert.equal(e[0].shape.type, 'circle');
+  assert.equal(e[0].shape.r, gs.radius);
+  assert.equal(e[0].follow, 'player');
+  assert.ok(Math.abs(e[0].spec.coef - gs.coef[0] * 0.6) < 1e-9);
   assert.equal(e[0].spec.stun, undefined, '파생 적중 — 기절 없음');
-  assert.equal(e[0].spec.knock, undefined);
+  assert.equal(e[0].spec.knock, undefined, '파생 적중 — 넉백 없음');
   assert.equal(e[0].hostile, false);
   assert.deepEqual(evs(ctx, EV.ACTION_HIT).at(-1).payload.transforms, ['aftershock']);
+  // 판정 전에 플레이어가 움직이면 원이 따라온다 — 판정은 그때의 자리에서
+  const moved = { x: p.pos.x + 2, z: p.pos.z + 1 };
+  p.pos = { ...moved };
+  const near1 = addTestMonster(ctx, { x: moved.x, z: moved.z + 2.0, hp: BIG });
+  while (st.tick < e[0].hitAt) { st.tick += 1; updateEffects(ctx); }
+  assert.deepEqual({ x: e[0].shape.x, z: e[0].shape.z }, moved);
+  assert.equal(e[0].resolved, true);
+  if (REAL) assert.ok(near1.hp < BIG, '따라온 원 안의 몬스터가 맞았다');
   const q = setup({ resource: 0, ranks: { leap: 1, quakeLanding: 1 }, bar: ['leap'] });
   const m = addTestMonster(q.ctx, { x: q.p.pos.x + 6.5, z: q.p.pos.z, hp: BIG });
   cast(q.ctx, { x: q.p.pos.x + 6, z: q.p.pos.z });
@@ -510,16 +581,19 @@ test('변형 — 피의 회오리 · 분열 화염구(±15° 셋 · 70%) · 얼�
 test('describeSkill: 계수 · 피해(무기 × coef × (1 + 주/100) × (1 + 보너스)) · 비용 · 쿨 · 사거리 · 반지름 · extra · 기본 공격 ID', () => {
   const s = makeTestStats();
   const b = describeSkill(s, 'bash', 1);
-  assert.equal(b.coefPct, 100);
-  assert.ok(Math.abs(b.dmgMin - 3 * 1.1) < 1e-9 && Math.abs(b.dmgMax - 7 * 1.1) < 1e-9);
-  assert.equal(b.range, 1.1);
+  const bc = BASIC_SKILLS.bash.coef[0];   // 피드백 1: 가르기 — 닿는 적마다
+  assert.ok(Math.abs(b.coefPct - bc * 100) < 1e-9);
+  assert.ok(Math.abs(b.dmgMin - 3 * bc * 1.1) < 1e-9 && Math.abs(b.dmgMax - 7 * bc * 1.1) < 1e-9);
+  assert.equal(b.range, BASIC_SKILLS.bash.reach);
   assert.equal(b.cost, 0);
   const g = describeSkill({ ...s, costReduce: 0.2, aoePct: 0.1 }, 'groundStomp', 3);
-  assert.ok(Math.abs(g.coefPct - 127) < 1e-9);   // 밸런스 게이트: 1.05 / +0.11(랭크 3)
-  assert.ok(Math.abs(g.dmgMin - 3 * 1.27 * 1.1 * 1.1) < 1e-9);
-  assert.ok(Math.abs(g.cost - 14 * 0.8) < 1e-9);   // 지면 강타 비용 14(W1 수정 · NOTES-W1FIX — 계약 §7.2) × (1 − 0.2)
-  assert.equal(g.radius, 4.0);
-  assert.equal(g.extra.stun, 1.0, '랭크 3 기절');
+  const gc = getNode('groundStomp').skill.coef[2];   // 피드백 1: 회전 베기 랭크 3
+  assert.ok(Math.abs(g.coefPct - gc * 100) < 1e-9);
+  assert.ok(Math.abs(g.dmgMin - 3 * gc * 1.1 * 1.1) < 1e-9);
+  assert.ok(Math.abs(g.cost - 14 * 0.8) < 1e-9);   // 회전 베기 비용 14(W1 수정 · NOTES-W1FIX — 계약 §7.2) × (1 − 0.2)
+  assert.equal(g.radius, 2.5);
+  assert.equal(g.extra.knock, 0.8, '넉백(피드백 1 — 옛 기절)');
+  assert.equal(g.extra.stun, undefined);
   const t = describeSkill({ ...makeTestStats({ cls: 'mage' }), cdr: 0.1 }, 'teleport', 3);
   assert.ok(Math.abs(t.cd - 2.6 * 0.9) < 1e-9);
   assert.equal(t.range, 12);
@@ -559,7 +633,7 @@ test('skillReady: cooldownLeft · cooldownTotal(초) · canAfford · ready · �
 // ───────────────────────── 규칙 ─────────────────────────
 
 test('동작 14가 표에 있고 모든 액티브 · 기본 공격의 behavior 가 그중 하나 · act 는 PlayerAct', () => {
-  const keys = ['meleeBasic', 'boltBasic', 'cone', 'quake', 'dash', 'spin', 'buff', 'leap', 'fireball', 'meteor', 'nova', 'shield', 'chain', 'blink'];
+  const keys = ['cleave', 'boltBasic', 'spinSlash', 'quake', 'dash', 'spin', 'buff', 'leap', 'fireball', 'meteor', 'nova', 'shield', 'chain', 'blink'];   // 피드백 1: meleeBasic → cleave · cone → spinSlash
   assert.deepEqual(Object.keys(SKILL_BEHAVIORS).sort(), [...keys].sort());
   for (const k of keys) {
     const b = SKILL_BEHAVIORS[k];

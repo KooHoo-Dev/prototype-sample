@@ -221,6 +221,7 @@ const EXTRA_ROWS = [
   { key: 'skill.x.burn', get: (x) => x.burn?.coefPerSec, p: (v, x) => ({ v: pct(v), s: f1(x.burn?.dur ?? 0) }), more: true },
   { key: 'skill.x.bounces', get: (x) => x.bounces, p: (v) => ({ v: f1(v) }), more: true },
   { key: 'skill.x.stun', get: (x) => x.stun, p: (v) => ({ v: f1(v) }), more: true },
+  { key: 'skill.x.knock', get: (x) => x.knock, p: (v) => ({ v: f1(v) }), more: true },   // 피드백 1 — 회전 베기 · 돌진의 status.knock(m)
   { key: 'skill.x.chill', get: (x) => x.chill, p: (v) => ({ v: f1(v) }), more: true },
   { key: 'skill.x.shock', get: (x) => x.shockChance, p: (v) => ({ v: pct(v) }), more: true },
   { key: 'skill.x.aftershock', get: (x) => x.aftershock?.mul, p: (v, x) => ({ v: pct(v), s: f1(x.aftershock?.delay ?? 0) }), more: true },

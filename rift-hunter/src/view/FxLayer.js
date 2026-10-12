@@ -15,6 +15,7 @@ import { CAM_AZIMUTH, DT } from '../core/constants.js';
 import { EV } from '../core/events.js';
 import { deg2rad } from '../core/math.js';
 import { ticks } from '../core/time.js';
+import { PLAYER } from '../data/classes.js';
 import { getMonDef, getSkillDef } from '../data/index.js';
 import { QUALITY } from '../data/quality.js';
 import {
@@ -26,7 +27,7 @@ import { DecalBatch, hash01, pointIn, shapeReach, writeBorder, writeEdge, writeF
 import { ParticlePool, PointBuffer } from './fx/particles.js';
 import {
   AFFIX_BURST, BURSTS, CAP, DEATH_STYLE, DECAL, FALL, HIT_FX, HIT_STYLE, HOSTILE, KIND_DEFAULT_FRIENDLY, KIND_DEFAULT_HOSTILE, KIND_STYLE,
-  PLAYER_FX, POOL, PORTAL_FX, PROJ_DEFAULT, PROJ_STYLE, RIFT_FX, WHITE, col, light,
+  PLAYER_FX, POOL, PORTAL_FX, PROJ_DEFAULT, PROJ_STYLE, RIFT_FX, SWING_FX, WHITE, col, light,
 } from './fx/style.js';
 
 const TAU = Math.PI * 2;
@@ -81,6 +82,10 @@ export class FxLayer {
     // 바닥 표식(보통 · 가산) — 드로콜 2
     this.decals = new DecalBatch(CAP.decalVerts, false, -2);
     this.glow = new DecalBatch(CAP.glowVerts, true, -1);
+    // 피드백 1 — 횡베기 칼끝 궤적(칼끝 높이의 가산 띠 · 가르기 · 회전 베기 · 연속 회전 잔상)
+    this.swoosh = new DecalBatch(CAP.swooshVerts, true, 4);
+    this.swoosh.y = SWING_FX.y;
+    this.swoosh.mesh.name = 'fxSwoosh';
     // 입자(시뮬) · 스프라이트(프레임마다)
     this.sparks = new ParticlePool(CAP.particlesAdd, true, 6, 'fxSparks');
     this.dust = new ParticlePool(CAP.particlesDust, false, 5, 'fxDust');
@@ -100,7 +105,7 @@ export class FxLayer {
     this.barrels = new InstBatch('fxBarrels', barrelGeometry(), solidMaterial(), CAP.solids, 0);
     /** @type {InstBatch[]} */
     this.batches = [this.segs, this.orbs, this.shells, this.pillars, this.arcs, this.links, this.stars, this.shards, this.arrows, this.solids, this.spikes, this.barrels];
-    this.group.add(this.decals.mesh, this.glow.mesh, this.sparks.buf.points, this.dust.buf.points, this.glyphs.points);
+    this.group.add(this.decals.mesh, this.glow.mesh, this.swoosh.mesh, this.sparks.buf.points, this.dust.buf.points, this.glyphs.points);
     for (const b of this.batches) this.group.add(b.mesh);
 
     /** 순간 연출 기록 */
@@ -206,6 +211,7 @@ export class FxLayer {
 
     this.decals.begin();
     this.glow.begin();
+    this.swoosh.begin();
     this.glyphs.begin();
     for (let i = 0; i < this.batches.length; i++) this.batches[i].begin();
     this.decalCount = 0;
@@ -230,6 +236,7 @@ export class FxLayer {
     this.glyphs.end(scale, maxPx);
     this.decals.end();
     this.glow.end();
+    this.swoosh.end();
     for (let i = 0; i < this.batches.length; i++) this.batches[i].end();
   }
 
@@ -238,6 +245,7 @@ export class FxLayer {
     this._offs = [];
     this.decals.geometry.dispose(); this.decals.material.dispose();
     this.glow.geometry.dispose(); this.glow.material.dispose();
+    this.swoosh.geometry.dispose(); this.swoosh.material.dispose();
     this.sparks.dispose();
     this.dust.dispose();
     this.glyphs.dispose();
@@ -252,7 +260,7 @@ export class FxLayer {
     for (const r of this.recs) if (r.alive) recs++;
     return {
       decals: this.decalCount, decalVerts: this.decals.n, glowVerts: this.glow.n,
-      particles: this.sparks.alive + this.dust.alive, glyphs: this.glyphs.n, transients: recs,
+      particles: this.sparks.alive + this.dust.alive, glyphs: this.glyphs.n, transients: recs, swooshVerts: this.swoosh.n,
       projectiles: this.orbs.n + this.shards.n + this.arrows.n, instances: this.batches.reduce((s, b) => s + b.n, 0),
     };
   }
@@ -361,7 +369,8 @@ export class FxLayer {
       if (s.type !== 'poly' && this.far(s.x, s.z, shapeReach(s))) continue;
       if (tick < e.hitAt) {
         const p = prog(e.start, e.hitAt, now);
-        if (st.pattern === 'rift') this._riftTele(e, p);
+        if (st.pre === 'spinGhost') this._spinGhost(e, st, now);
+        else if (st.pattern === 'rift') this._riftTele(e, p);
         else if (st.tele) this._telegraph(e, st, p);
         if (st.fall && e.from) this._fall(e, st.fall, p);
         this.decalCount++;
@@ -401,6 +410,44 @@ export class FxLayer {
     B.unmark();
     B.mark('border', e.id);
     writeBorder(B, s, DECAL.border, bc, DECAL.borderA * k * (0.85 + 0.15 * p));
+    B.unmark();
+  }
+
+  /**
+   * 피드백 1 — 연속 회전 대기 [start, hitAt): 중심은 플레이어를 따라간다(follow 'player' — 그린 플레이어 자리 · 아니면 효과 shape) ·
+   * 바닥 옅은 호가 진행만큼 자라고(판정 반지름) · 마지막 echoGhostSec 동안 칼끝 높이 잔상이 한 바퀴 돌아 판정 틱에 마친다(예고 붉은색 없음)
+   * @param {import('../types.js').Effect} e @param {any} st @param {number} now
+   */
+  _spinGhost(e, st, now) {
+    const s = e.shape;
+    if (!s || s.type !== 'circle') return;
+    const fol = /** @type {any} */ (e).follow === 'player';
+    const x = fol ? this.px : s.x, z = fol ? this.pz : s.z;
+    const p = prog(e.start, e.hitAt, now);
+    const f0 = (this._st && this._st.player ? this._st.player.facing : 0) - Math.PI / 2;
+    const c = col(st.inner);
+    this.glow.mark('echoPre', e.id);
+    this.glow.band(x, z, Math.max(0, s.r - SWING_FX.ground * 0.6), s.r, f0, f0 + TAU * p, c, SWING_FX.echoPreA, 0);
+    this.glow.unmark();
+    const gT = Math.max(1, ticks(SWING_FX.echoGhostSec));
+    const g = (now - (e.hitAt - gT)) / gT;
+    if (g > 0) this.sweep(this.swoosh, 'echo', e.id, x, z, s.r, f0, f0 + TAU * easeOut(clamp01(g)), c, st.sheet ?? SWING_FX.sheetA);
+  }
+
+  /**
+   * 칼끝 궤적 — 머리 head(방위)에서 꼬리 쪽(tail 까지 · 최대 tailDeg)으로 옅어지는 띠(바깥 = 반지름 r · 안쪽 r × inner 는 0) — 횡베기 · 잔상 공용
+   * @param {DecalBatch} B @param {string} tag @param {number} id @param {number} tail 휘두름 시작 방위(꼬리가 이보다 뒤로 가지 않는다) @param {number} head
+   */
+  sweep(B, tag, id, x, z, r, tail, head, c, k) {
+    if (!(r > 0) || !(k > 0)) return;
+    const span = Math.min(head - tail, deg2rad(SWING_FX.tailDeg));
+    if (!(span > 1e-3)) return;
+    const n = SWING_FX.pieces, d = span / n;
+    B.mark(tag, id);
+    for (let i = 0; i < n; i++) {
+      const hi = head - d * i, lo = hi - d;
+      B.band(x, z, r * SWING_FX.inner, r, lo, hi, c, k * (1 - i / n), 0);
+    }
     B.unmark();
   }
 
@@ -715,6 +762,7 @@ export class FxLayer {
     r.durT = this._hitDurT(st);
     if (type === 'ring') { r.growT = Math.max(1, ticks(st.grow ?? 0.25)); r.k = 0.75; }
     else if (type === 'sphere') r.growT = Math.max(1, ticks(st.grow ?? 0.1));
+    else if (type === 'slash') { r.k = SWING_FX.groundA; r.h = st.sheet ?? 0; }
     if (st.burst === 'spikes' && s.type === 'line') {
       const sp = this._rec('spikes', '', tick);
       if (sp) { this._copyShape(sp, s); sp.durT = ticks(0.6); sp.id = id; }
@@ -757,21 +805,16 @@ export class FxLayer {
   }
 
   /**
-   * 스킬 판정 순간(동작 behavior 로 — 치수는 데이터 그대로: 원뿔 radius · angleDeg · 원 radius)
+   * 스킬 판정 순간(동작 behavior 로 — 치수는 데이터 그대로: 원 radius · 가르기 부채꼴 = 몸 r + reach + PLAYER.reachTolerance · angleDeg)
    * @param {string} skillId @param {number} tick 판정 틱
    */
   _skillHit(skillId, x, z, facing, tx, tz, tick) {
     const def = this.skillDef(skillId);
     if (!def) return;
     switch (def.behavior) {
-      case 'cone': {
-        const r = this._rec('fan', 'dust', tick);
-        if (!r) return;
-        r.shape.type = 'cone'; r.shape.x = x; r.shape.z = z; r.shape.r = def.radius ?? 0; r.shape.facing = facing;
-        r.shape.angle = deg2rad(def.angleDeg ?? 0); r.x = x; r.z = z;
-        r.hex = PLAYER_FX.stomp; r.hex2 = 0xfff2d6; r.durT = ticks(0.3);
-        break;
-      }
+      // 피드백 1 — 가르기 · 회전 베기: 판정 영역의 바깥 가장자리에 얇은 칼자국(바닥 · 0.3초) · 칼끝 높이의 궤적은 상태로 그린다(_swingTrail)
+      case 'cleave': this._slashRec(x, z, this.slashReach(def), facing, deg2rad(def.angleDeg ?? PLAYER.standConeDeg), PLAYER_FX.slash, 0, tick); break;
+      case 'spinSlash': this._slashRec(x, z, def.radius ?? 0, facing, TAU, PLAYER_FX.slash, 0, tick); break;
       case 'leap': this._ringRec(x, z, def.radius ?? 0, PLAYER_FX.dust, 0.2, 0.35, false, 'dustRing', tick); break;
       case 'nova': this._ringRec(x, z, def.radius ?? 0, PLAYER_FX.frost, 0.18, 0.3, true, 'frost', tick); break;
       case 'buff':
@@ -784,6 +827,28 @@ export class FxLayer {
       default:
         if (def.type && def.type !== 'phys') this._burstRec('cast', x + Math.sin(facing) * 0.5, 1.2, z + Math.cos(facing) * 0.5, 1, false, tick);
     }
+  }
+
+  /** 가르기 부채꼴 반지름(sim cleave 와 같은 식 — 몸 r + reach + PLAYER.reachTolerance) @param {any} def */
+  slashReach(def) {
+    const pr = this._st && this._st.player && this._st.player.r > 0 ? this._st.player.r : 0.4;
+    return pr + (def.reach ?? 0) + PLAYER.reachTolerance;
+  }
+
+  /**
+   * 칼자국(바닥 얇은 띠 — 바깥 가장자리 = 판정 반지름 r · 방향 facing ± angle/2 · angle ≥ 2π 면 고리) · sheet > 0 이면 칼끝 높이 잔상 고리도
+   * @param {number} sheet 잔상 세기(연속 회전) @param {number} [tick]
+   */
+  _slashRec(x, z, r, facing, angle, hex, sheet, tick = this._tick()) {
+    if (!(r > 0)) return;
+    const rec = this._rec('slash', '', tick);
+    if (!rec) return;
+    const s = rec.shape;
+    if (angle >= TAU - 1e-6) { s.type = 'circle'; s.angle = 0; }
+    else { s.type = 'cone'; s.angle = angle; }
+    s.x = x; s.z = z; s.r = r; s.facing = facing; rec.x = x; rec.z = z;
+    rec.hex = hex; rec.hex2 = hex; rec.k = SWING_FX.groundA; rec.h = sheet;
+    rec.durT = Math.max(2, ticks(0.3));
   }
 
   /** 퍼지는 고리(반지름 r 까지 · glow = 가산) */
@@ -888,6 +953,25 @@ export class FxLayer {
           writeBorder(this.glow, s, DECAL.border, col(r.hex2), 0.7 * fade);
           this.glow.unmark();
           if (r.type === 'fan') writePattern(this.decals, 'cracks', s, r.id || 1, t, 1, col(0x2a221a), 0.6 * fade);
+          break;
+        }
+        case 'slash': {
+          // 피드백 1 — 칼자국: 바닥 얇은 띠(판정 가장자리 · 안쪽으로 SWING_FX.ground) · 연속 회전이면 칼끝 높이 잔상 고리가 짧게
+          if (this.decalCount >= CAP.decals) break;
+          this.decalCount++;
+          const fade = 1 - u;
+          const full = s.type !== 'cone';
+          const a0 = full ? 0 : s.facing - s.angle / 2, a1 = full ? TAU : s.facing + s.angle / 2;
+          this.glow.mark('slash', r.id);
+          this.glow.band(s.x, s.z, Math.max(0, s.r - SWING_FX.ground), s.r, a0, a1, col(r.hex), r.k * fade, 0.15 * r.k * fade);
+          this.glow.unmark();
+          const sheetT = Math.max(1, ticks(SWING_FX.echoSheetSec));
+          if (r.h > 0 && age < sheetT) {
+            const k = r.h * (1 - age / sheetT);
+            this.swoosh.mark('echo', r.id);
+            this.swoosh.band(s.x, s.z, s.r * SWING_FX.inner, s.r, a0, a1, col(r.hex), k, 0);
+            this.swoosh.unmark();
+          }
           break;
         }
         case 'trail': {

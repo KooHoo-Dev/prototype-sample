@@ -69,7 +69,7 @@
  * @property {string[]} offhandBases      낄 수 있는 보조 기본형 ID
  */
 
-/** @typedef {'meleeBasic'|'boltBasic'|'cone'|'quake'|'dash'|'spin'|'buff'|'leap'|'fireball'|'meteor'|'nova'|'shield'|'chain'|'blink'} SkillBehaviorId */
+/** @typedef {'cleave'|'boltBasic'|'spinSlash'|'quake'|'dash'|'spin'|'buff'|'leap'|'fireball'|'meteor'|'nova'|'shield'|'chain'|'blink'} SkillBehaviorId   피드백 1: meleeBasic → cleave(가르기) · cone → spinSlash(회전 베기) */
 /** @typedef {'aoe'|'melee'|'projectile'|'movement'|'buff'|'channel'|'dot'|'chain'} SkillTag */
 /** @typedef {Object} SkillDef   (액티브 · 기본 공격의 동작 수치 — §7.2)
  * @property {SkillBehaviorId} behavior
@@ -84,7 +84,7 @@
  * @property {boolean} scaled       true면 행동 길이 = action × APS_REF / stats.aps
  * @property {number} hitFrac       판정 시점 = 행동 시작 + action × hitFrac
  * @property {number} [range]       사거리 · 최대 거리(m) @property {number} [radius] 원 · 원뿔 반지름(m) @property {number} [angleDeg] 원뿔 전체 각(도) @property {number} [width] 선 폭(m)
- * @property {number} [reach]       근접 사거리 — 몸 가장자리 사이(m · 강타 1.1)
+ * @property {number} [reach]       근접 사거리 — 몸 가장자리 사이(m · 가르기 1.2 — 피드백 1 · 판정 부채꼴 반지름 = 몸 r + reach + PLAYER.reachTolerance)
  * @property {number[]} coef        랭크별 무기 피해 계수(길이 = maxRank · 기본 공격은 1)
  * @property {{stun?:number[], chill?:number|number[], burnFrac?:number, shockChance?:number, knock?:number, slowPct?:number, slowSec?:number}} [status]
  *                                  적중이 싣는 상태 이상(배열이면 랭크별 [rank−1] · 비율은 0..1 — §7.2)
@@ -577,6 +577,7 @@
  * @property {Object|null} spec     hitAt 판정 정의(null = 판정 없는 표시 전용 예고 — 돌진 선 · 연출이 읽지 않는다)
  * @property {Object|null} tickSpec 지속 틱 판정 정의(null이면 spec · 비적대는 만드는 쪽이 coef = coefPerSec × 틱 초를 넣는다)
  * @property {Vec2|null} from       몰타르 포탄 · 메테오 낙하의 출발점(연출)
+ * @property {'player'} [follow]  피드백 1 — 있으면('player') 판정(hitAt) 전까지 매 틱 shape 중심이 플레이어 자리(연속 회전 spinEcho) · 따라가지 않는 효과에는 키가 없다
  */
 /** @typedef {Object} Drop
  * @property {number} id @property {DropKind} kind

@@ -216,7 +216,7 @@ function dead(fx, m, { ago = 20, launch = null } = {}) {
 }
 
 /** 바닥 효과(spawnEffect 와 같은 꼴) — ago = 예고를 시작한 지 몇 틱 · 시간 인자는 초 */
-function effect(fx, { kind, owner = 'mon', srcId = -1, packId = -1, hostile = true, shape, delay = 1, dur = 0, tick = 0, spec = null, tickSpec = null, from = null, cancelOnSrcDeath = false, ago = 6 }) {
+function effect(fx, { kind, owner = 'mon', srcId = -1, packId = -1, hostile = true, shape, delay = 1, dur = 0, tick = 0, spec = null, tickSpec = null, from = null, cancelOnSrcDeath = false, ago = 6, follow = null }) {
   const st = fx.state;
   const start = st.tick - ago;
   const hitAt = start + ticks(delay);
@@ -232,6 +232,7 @@ function effect(fx, { kind, owner = 'mon', srcId = -1, packId = -1, hostile = tr
     spec, tickSpec,
     from: from ? { ...from } : null,
   };
+  if (follow === 'player') e.follow = 'player';   // 피드백 1 — 따라가는 효과에만 키를 둔다(sim spawnEffect 와 같은 꼴)
   if (e.end <= st.tick) e.end = st.tick + 1;
   st.rift.effects.push(e);
   return e;
@@ -353,7 +354,7 @@ function fxTown(seed) {
   return { state: st, map, riftMap };
 }
 
-/** 지하 묘지 · 전사 강타 판정 직후 · 일반 8종 + 새끼 40마리(걷기 · 예비 · 판정 · 경직 · 기절 · 빙결 · 사망 · 날아가는 시체) */
+/** 지하 묘지 · 전사 가르기(bash) 판정 직후 · 일반 8종 + 새끼 40마리(걷기 · 예비 · 판정 · 경직 · 기절 · 빙결 · 사망 · 날아가는 시체) */
 function fxRiftSwarm(seed) {
   const map = arena('riftSwarm');
   const fx = base(seed, { cls: 'warrior', level: 8, scene: 'rift', riftLevel: 4, map });
@@ -375,7 +376,7 @@ function fxRiftSwarm(seed) {
     const [x, z] = ring(k, 10, 1.6, 6);
     ghouls.push(mon(fx, 'ghoul', x, z, { pk: pkG }));
   }
-  // 강타를 맞은 첫 구울 — 정면 1.4m
+  // 가르기를 맞은 첫 구울(대상) — 정면 1.5m
   const [tx, tz] = around(fx, -PI / 2, 1.5);
   ghouls[0].pos = place(map, tx, tz, ghouls[0].r);
   ghouls[0].prevPos = { ...ghouls[0].pos };
@@ -630,7 +631,7 @@ function fxRiftWitch(seed) {
   return { state: st, map, riftMap: map };
 }
 
-/** 전사 회오리 채널 중 · 지진 파동 · 지면 강타 부채 · 전투 함성 버프(도약은 같은 순간에 둘 수 없어 행동은 회오리) */
+/** 전사 회오리 채널 중 · 지진 파동 · 연속 회전 대기(회전 베기 0.5초 뒤 플레이어를 따라가는 원 — 피드백 1) · 전투 함성 버프(도약은 같은 순간에 둘 수 없어 행동은 회오리) */
 function fxRiftWarrior(seed) {
   const map = arena('riftWarrior');
   const fx = base(seed, { cls: 'warrior', level: 20, scene: 'rift', riftLevel: 10, map });
@@ -655,7 +656,8 @@ function fxRiftWarrior(seed) {
   effect(fx, { kind: 'quakeWave', owner: 'player', srcId: 0, hostile: false, shape: circle(qx, qz, 6.0), delay: 0.4, spec: waveSpec, ago: 10 });
   effect(fx, { kind: 'quakeWave', owner: 'player', srcId: 0, hostile: false, shape: circle(qx, qz, 6.0), delay: 0.9, spec: waveSpec, ago: 10 });
   effect(fx, { kind: 'quakeWave', owner: 'player', srcId: 0, hostile: false, shape: circle(qx, qz, 6.0), delay: 1.4, spec: waveSpec, ago: 10 });
-  effect(fx, { kind: 'stomp', owner: 'player', srcId: 0, hostile: false, shape: cone(p.pos.x, p.pos.z, 4.0, -PI / 2, (120 * PI) / 180), delay: 0, spec: playerSpec(fx, 'groundStomp', 1.02, 'phys', ['aoe']), ago: 2 });
+  // 피드백 1: 옛 지면 강타 원뿔(stomp · r 4.0 · 120°) → 연속 회전(spinEcho · 원 r 2.5 · 0.5초 뒤 · follow 'player') — 대기 중(판정 7틱 전)
+  effect(fx, { kind: 'spinEcho', owner: 'player', srcId: 0, hostile: false, shape: circle(p.pos.x, p.pos.z, 2.5), delay: 0.5, spec: playerSpec(fx, 'groundStomp', 0.6 * 1.38, 'phys', ['aoe']), ago: 8, follow: 'player' });
   const pk = pack(fx, 'normal', p.pos.x, p.pos.z, true);
   for (let k = 0; k < 10; k++) {
     const m = mon(fx, k < 6 ? 'ghoul' : 'fallen', ...around(fx, k * 0.6, 2.2 + (k % 4)), { pk });

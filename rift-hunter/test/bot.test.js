@@ -272,14 +272,21 @@ const mon = (x, z, rank = 'normal', o = {}) => ({ x, z, r: 0.45, rank, awake: tr
 const tgt = (m, o = {}) => ({ ...m, d: Math.hypot(m.x, m.z), los: true, ...o });
 const R = BOT_RULES;
 
-test('동작별 스킬 규칙(§12.1 표) — 원뿔 · 지진 · 돌진 · 회오리 · 버프 · 도약', () => {
-  const sk = { cost: 14, angleDeg: 120 };
-  const a = mon(0, 2), b = mon(0.8, 2.5), far = mon(0, 6);
-  assert.ok(skillRule('cone', sit({ mons: [a, b], target: tgt(a) }), R, sk), 'cone: 4m 원뿔 안 2마리');
-  assert.equal(skillRule('cone', sit({ mons: [a], target: tgt(a) }), R, sk), null, 'cone: 1마리');
-  assert.ok(skillRule('cone', sit({ mons: [mon(0, 2, 'elite')], target: tgt(mon(0, 2, 'elite')) }), R, sk), 'cone: 정예 대상');
-  assert.equal(skillRule('cone', sit({ mons: [a, mon(0, -2)], target: tgt(a) }), R, sk), null, 'cone: 뒤의 것은 원뿔 밖');
-  assert.equal(skillRule('cone', sit({ mons: [far, mon(0.5, 6)], target: tgt(far) }), R, sk), null, 'cone: 대상이 4m 밖');
+test('동작별 스킬 규칙(§12.1 표) — 회전 베기 · 지진 · 돌진 · 회오리 · 버프 · 도약', () => {
+  const sk = { cost: 14, angleDeg: 120, radius: 2.5 };
+  const a = mon(0, 1.5), b = mon(0.8, 1.6), far = mon(0, 6);
+  // 피드백 1: cone(전방 4m 원뿔) → spinSlash(원 r 2.5 − inner 0.5 · 360° — 등 뒤도 센다 · 분노 ≥ 비용 + 남길 분노)
+  const inner = sk.radius - R.spinSlash.inner;
+  assert.ok(skillRule('spinSlash', sit({ mons: [a, b], target: tgt(a) }), R, sk), 'spinSlash: 원 안 2마리');
+  assert.ok(skillRule('spinSlash', sit({ mons: [a, mon(0, -1.5)], target: tgt(a) }), R, sk), 'spinSlash: 등 뒤도 원 안');
+  assert.equal(skillRule('spinSlash', sit({ mons: [a, mon(0, -(inner + 0.45 + 0.1))], target: tgt(a) }), R, sk), null, 'spinSlash: 가장자리(inner 밖) — 판정까지 물러설 수 있는 적은 세지 않는다');
+  assert.equal(skillRule('spinSlash', sit({ mons: [a], target: tgt(a) }), R, sk), null, 'spinSlash: 1마리');
+  assert.ok(skillRule('spinSlash', sit({ mons: [mon(0, 2, 'elite')], target: tgt(mon(0, 2, 'elite')) }), R, sk), 'spinSlash: 정예 대상이 원 안');
+  assert.equal(skillRule('spinSlash', sit({ mons: [mon(0, 3.5, 'elite')], target: tgt(mon(0, 3.5, 'elite')) }), R, sk), null, 'spinSlash: 정예 대상이 원 밖');
+  assert.equal(skillRule('spinSlash', sit({ mons: [far, mon(0.5, 6)], target: tgt(far) }), R, sk), null, 'spinSlash: 원 밖');
+  assert.equal(skillRule('spinSlash', sit({ mons: [a, b], target: tgt(a), resource: 10 }), R, sk), null, 'spinSlash: 분노 < 비용');
+  assert.equal(skillRule('spinSlash', sit({ mons: [a, b], target: tgt(a), resource: 40 }), R, { ...sk, reserve: R.spin.rage }), null, 'spinSlash: 바에 회오리가 있으면 비용 + 30 까지 남긴다');
+  assert.ok(skillRule('spinSlash', sit({ mons: [a, b], target: tgt(a), resource: 44 }), R, { ...sk, reserve: R.spin.rage }));
   const five = [mon(1, 1), mon(-1, 1), mon(2, -2), mon(-3, 2), mon(0, -4)];
   assert.ok(skillRule('quake', sit({ mons: five, target: tgt(five[0]) }), R, sk), 'quake: 6m 안 5마리');
   assert.equal(skillRule('quake', sit({ mons: five.slice(0, 4), target: tgt(five[0]) }), R, sk), null);
@@ -291,7 +298,9 @@ test('동작별 스킬 규칙(§12.1 표) — 원뿔 · 지진 · 돌진 · 회�
   const three = [mon(1, 0), mon(-1, 1), mon(0, -1.5)];
   assert.ok(skillRule('spin', sit({ mons: three, target: tgt(three[0]), resource: 40 }), R, sk), 'spin: 2.4m 3마리 · 분노 30 이상');
   assert.equal(skillRule('spin', sit({ mons: three, target: tgt(three[0]), resource: 20 }), R, sk), null, 'spin: 분노 부족');
-  assert.equal(skillRule('spin', sit({ mons: three.slice(0, 2), target: tgt(three[0]), resource: 60 }), R, sk), null);
+  // 피드백 1: 회오리 문턱 3 → 2마리(프리셋 B 가 회오리를 거의 시작하지 못했다)
+  assert.ok(skillRule('spin', sit({ mons: three.slice(0, 2), target: tgt(three[0]), resource: 60 }), R, sk), 'spin: 2마리');
+  assert.equal(skillRule('spin', sit({ mons: three.slice(0, 1), target: tgt(three[0]), resource: 60 }), R, sk), null, 'spin: 1마리');
   assert.ok(skillRule('buff', sit({ combat: true }), R, sk));
   assert.equal(skillRule('buff', sit({ combat: false }), R, sk), null);
   const t7 = mon(0, 7);
@@ -536,4 +545,27 @@ test('리뷰 수정: 줍기 — 벽 너머 긴 우회(직선 11m · 경로 약 8
   }
   assert.ok(pickedB >= 0 && pickedB < 30 * 10, `닿는 일반 드랍을 줍지 못했다(${pickedB})`);
   assert.ok(switches <= 4, `두 드랍을 번갈아 눌렀다(${switches}번 바뀜)`);
+});
+
+// 피드백 1 회귀에서 찾음: 수호자가 출현 자리에서 멀리 쫓아온 뒤 잠들면 봇이 출현 자리에서 영영 기다렸다(빌드 비교 1/150판이 20분 포기).
+test('피드백 1: 수호자 단계 — 수호자가 출현 자리에서 먼 탐색한 칸에서 잠들어 있으면(미니맵의 점) 봇은 그쪽으로 간다', () => {
+  const { sim } = cleanRift('warrior', { level: 6, charLevel: 12, seed: 4 });
+  const st = sim.state;
+  const rift = st.rift;
+  const map = sim.getMap();
+  const p = st.player.pos;
+  const rooms = [...map.rooms].sort((a, b) => Math.hypot(b.cx - p.x, b.cz - p.z) - Math.hypot(a.cx - p.x, a.cz - p.z));
+  const far = rooms[0], near = rooms[rooms.length - 1];
+  assert.ok(Math.hypot(far.cx - p.x, far.cz - p.z) > 30, '먼 방');
+  const g = spawnMonster(sim.ctx, { typeId: 'boneGiant', rank: 'guardian', level: rift.level, x: far.cx, z: far.cz, awake: false });
+  rift.gauge = 100;
+  rift.phase = 'guardian';
+  rift.guardianId = g.id;
+  rift.guardianSpawn = { x: near.cx, z: near.cz, at: st.tick };   // 출현 자리는 가까운 방(봇의 옛 목표)
+  const bot = new Bot({ sim, cls: 'warrior', seed: 4, autoCommit: true });
+  const d0 = Math.hypot(g.pos.x - p.x, g.pos.z - p.z);
+  for (let i = 0; i < 30 * 20 && !g.awake; i++) tickBot(sim, bot);
+  const pos = st.player.pos;
+  const d1 = Math.hypot(g.pos.x - pos.x, g.pos.z - pos.z);
+  assert.ok(g.awake || d1 < d0 - 20, `수호자 쪽으로 — ${d0.toFixed(1)} → ${d1.toFixed(1)}m · 깸 ${g.awake}`);
 });

@@ -33,12 +33,15 @@ export const BOT_RULES = {
   // 카이팅 — 뒷걸음 거리 · 한 번에 걷는 시간 · 최소 간격 · 몰림이 풀린 뒤 다시 물러설 준비까지(P15) · 잠든 몬스터 쪽으로 물러서지 않는 거리 · 순간이동은 반대쪽 10m(§12.1)
   kiteDist: 5, kiteSec: 0.5, kiteGapSec: 1.5, kiteRearmSec: 1.0, kiteSleepR: 14, blinkDist: 10, awayDirs: 12,
   // 동작별 스킬 사용(§12.1 표)
-  cone: { range: 4.0, count: 2, angleDeg: 120 },
+  // 피드백 1: cone(지면 강타 · 전방 4m 원뿔 안 2마리) → spinSlash(회전 베기 · 원 안 2마리 — range 는 행의 radius 가 없을 때 · rageKeep = 비용 위로 남길 분노 ·
+  //   inner = 반지름에서 뺀 가장자리(m — 판정까지 물러서는 궁수 챔피언이 원 밖으로 나가 헛돌았다 · 첫 판 챔피언 팩 72~148초)
+  spinSlash: { range: 2.5, count: 2, rageKeep: 0, inner: 0.5 },
   quake: { range: 6.0, count: 5 },
   dash: { min: 6, max: 10 },
-  spin: { range: 2.4, count: 3, rage: 30, keepRange: 3.4, keepCount: 2, aimR: 5, aimAhead: 2 },
+  // 피드백 1: count 3 → 2 · 바에 회오리가 있으면 다른 분노 스킬(회전 베기)은 rage(30)를 남긴다(combat.js channelReserve) — 프리셋 B 「학살」이 A 보다 26~31% 느렸다
+  spin: { range: 2.4, count: 2, rage: 30, keepRange: 3.4, keepCount: 2, aimR: 5, aimAhead: 2 },
   buff: { combatR: 10 },
-  leap: { min: 6, max: 9, packCount: 2, packMin: 2 },
+  leap: { min: 6, max: 9, packCount: 2, packMin: 2, packR: 4.0 },   // 피드백 1: packR — 옛 cone.range(4.0)를 빌려 쓰던 「정예 팩 한가운데」 반경
   fireball: { reserve: 20 },
   meteor: { cluster: 3.5, count: 4, range: 18 },
   nova: { range: 5.0, count: 3 },

@@ -5,10 +5,10 @@
 
 import { EV } from '../core/events.js';
 import { ticks } from '../core/time.js';
-import { DEATH } from '../data/combat.js';
+import { DEATH, POTION } from '../data/combat.js';
 import { KEYBINDS } from '../data/keybinds.js';
 import { createMeterHud } from './analytics/meterHud.js';
-import { createHud } from './hud.js';
+import { createHud, potionUrge } from './hud.js';
 import { createNotices } from './hudNotices.js';
 import { t, tName } from './i18n.js';
 import { createLabels } from './labels.js';
@@ -44,6 +44,8 @@ const HIT_FLASH_SEC = 0.15;
 const FAIL_GAP_SEC = 1.2;
 /** 가방 가득 알림 간격(초 — §4.2 「1초에 한 번」) */
 const BAGFULL_GAP_SEC = 1;
+/** 피드백 1 — 저생명 포션 안내(비모달)는 균열 몇 판째까지(char.runs) · 세션마다 캐릭터당 한 번 */
+const POTION_NUDGE_RUNS = 3;
 
 export class UIRoot {
   /** @param {{root:HTMLElement, bus:any, sim:any, settings:any, actions:any, view:{project:Function}}} deps */
@@ -82,6 +84,8 @@ export class UIRoot {
     this._resuming = false;
     /** @type {Record<string, number>} */
     this.failAt = {};
+    /** 피드백 1 — 이 세션에 저생명 포션 안내를 냈다(캐릭터가 바뀌면 다시) */
+    this.potionNudged = false;
 
     const layer = (cls) => {
       const e = document.createElement('div');
@@ -138,6 +142,11 @@ export class UIRoot {
     on(EV.LEVEL_UP, (e) => this.notices.banner(t('banner.levelUp', { n: e.level })));
     on(EV.UNLOCK, (e) => this.notices.push(t('notice.unlock', { n: e.riftUnlocked })));
     on(EV.DROP_SPAWN, (e) => this._onDrop(e));
+    on(EV.DROP_PICKED, (e) => {
+      // 피드백 1 — 주운 골드를 머리 위에 「+n 골드」(자동 줍기로 연달아 주우면 한 숫자로 합친다)
+      const p = this.sim?.state?.player;
+      if (e.kind === 'gold' && p && e.amount > 0) this.labels.addGold(p.pos.x, p.pos.z, e.amount);
+    });
     on(EV.PICKUP_FAIL, (e) => {
       if (e.reason === 'bagFull') { if (this._gap('bagFull', BAGFULL_GAP_SEC)) this.notices.push(t('notice.bagFull')); }
       else if (this._gap('pickFull', BAGFULL_GAP_SEC)) this.notices.push(t('notice.potionFull'));
@@ -194,6 +203,7 @@ export class UIRoot {
     this._autoPanels(state, dt, rdt);
     const visible = this._hudVisible(state);
     this.hud.update(state, dt, { visible, bot: this.botOn });
+    if (visible) this._potionNudge(state);
     this.minimap.update(state, dt);
     this.labels.update(state, dt, { visible, alpha });
     if (this.meterHud) {
@@ -552,7 +562,25 @@ export class UIRoot {
     for (const h of this.hintQueue) h.deferred = true;
   }
 
+  /**
+   * 피드백 1 — 첫 몇 판에서 처음으로 생명이 낮아졌고 포션을 마실 수 있으면 「Q — 체력 포션」 비모달 안내(6초 · 게임을 멈추지 않는다).
+   * 안내 카드(HINT)가 아니다 — sim 의 HINT_IDS 밖이라 세이브에 적지 않는다(세션마다 캐릭터당 한 번).
+   * @param {any} state
+   */
+  _potionNudge(state) {
+    if (this.potionNudged || this.botOn || state.scene !== 'rift' || !state.char) return;
+    if ((state.char.runs ?? 0) > POTION_NUDGE_RUNS) return;
+    if (!potionUrge(state.player, state.char, state.tick) || this.isModal()) return;
+    this.potionNudged = true;
+    this.notices.big({
+      title: t('hint.potion.title'),
+      body: t('hint.potion.body', { n: state.char.potions, heal: Math.round(POTION.heal * 100), cd: POTION.cd }),
+      more: '',
+    });
+  }
+
   _onCharLoaded() {
+    this.potionNudged = false;
     this.hud.reset();
     this.labels.reset();
     this.notices.clearTransient();

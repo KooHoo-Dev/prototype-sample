@@ -88,14 +88,15 @@ export const HIT_BY_TYPE = { phys: 'hitPhys', fire: 'hitFire', cold: 'hitCold', 
 /** 피해 종류 → 시전 시작음 음높이 */
 export const TYPE_PITCH = { phys: 1.0, fire: 0.85, cold: 1.3, lightning: 1.12 };
 
-/** 스킬 동작(SkillBehaviorId) → ACTION_START 소리(null = 없음 — 다른 이벤트 · 지속음이 맡는다) */
+/** 스킬 동작(SkillBehaviorId) → ACTION_START 소리(null = 없음 — 다른 이벤트 · 지속음이 맡는다)
+ *  피드백 1: 가르기(cleave — 옛 강타 meleeBasic)는 같은 휘두름 · 회전 베기(spinSlash — 옛 지면 강타 cone 의 휘두름 + 쿵)는 한 바퀴 휘두름 */
 export const START_BY_BEHAVIOR = {
-  meleeBasic: 'swing', cone: 'swing', quake: 'swing', dash: 'dash', spin: null, buff: null, leap: 'leapStart',
+  cleave: 'swing', spinSlash: 'spinSwoosh', quake: 'swing', dash: 'dash', spin: null, buff: null, leap: 'leapStart',
   boltBasic: 'castStart', fireball: 'castStart', meteor: 'castStart', nova: 'castStart', shield: 'castStart', chain: 'castStart', blink: null,
 };
 /** 스킬 동작 → ACTION_HIT(판정 틱) 소리 — 투사체 발사는 PROJ_SPAWN · 피격은 HIT 가 맡는다 */
 export const HIT_BY_BEHAVIOR = {
-  meleeBasic: null, cone: 'stomp', quake: 'quake', dash: null, spin: null, buff: 'warCry', leap: 'leapLand',
+  cleave: null, spinSlash: null, quake: 'quake', dash: null, spin: null, buff: 'warCry', leap: 'leapLand',
   boltBasic: null, fireball: null, meteor: 'meteorCall', nova: 'frostNova', shield: 'shieldUp', chain: 'chainZap', blink: 'blink',
 };
 
@@ -125,7 +126,7 @@ export const EFFECT_WARN = {
 export const EFFECT_WARN_DEFAULT = 'groundWarn';
 /** EFFECT_HIT kind → 폭발 · 판정음(플레이어 · 적대 모두 · null = 없음) */
 export const EFFECT_BOOM = {
-  stomp: 'stomp', quakeWave: 'quakeBoom', shockwave: 'stomp', meteor: 'meteorImpact', vortex: null, afterimageBlast: 'zapBoom',
+  spinEcho: 'echoSwoosh', quakeWave: 'quakeBoom', shockwave: 'stomp', meteor: 'meteorImpact', vortex: null, afterimageBlast: 'zapBoom',
   corpseBlast: 'fireBoom', iceBurst: 'coldNovaBoom', chainArc: null, fireball: 'fireBoom', fireballSplit: 'fireBoom', iceShard: null,
   chargeLine: null, bloaterBurst: 'splatBoom', poisonPool: null, fireDeath: 'fireBoom', coldNova: 'coldNovaBoom',
   jail: 'jailSnap', plague: 'poisonHiss', mortar: 'mortarBoom', slam: 'bigSlam', boneSpikes: 'boneCrack', emberRain: 'fireBoom',
@@ -172,6 +173,13 @@ const n = (d, flt, g = 1, t = 0, a = 0.003) => ({ w: 'noise', d, a, g, t, flt })
 export const SOUNDS = {
   // ── 플레이어 스킬 ──
   swing: { cat: 'skill', bus: 'sfx', g: 0.58, rp: 2, L: [n(0.14, ['bandpass', 600, 2400, 1.2], 1, 0, 0.03)] },
+  // 피드백 1: 회전 베기 — 한 바퀴 휘두름(칼이 몸을 돌아 지나간다: 대역 잡음이 올라갔다 내려온다 · 낮은 바람 · 행동 0.6초 중 휘두르기 0.09~0.33초에 맞춘 지연)
+  spinSwoosh: { cat: 'skill', bus: 'sfx', g: 0.62, rp: 1, L: [
+    n(0.26, ['bandpass', 500, 2600, 1.3], 1, 0.05, 0.13), n(0.18, ['bandpass', 2600, 800, 1.6], 0.6, 0.2, 0.03),
+    { w: 'sine', f: [150, 85], d: 0.26, t: 0.06, a: 0.1, g: 0.3 }] },
+  // 피드백 1: 연속 회전(spinEcho) 판정 — 가볍고 높은 잔상 휘두름 + 옅은 쇳소리(효과 판정 틱 = 잔상 칼자국이 한 바퀴를 마치는 때)
+  echoSwoosh: { cat: 'skill', bus: 'sfx', g: 0.5, rp: 1, L: [
+    n(0.2, ['bandpass', 2800, 1000, 1.5], 1, 0, 0.02), { w: 'triangle', f: [1900, 1600], d: 0.16, g: 0.12, flt: ['highpass', 1200] }] },
   castStart: { cat: 'skill', bus: 'sfx', g: 0.24, rp: 1, L: [{ w: 'sine', f: [300, 700], d: 0.18, a: 0.05, g: 0.8 }, n(0.12, ['highpass', 3000], 0.3, 0, 0.03)] },
   dash: { cat: 'skill', bus: 'sfx', g: 0.45, L: [n(0.25, ['lowpass', 400, 2000, 0.8], 1, 0, 0.02), { w: 'sine', f: [90, 50], d: 0.2, g: 0.7 }] },
   stomp: { cat: 'skill', bus: 'sfx', g: 0.4, rp: 1, L: [{ w: 'sine', f: [120, 40], d: 0.35, a: 0.004, g: 1 }, n(0.3, ['lowpass', 900, 200], 0.6), n(0.06, ['bandpass', 2000, null, 1.5], 0.3)] },

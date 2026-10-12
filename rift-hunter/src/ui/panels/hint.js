@@ -2,9 +2,13 @@
 // 모달 안내 카드: 제목 · 본문(controls 는 조작 줄 전부) · Enter = 닫기 · H = 도움말. 어떻게 닫히든 sim.markHint(id)(본 것으로).
 // 비모달 여섯은 UIRoot 가 ui.notice(…, {big:true}) 꼴로 낸다(이 패널을 쓰지 않는다).
 
+import { POTION } from '../../data/combat.js';
+
 /** @typedef {import('../../types.js').Panel} Panel */
 
 const CONTROL_LINES = 8;
+/** 조작 줄 중 포션 줄(help.controls.3) — 피드백 1: 실제 개수와 함께 강조한다(hint.controls.potion) */
+const POTION_LINE = 3;
 
 /**
  * @param {{root:HTMLElement, sim:any, bus:any, settings:any, actions:any, t:(key:string, params?:Object) => string, ui:any, widgets:any}} ctx
@@ -18,7 +22,10 @@ export function createHintPanel(ctx) {
   const h = /** @type {HTMLElement} */ (el.querySelector('.panel-title'));
   const body = el.appendChild(w.el('p', 'hint-body'));
   const list = el.appendChild(w.el('ul', 'help-list hint-list'));
-  for (let i = 0; i < CONTROL_LINES; i++) list.appendChild(w.el('li', '', t('help.controls.' + i)));
+  /** @type {HTMLElement[]} */
+  const lines = [];
+  for (let i = 0; i < CONTROL_LINES; i++) lines.push(list.appendChild(w.el('li', '', t('help.controls.' + i))));
+  lines[POTION_LINE].classList.add('hint-potion');
   const btns = el.appendChild(w.el('div', 'btn-row'));
   const ok = btns.appendChild(w.button('hint.close', () => ui.closePanel('hint', 'confirm'), 'Enter'));
   ok.classList.add('is-primary');
@@ -42,6 +49,10 @@ export function createHintPanel(ctx) {
       body.textContent = t('hint.' + id + '.body');
       list.hidden = id !== 'controls';
       body.hidden = id === 'controls';
+      if (id === 'controls') {
+        const n = Math.max(0, Number(sim?.state?.char?.potions) || 0);
+        lines[POTION_LINE].textContent = t('hint.controls.potion', { n, heal: Math.round(POTION.heal * 100), cd: POTION.cd });
+      }
     },
     close() {
       if (id) sim?.markHint?.(id);

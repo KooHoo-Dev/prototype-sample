@@ -66,6 +66,13 @@ export function monName(mon) {
   if (!mon) return '';
   return mon.name && mon.name.length ? tName(mon.name) : t('mon.' + mon.typeId);
 }
+/**
+ * 순수 — 포션 칸을 재촉하는가(피드백 1): 살아 있고 · 저생명(player.lowLife)이고 · 포션이 있고 · 재사용 대기가 끝났다.
+ * @param {any} p player @param {any} ch char @param {number} tick
+ */
+export function potionUrge(p, ch, tick) {
+  return !!(p && ch && !p.dead && p.lowLife && ch.potions > 0 && !(p.potionReadyAt > tick));
+}
 /** 스킬 이름 문면(노드 또는 기본 공격) @param {string} id */
 export function skillName(id) {
   if (own.call(BASIC_SKILLS, id)) return t('skill.' + id + '.name');
@@ -150,12 +157,20 @@ export function createHud({ root, sim }) {
   add(lifeOrb, 'orb-gloss');
   const lifeText = add(lifeOrb, 'orb-text');
   lifeOrb.title = t('hud.life');
+  // 포션 칸(피드백 1 — 「포션이 있는지 몰랐다」): 생명 구슬 왼쪽의 붉은 병 · 개수 크게 · Q 키 단추 · 쿨다운 부채(병 몸통) · 「포션」 글자.
+  //   생명이 낮고 마실 수 있으면 병이 금빛으로 맥동한다(is-urge — 구슬의 붉은 저생명 맥동과 색 · 주기 · 자리가 다르다)
   const potion = add(lifeWrap, 'consum consum-potion');
-  const potionCd = add(potion, 'consum-cd');
+  const flask = add(potion, 'flask');
+  add(flask, 'flask-neck');
+  const flaskBody = add(flask, 'flask-body');
+  add(flaskBody, 'flask-liquid');
+  const potionCd = add(flaskBody, 'consum-cd');
+  add(flaskBody, 'flask-gloss');
+  const potionN = add(flask, 'consum-n');
   const potionKey = add(potion, 'consum-key');
   potionKey.textContent = 'Q';
-  const potionN = add(potion, 'consum-n');
-  potion.title = t('hud.potion');
+  add(potion, 'consum-name').textContent = t('hud.potion');
+  potion.title = t('hud.potionTip');
   // 스킬 바 6칸
   const barEl = add(cluster, 'skillbar');
   /** @type {Array<{el:HTMLElement, icon:HTMLElement, cd:HTMLElement, cdText:HTMLElement, key:HTMLElement, id:string|null}>} */
@@ -443,6 +458,8 @@ export function createHud({ root, sim }) {
       const pl = p.potionReadyAt - state.tick;
       setVar(potionCd, '--cd', pl > 0 && cdT > 0 ? clamp01(pl / cdT) : 0);
       potion.classList.toggle('is-empty', !(ch.potions > 0));
+      potion.classList.toggle('is-cd', pl > 0);
+      potion.classList.toggle('is-urge', potionUrge(p, ch, state.tick));
       // 자원 구슬
       const kind = CLASSES_BY_ID[ch.cls]?.resource ?? 'mana';
       if (kind !== resKind) {

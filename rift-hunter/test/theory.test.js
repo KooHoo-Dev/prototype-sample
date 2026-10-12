@@ -14,6 +14,7 @@ import {
   affixCountDist, baseTierDist, blpMultiplier, effectiveMF, expectedGoldPile, expectedPerKill, rarityDist, rarityWeights, slotDist,
   specialCandidates, tcDist, tierDist,
 } from '../src/sim/loot/theory.js';
+import { rollDrops } from '../src/sim/loot/rollDrops.js';
 
 const close = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg ?? ''} ${a} vs ${b} (±${eps})`);
 const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
@@ -217,8 +218,9 @@ test('시드 표가 계약 §7.7 · §7.8 · §7.9 그대로(양손 무기 피�
   assert.equal(ITEM_AFFIXES.length, 32);
   assert.deepEqual(AFFIX_TIERS, { minIlvl: [1, 6, 12, 18, 24], weight: [100, 70, 45, 25, 12] });
   // W1 수정(NOTES-W1FIX): normal · minion 의 globe ↔ none 맞교환(normal 25 → 80 · minion 80 → 150 — 합 1000 · 나머지 그대로 · 계약 §7.8)
+  // 피드백 1: normal · minion 의 none → gold(90 → 270 · 150 → 300) · goldMul(1.0 → 1/3 · 1.2 → 0.6) — 골드 더미를 더 자주 · 더 작게(기대 골드는 drops.test)
   assert.deepEqual(TREASURE.map(t => [t.id, t.picks, t.goldMul, t.w.none, t.w.gold, t.w.potion, t.w.globe, t.w.material, t.w.gear, t.guaranteed ?? 0]), [
-    ['normal', 1, 1.0, 732, 90, 5, 80, 8, 85, 0], ['minion', 1, 1.2, 450, 150, 30, 150, 20, 200, 0], ['champion', 2, 1.6, 315, 250, 25, 90, 45, 275, 0],
+    ['normal', 1, 1 / 3, 552, 270, 5, 80, 8, 85, 0], ['minion', 1, 0.6, 300, 300, 30, 150, 20, 200, 0], ['champion', 2, 1.6, 315, 250, 25, 90, 45, 275, 0],
     ['elite', 4, 2.2, 150, 300, 50, 60, 40, 400, 0], ['guardian', 8, 4.0, 0, 400, 50, 0, 100, 450, 2], ['split', 1, 0.5, 900, 60, 0, 40, 0, 0, 0],
   ]);
   assert.deepEqual(RARITY.base, { normal: 1000, magic: 640, rare: 95, legendary: 6.5, set: 1.8 });
@@ -247,4 +249,42 @@ test('시드 표가 계약 §7.7 · §7.8 · §7.9 그대로(양손 무기 피�
   // 모든 부위에 L1 기본형
   for (const s of ITEM_SLOTS) assert.ok(BASES.some(b => b.slot === s), s);
   assert.equal(riftRow(5).rarityMul.legendary, 1.2);
+});
+
+// 피드백 1(Jay 2026-10-12): 골드 더미를 더 자주 · 더 작게 — 처치당 기대 골드(반올림 · 최소 1 을 넣은 정확한 적분)는 옛 표(normal gold 90 · goldMul 1.0 ·
+// minion 150 · 1.2)와 같다(균열 1 · 6 이상 ±1% · 2~5 는 반올림 탓에 ±4% · 30레벨 평균 ±0.5%) · 장비 · 구슬 · 포션 · 재료 확률은 그대로 · 일반 처치의 골드 확률 25~35%
+test('피드백 1: 일반 · 하수인 골드 — 확률은 오르고(일반 27%) 처치당 기대 골드는 옛 표와 같다 · 다른 드랍 확률 그대로 · 굴림 표본도 이론과 맞는다', () => {
+  const OLD = { normal: { gold: 90, goldMul: 1.0, w: { potion: 5, globe: 80, material: 8, gear: 85 } }, minion: { gold: 150, goldMul: 1.2, w: { potion: 30, globe: 150, material: 20, gear: 200 } } };
+  for (const rank of ['normal', 'minion']) {
+    const tc = TREASURE.find(t => t.id === rank);
+    const o = OLD[rank];
+    const sumW = Object.values(tc.w).reduce((a, b) => a + b, 0);
+    assert.equal(sumW, 1000, rank);
+    for (const k of ['potion', 'globe', 'material', 'gear']) assert.equal(tc.w[k], o.w[k], `${rank}.${k} 그대로`);
+    assert.ok(tc.w.gold > o.gold && tc.goldMul < o.goldMul, `${rank}: 더 자주 · 더 작게`);
+    let drift = 0;
+    for (let L = 1; L <= 30; L++) {
+      const g = riftRow(L).goldMul;
+      const before = (o.gold / 1000) * expectedGoldPile(GOLD.base * o.goldMul * g);
+      const after = expectedPerKill({ rank, level: L }).goldAmount;
+      const r = after / before - 1;
+      drift += r;
+      assert.ok(Math.abs(r) <= (L >= 2 && L <= 5 ? 0.04 : 0.01), `${rank} 균열 ${L}: ${before.toFixed(3)} → ${after.toFixed(3)}`);
+    }
+    assert.ok(Math.abs(drift / 30) <= 0.005, `${rank} 평균 ${(drift / 30 * 100).toFixed(2)}%`);
+  }
+  const pNormal = TREASURE.find(t => t.id === 'normal').w.gold / 1000;
+  assert.ok(pNormal >= 0.25 && pNormal <= 0.35, `일반 처치 골드 확률 ${pNormal}`);
+  // 굴림 표본(rollDrops) — 균열 5 일반 처치 6만 번의 골드 더미 수 · 골드 합이 이론과 ±3% 안
+  const rng = makeRng(seedRng(4242));
+  let n = 0;
+  const newId = () => 'g' + (++n);
+  let piles = 0, gold = 0;
+  const N = 60000;
+  for (let i = 0; i < N; i++) {
+    for (const d of rollDrops(rng, { rank: 'normal', level: 5, cls: 'warrior', newId, blpOn: false }).drops) if (d.kind === 'gold') { piles++; gold += d.amount; }
+  }
+  const th = expectedPerKill({ rank: 'normal', level: 5 });
+  assert.ok(Math.abs(piles / N / th.gold - 1) < 0.03, `더미 ${piles / N} vs ${th.gold}`);
+  assert.ok(Math.abs(gold / N / th.goldAmount - 1) < 0.03, `골드 ${gold / N} vs ${th.goldAmount}`);
 });

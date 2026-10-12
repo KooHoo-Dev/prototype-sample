@@ -19,9 +19,11 @@ import { addEffect, getMonster } from './entities.js';
  * 효과 하나 → Effect · EFFECT_SPAWN. 시각(틱): start = 지금 · hitAt = start + ticks(delay) · end = hitAt + max(1, ticks(dur))(dur 0 이면 판정 한 틱 뒤 끝) ·
  * tickT = ticks(tick) · nextTickAt = tickT > 0 ? hitAt + tickT : -1(첫 지속 판정 = hitAt + tickT)
  * spec.shake(선택 · 0..1)가 있으면 hitAt 판정에 SHAKE 를 낸다.
+ * follow 'player'(피드백 1 — 연속 회전): 판정(hitAt) 전까지 매 틱 모양의 중심 · spec 출처(srcX/srcZ)를 플레이어 자리로 옮긴다(updateEffects).
  * @param {SimCtx} ctx
  * @param {{kind:string, owner:'player'|'mon'|'env', srcId:number, packId?:number, hostile:boolean, shape:Shape, delay:number,
- *   dur?:number, tick?:number, spec:Object|null, tickSpec?:Object|null, from?:import('../types.js').Vec2|null, cancelOnSrcDeath?:boolean}} def
+ *   dur?:number, tick?:number, spec:Object|null, tickSpec?:Object|null, from?:import('../types.js').Vec2|null, cancelOnSrcDeath?:boolean,
+ *   follow?:'player'|null}} def
  *   delay · dur · tick 은 초
  * @returns {Effect}
  */
@@ -51,6 +53,7 @@ export function spawnEffect(ctx, def) {
     tickSpec: def.tickSpec ?? null,
     from: def.from ? { x: def.from.x, z: def.from.z } : null,
   };
+  if (def.follow === 'player') e.follow = 'player';   // 선택 키(피드백 1) — 따라가는 효과에만 둔다(다른 효과의 모양 · 고정 상태 그대로)
   addEffect(ctx, e);
   ctx.emit(EV.EFFECT_SPAWN, { id: e.id, kind: e.kind, hostile: e.hostile, shape: { ...e.shape }, sec: delay, dur });
   return e;
@@ -109,6 +112,7 @@ export function updateEffects(ctx) {
         continue;
       }
     }
+    if (e.follow === 'player' && !e.resolved) followPlayer(ctx, e);
     if (!e.resolved && tick >= e.hitAt) {
       e.resolved = true;
       let r = null;
@@ -125,6 +129,16 @@ export function updateEffects(ctx) {
       if (spec) judge(ctx, e, spec, true);
     }
   }
+}
+
+/** follow 'player' — 판정 전 효과의 모양 중심 · spec 출처를 지금 플레이어 자리로(죽었으면 그대로 · 선 · 원뿔도 중심만) @param {SimCtx} ctx @param {Effect} e */
+function followPlayer(ctx, e) {
+  const p = ctx.state.player;
+  if (!p || p.dead) return;
+  e.shape.x = p.pos.x;
+  e.shape.z = p.pos.z;
+  const sp = /** @type {any} */ (e.spec);
+  if (sp) { sp.srcX = p.pos.x; sp.srcZ = p.pos.z; }
 }
 
 /** 몸에 원(nearR)을 둔 플레이어와 겹치는가 — shape 가 있으면 overlaps, 없으면 (x, z) 점 거리 @param {Shape|null} shape */

@@ -11,7 +11,11 @@ import { test } from 'node:test';
 import { EventBus, EV } from '../src/core/events.js';
 import { NEUTRAL_INPUT } from '../src/core/inputFrame.js';
 import { DEATH } from '../src/data/combat.js';
-import { getMonDef } from '../src/data/index.js';
+import { getMonDef, getSkillDef } from '../src/data/index.js';
+import { circle } from '../src/core/shapes.js';
+import { playerHitShape } from '../src/sim/combat.js';
+import { hitSpec } from '../src/sim/player/skills.js';
+import { spawnMonster } from '../src/sim/monsters/spawn.js';
 import { GameSim } from '../src/sim/GameSim.js';
 import { losClear } from '../src/sim/world/nav.js';
 import { makeDevCharacter } from '../src/sim/progression/dev.js';
@@ -271,4 +275,85 @@ test('W1 수정 2 · 밸런스 게이트: 첫 판 완화(균열 1~11 경사)가 
     assert.equal(r.minLife, 0, why);
     assertFiniteDeep(sim.state, cls);
   }
+});
+
+// ───────────────────────── 피드백 1 — 회전 베기 정타 처치 수 ─────────────────────────
+// Jay 피드백(2026-10-12): 「광역 스킬을 두 번에서 세 번 정도 정통으로 맞으면 몬스터가 죽는 게 좋다」 — 회전 베기(groundStomp · spinSlash) 정타 한 번 =
+// 그 랭크의 판정 정의 그대로(hitSpec · 치명타 · 조건부 패시브 포함 · 넉백은 빼고 같은 자리)를 일반 몬스터(구울 · 소인 · 궁수 · 방패 해골)가 쓰러질 때까지.
+// 기준(계약 §7.14 「피드백 1」): 적정 레벨 = 봇 basic 세션이 고른 균열 레벨과 그때의 캐릭터 레벨(4시드 중앙) · 장비 = makeDevCharacter(README 「바로 해 보기」 주소와 같은 개발 캐릭터) ·
+// 첫 판 = 시작 장비(새 캐릭터 · 레벨 · 랭크만 그 순간). 데이터(계수 · 반지름 · 몬스터 생명)를 바꾸면 깨진다 — 다시 재고 계약 표를 고친다.
+const NORMAL_TYPES = ['ghoul', 'fallen', 'skeletonArcher', 'shieldSkeleton'];
+
+/** 균열 rift 에 선 sim(무적 · 몬스터 없음) — char 가 없으면 개발 캐릭터(level · 프리셋 A) */
+function standAt({ cls, level, rift, seed, char = null }) {
+  const { sim } = newSim(seed);
+  const ch = char ?? makeDevCharacter({ slot: 0, cls, name: cls, level, rift, preset: 0, seed, newId: sim.ctx.newItemId });
+  assert.equal(sim.loadCharacter(0, ch).ok, true);
+  sim.debugOpenRift(rift, seed);
+  if (sim.state.pendingTravel) sim.commitTravel();
+  for (const m of sim.state.rift.mons) m.gone = true;
+  sim.debugSetInvincible(true);
+  sim.step(NEUTRAL_INPUT);
+  return sim;
+}
+
+/** 정타 처치 수(trials 번 평균) — 몬스터를 플레이어 앞 1.2m 에(방패 해골은 플레이어를 본다) */
+function hitsToKill(sim, skillId, typeId, trials) {
+  const ctx = sim.ctx, st = sim.state, p = st.player;
+  const def = getSkillDef(skillId);
+  const rank = Math.max(1, st.char.skills.ranks[skillId] ?? 1);
+  let sum = 0;
+  for (let t = 0; t < trials; t++) {
+    const x = p.pos.x, z = p.pos.z + 1.2;
+    const m = spawnMonster(ctx, { typeId, rank: 'normal', level: st.rift.level, x, z, facing: Math.PI, awake: false });
+    let n = 0;
+    while (!m.dead && m.hp > 0 && n < 40) {
+      n++;
+      const spec = hitSpec(skillId, def, rank, ctx.nextId(), p.pos.x, p.pos.z);
+      delete spec.knock;
+      m.pos = { x, z };
+      m.act = 'idle';
+      m.facing = Math.PI;
+      playerHitShape(ctx, circle(x, z, 0.01), spec);
+      st.tick += 18;
+    }
+    sum += n;
+    m.gone = true;
+    m.dead = true;
+  }
+  return sum / trials;
+}
+
+test('피드백 1: 회전 베기 정타 처치 수 — 적정 레벨(개발 캐릭터) 일반 몬스터 중앙 2~3번 · 시작 장비 첫 판 2~3번(옛 지면 강타 ~3.1)', (t) => {
+  const dev = [];
+  // (균열 · 캐릭터 레벨) = 봇 basic 4시드 세션이 그 균열을 돌 때의 캐릭터 레벨(계약 §7.14 피드백 1 표)
+  for (const [rift, level] of [[3, 8], [5, 11], [10, 19], [15, 27]]) {
+    const sim = standAt({ cls: 'warrior', level, rift, seed: 1 });
+    const row = NORMAL_TYPES.map(t => hitsToKill(sim, 'groundStomp', t, 24));
+    const why = `균열 ${rift} · 레벨 ${level}: ${row.map(v => v.toFixed(2)).join(' · ')}`;
+    for (const v of row) assert.ok(v >= 1.2 && v <= 3.5, why);
+    dev.push(...row);
+  }
+  const sorted = [...dev].sort((a, b) => a - b);
+  const median = (sorted[(sorted.length >> 1) - 1] + sorted[sorted.length >> 1]) / 2;
+  const mean = dev.reduce((a, b) => a + b, 0) / dev.length;
+  t.diagnostic(`적정 레벨(개발 장비) 중앙 ${median.toFixed(2)} · 평균 ${mean.toFixed(2)}`);
+  assert.ok(median >= 1.9 && median <= 3, `적정 레벨 중앙 ${median.toFixed(2)}`);
+  assert.ok(mean >= 1.8 && mean <= 3, `적정 레벨 평균 ${mean.toFixed(2)}`);
+  // 시작 장비 — 새 캐릭터(검 · 갑옷) · 첫 판에서 오르는 레벨 · 랭크(프리셋 A 의 순서)
+  const first = [];
+  for (const [rift, level, rank] of [[1, 2, 1], [1, 4, 2], [2, 6, 3]]) {
+    const { sim: s0 } = newSim(5);
+    assert.equal(s0.newCharacter({ slot: 0, cls: 'warrior', name: 'w' }).ok, true);
+    const ch = JSON.parse(JSON.stringify(s0.state.char));
+    ch.level = level;
+    ch.skills.ranks = { groundStomp: rank };
+    ch.skills.bar = ['groundStomp', null, null, null, null];
+    const sim = standAt({ cls: 'warrior', rift, seed: 5, char: ch });
+    first.push(...NORMAL_TYPES.map(t => hitsToKill(sim, 'groundStomp', t, 24)));
+  }
+  const fm = first.reduce((a, b) => a + b, 0) / first.length;
+  t.diagnostic(`시작 장비 첫 판 평균 ${fm.toFixed(2)} — ${first.map(v => v.toFixed(2)).join(' · ')}`);
+  // 위 끝 3.0 = Jay 「두세 번」 — 옛 계수(1.05/+0.11)는 이 표에서 3.02 로 걸린다(수정 단계 변이 실측 · 지금 값 2.76)
+  assert.ok(fm >= 2.2 && fm <= 3.0, `첫 판 평균 ${fm.toFixed(2)} — ${first.map(v => v.toFixed(2)).join(' · ')}`);
 });

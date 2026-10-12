@@ -30,6 +30,7 @@ function makeLayer(quality = 'high') {
   const fx = new FxLayer({ rc, bus, settings: { quality } });
   fx.decals.trace = true;
   fx.glow.trace = true;
+  fx.swoosh.trace = true;
   for (const b of fx.batches) b.trace = true;
   return { fx, bus, rc };
 }
@@ -210,21 +211,128 @@ test('§9.6 — 적대 바닥 표식: 바깥 가장자리 = 판정 모양(차이
   }
 });
 
-test('§9.6 — 플레이어 쪽: 지면 강타 4.0·120° · 지진 6.0 · 회오리 2.4 · 돌진 폭 1.6 · 도약 3.5 · 서리 노바 5.0 · 메테오 3.5(예고 · 불타는 바닥) · 화염구 2.5 · 번개 잔상 3.0', () => {
-  const stomp = getSkillDef('groundStomp'), quake = getSkillDef('earthquake'), whirl = getSkillDef('whirlwind'), charge = getSkillDef('charge');
+// 피드백 1: 지면 강타(cone · 원뿔 r 4.0 · 120°) → 회전 베기(spinSlash · 원 r 2.5 · 360°) · 강타 → 가르기(cleave · 부채꼴 r 1.9 · 180°) · 여진 → 연속 회전(spinEcho).
+// 칼자국(바닥 얇은 띠 'slash' · 칼끝 높이 궤적 'swing' · 잔상 'echo')의 바깥 가장자리 = 판정 반지름 · 각 = 판정 각(차이 0 · 계약 §9.6 · §9.7).
+test('피드백 1: §9.6 — 회전 베기 칼자국 고리 r 2.5(360°) · 가르기 칼자국 호 r 1.9 · 180°(facing 중심) · 붉은색 없음', () => {
+  const spin = getSkillDef('groundStomp'), cleave = getSkillDef('bash');
+  assert.equal(spin.radius, 2.5);
+  const { fx, bus } = makeLayer();
+  const st = riftState();
+  const p = st.player;
+  fx.update(st, 0, 0, p.pos);
+  bus.emit(EV.ACTION_HIT, { skillId: 'groundStomp', x: p.pos.x, z: p.pos.z, facing: 0.4, tx: p.pos.x, tz: p.pos.z, rank: 1, transforms: [] });
+  fx.update(st, 0, 0, p.pos);
+  const ring = spanVerts(fx.glow, 'slash');
+  const circ = { type: 'circle', x: p.pos.x, z: p.pos.z, r: spin.radius };
+  assertBorderExact(ring, circ, '회전 베기 칼자국');
+  assert.ok(radii(ring, p.pos.x, p.pos.z).lo >= spin.radius - 0.2 - EPS, '얇은 띠(판정 가장자리 안쪽 ≤ 0.2m)');
+  // 360° — 네 방위 모두에 정점
+  const quads = new Set(ring.map(v => Math.floor(((yawOf(v.x - p.pos.x, v.z - p.pos.z) + 2 * Math.PI) % (2 * Math.PI)) / (Math.PI / 2))));
+  assert.equal(quads.size, 4, '고리가 한 바퀴');
+  for (const v of ring) assert.ok(!isRed(v.c), '플레이어 칼자국은 붉지 않다');
+  // 옛 연출(지면 강타 충격 부채 · 균열 무늬)이 남지 않는다
+  assert.equal(spanVerts(fx.glow, 'fan').length + spanVerts(fx.decals, 'pattern').length, 0, '옛 부채 없음');
+
+  const R = p.r + cleave.reach + 0.3;
+  assert.ok(Math.abs(R - 1.9) < 1e-9, '가르기 판정 반지름 1.9');
+  const { fx: f2, bus: b2 } = makeLayer();
+  const s2 = riftState();
+  f2.update(s2, 0, 0, s2.player.pos);
+  b2.emit(EV.ACTION_HIT, { skillId: 'bash', x: s2.player.pos.x, z: s2.player.pos.z, facing: 0.4, tx: s2.player.pos.x, tz: s2.player.pos.z, rank: 1, transforms: [] });
+  f2.update(s2, 0, 0, s2.player.pos);
+  const arc = spanVerts(f2.glow, 'slash');
+  assertBorderExact(arc, { type: 'cone', x: s2.player.pos.x, z: s2.player.pos.z, r: R, facing: 0.4, angle: deg2rad(cleave.angleDeg) }, '가르기 칼자국');
+  for (const v of arc) assert.ok(!isRed(v.c), '가르기 칼자국은 붉지 않다');
+  // 0.3초 뒤 사라진다
+  s2.tick += ticks(0.3) + 1;
+  f2.update(s2, 0, 0, s2.player.pos);
+  assert.equal(spanVerts(f2.glow, 'slash').length, 0, '0.3초 뒤 사라짐');
+});
+
+test('피드백 1: 칼끝 궤적(상태) — 휘두른 만큼만 · 바깥 = 판정 반지름 · 정지 화면에서도 같은 그림 · 휘두름이 끝나면 사라진다', () => {
+  for (const [skillId, R] of [['bash', 1.9], ['groundStomp', 2.5]]) {
+    const def = getSkillDef(skillId), sw = def.params.swing;
+    const { fx } = makeLayer();
+    const st = riftState();
+    const p = st.player;
+    const T = 20;
+    p.act = 'attack'; p.actSkill = skillId; p.actId = 9; p.facing = -0.7;
+    p.actStart = st.tick; p.actEnd = st.tick + T; p.actHit = st.tick + Math.round(T * def.hitFrac);
+    const at = (k) => { st.tick = p.actStart + Math.floor(k * T); fx.update(st, k * T - Math.floor(k * T), 0, p.pos); return spanVerts(fx.swoosh, 'swing'); };
+    assert.equal(at(sw.from * 0.5).length, 0, `${skillId}: 감는 예비에는 궤적 없음`);
+    for (const k of [sw.from + (sw.to - sw.from) * 0.3, (sw.from + sw.to) / 2, sw.to]) {
+      const v = at(k);
+      assert.ok(v.length > 0, `${skillId} k ${k}: 궤적`);
+      const { hi } = radii(v, p.pos.x, p.pos.z);
+      assert.ok(Math.abs(hi - R) < EPS, `${skillId}: 궤적 바깥 ${hi} ≠ ${R}`);
+      // 칼끝(머리) 방위 = facing + arcFrom + (arcTo − arcFrom)·ease(u) · 꼬리는 휘두름 시작보다 뒤로 가지 않는다
+      const u = Math.min(1, Math.max(0, (k - sw.from) / (sw.to - sw.from))), e = u * u * (3 - 2 * u);
+      const head = deg2rad(sw.arcFrom + (sw.arcTo - sw.arcFrom) * e), tail = deg2rad(sw.arcFrom);
+      for (const q of v) {
+        if (Math.hypot(q.x - p.pos.x, q.z - p.pos.z) < 0.5) continue;
+        const rel = angleDiff(p.facing, yawOf(q.x - p.pos.x, q.z - p.pos.z));
+        // 360° 회전은 방위가 감기므로 머리 쪽 각만 본다 — 머리를 넘지 않는다(꼬리는 머리 뒤 tailDeg 안)
+        const back = ((head - (p.facing + rel) + p.facing) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        assert.ok(back <= deg2rad(110) + 1e-4 || back >= 2 * Math.PI - 1e-4, `${skillId}: 궤적이 칼끝 앞 · 꼬리 밖 (${back})`);
+        if (skillId === 'bash') assert.ok(rel >= tail - 1e-4 && rel <= head + 1e-4, `${skillId}: 휘두른 범위 밖 ${rel}`);
+      }
+      for (const q of v) assert.ok(!isRed(q.c), '붉지 않다');
+      assert.ok(Math.abs(v[0].y - fx.swoosh.y) < 1e-6 && fx.swoosh.y > 0.6 && fx.swoosh.y < 1.3, '칼끝 높이');
+    }
+    // 정지 화면 — 같은 틱 · alpha 면 같은 정점
+    const a = at((sw.from + sw.to) / 2).map(q => q.x + q.z), b = at((sw.from + sw.to) / 2).map(q => q.x + q.z);
+    assert.deepEqual(a, b, '같은 틱 같은 그림');
+    assert.equal(at(Math.min(0.99, sw.to + 0.2)).length, 0, `${skillId}: 후딜 뒤 사라짐`);
+  }
+});
+
+test('피드백 1: 연속 회전(spinEcho) — 대기 동안 플레이어를 따라가는 옅은 호 · 판정 직전 잔상 한 바퀴 · 판정에 고리 r 2.5(판정 자리) · 예고 붉은색 없음', () => {
+  const { fx, bus } = makeLayer();
+  const st = riftState();
+  const p = st.player;
+  const R = getSkillDef('groundStomp').radius;
+  const e = addEffect(st, { kind: 'spinEcho', hostile: false, owner: 'player', shape: { type: 'circle', x: p.pos.x, z: p.pos.z, r: R }, ago: 3, delayT: 15, spec: {} });
+  e.follow = 'player';
+  // 플레이어가 옮겨 갔다(그린 자리 = 보간 위치) — 호의 중심이 플레이어를 따라간다
+  p.prevPos = { x: p.pos.x + 1, z: p.pos.z }; p.pos = { x: p.pos.x + 1, z: p.pos.z };
+  e.shape.x = p.pos.x;
+  fx.update(st, 0, 0, p.pos);
+  const pre = spanVerts(fx.glow, 'echoPre', e.id);
+  assert.ok(pre.length > 0, '대기 호');
+  assertInside(pre, { type: 'circle', x: p.pos.x, z: p.pos.z, r: R }, '대기 호(플레이어 중심)');
+  for (const v of pre) assert.ok(!isRed(v.c) && v.a <= 0.2 + 1e-6, '옅고 붉지 않다');
+  assert.equal(spanVerts(fx.decals, 'border', e.id).length, 0, '예고 테두리 없음(판정만)');
+  assert.equal(spanVerts(fx.swoosh, 'echo', e.id).length, 0, '잔상은 판정 직전에만');
+  st.tick = e.hitAt - 2;
+  fx.update(st, 0, 0, p.pos);
+  const ghost = spanVerts(fx.swoosh, 'echo', e.id);
+  assert.ok(ghost.length > 0, '판정 직전 잔상');
+  assert.ok(Math.abs(radii(ghost, p.pos.x, p.pos.z).hi - R) < EPS, '잔상 바깥 = r');
+  // 판정 — EFFECT_HIT 의 shape(판정 자리)에 고리
+  st.tick = e.hitAt;
+  e.resolved = true;
+  bus.emit(EV.EFFECT_HIT, { id: e.id, kind: 'spinEcho', hostile: false, shape: { ...e.shape }, hitPlayer: false, targets: 2 });
+  fx.update(st, 0, 0, p.pos);
+  assertBorderExact(spanVerts(fx.glow, 'slash', e.id), { type: 'circle', x: e.shape.x, z: e.shape.z, r: R }, '연속 회전 칼자국');
+  assert.ok(spanVerts(fx.swoosh, 'echo', e.id).length > 0, '판정 뒤 잔상 고리');
+  // 이벤트를 놓쳐도(고정 상태) 상태로 한 번 세운다
+  const { fx: g } = makeLayer();
+  const s2 = riftState();
+  const e2 = addEffect(s2, { kind: 'spinEcho', hostile: false, owner: 'player', shape: { type: 'circle', x: 12, z: 14, r: R }, ago: 15, delayT: 15, spec: {} });
+  g.update(s2, 0, 0, s2.player.pos);
+  assertBorderExact(spanVerts(g.glow, 'slash', e2.id), e2.shape, '놓친 판정');
+});
+
+test('§9.6 — 플레이어 쪽: 지진 6.0 · 회오리 2.4 · 돌진 폭 1.6 · 도약 3.5 · 서리 노바 5.0 · 메테오 3.5(예고 · 불타는 바닥) · 화염구 2.5 · 번개 잔상 3.0(피드백 1: 회전 베기 · 가르기는 위)', () => {
+  const quake = getSkillDef('earthquake'), whirl = getSkillDef('whirlwind'), charge = getSkillDef('charge');
   const leap = getSkillDef('leap'), nova = getSkillDef('frostNova'), meteor = getSkillDef('meteor'), fireball = getSkillDef('fireball');
-  assert.deepEqual([stomp.radius, stomp.angleDeg, quake.radius, whirl.radius, charge.width, leap.radius, nova.radius, meteor.radius, fireball.params.explodeR],
-    [4.0, 120, 6.0, 2.4, 1.6, 3.5, 5.0, 3.5, 2.5], '§9.6 표의 값');
+  assert.deepEqual([quake.radius, whirl.radius, charge.width, leap.radius, nova.radius, meteor.radius, fireball.params.explodeR],
+    [6.0, 2.4, 1.6, 3.5, 5.0, 3.5, 2.5], '§9.6 표의 값');
 
   const { fx, bus } = makeLayer();
   const st = riftState();
   const p = st.player;
   fx.update(st, 0, 0, p.pos);
-  // 지면 강타 — 부채(원뿔 r · 각 = 데이터)
-  bus.emit(EV.ACTION_HIT, { skillId: 'groundStomp', x: p.pos.x, z: p.pos.z, facing: 0.4, tx: p.pos.x, tz: p.pos.z, rank: 1, transforms: [] });
-  fx.update(st, 0, 0, p.pos);
-  const fan = spanVerts(fx.glow, 'fan');
-  assertBorderExact(fan, { type: 'cone', x: p.pos.x, z: p.pos.z, r: stomp.radius, facing: 0.4, angle: deg2rad(stomp.angleDeg) }, '지면 강타 부채');
 
   // 도약 착지 · 서리 노바 — 퍼지는 고리의 최종 반지름 = 데이터 radius
   const ringAt = (skillId, batch, r) => {
@@ -506,7 +614,7 @@ test('공격 예고 — 궁수 붉은 조준선(조준이 멈추면 굵게) · �
 test('투사체 — 구의 반지름 = proj.r · 화살 0.8m · 모든 visual 이 표에 있다 · 풀 상한 256', () => {
   const visuals = ['magicBolt', 'fireball', 'fireballSplit', 'iceShard', 'arrow', 'shamanFire', 'spark', 'ashBolt'];
   for (const v of visuals) assert.ok(PROJ_STYLE[v], `PROJ_STYLE.${v}`);
-  for (const k of ['stomp', 'quakeWave', 'shockwave', 'meteor', 'vortex', 'afterimageBlast', 'corpseBlast', 'iceBurst', 'chainArc', 'chargeLine', 'bloaterBurst', 'poisonPool',
+  for (const k of ['spinEcho', 'quakeWave', 'shockwave', 'meteor', 'vortex', 'afterimageBlast', 'corpseBlast', 'iceBurst', 'chainArc', 'chargeLine', 'bloaterBurst', 'poisonPool',
     'fireDeath', 'coldNova', 'jail', 'plague', 'mortar', 'slam', 'boneSpikes', 'emberRain', 'guardianSpawn']) assert.ok(KIND_STYLE[k], `KIND_STYLE.${k}(§9.8)`);
   // 화살 0.8m(§9.6)
   const g = arrowGeometry();

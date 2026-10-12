@@ -3,8 +3,8 @@
 // 바의 스킬을 「동작(behavior)별 규칙」으로(노드 ID 가 아니다 — 무작위 배분 빌드도 같은 규칙) → 기본 공격(좌클릭 누르고 있기).
 // 입력은 사람과 같은 InputFrame 하나뿐이다 — 커서 · hover(src 'pick') · 좌클릭 · 스킬 칸 · 포션.
 
-import { cone as coneShape, overlaps } from '../core/shapes.js';
-import { deg2rad, segPointDist, yawOf } from '../core/math.js';
+import { overlaps } from '../core/shapes.js';
+import { segPointDist, yawOf } from '../core/math.js';
 import { ticks } from '../core/time.js';
 import { BOT_RULES } from '../data/bot.js';
 import { getClass, getNode, getSkillDef } from '../data/index.js';
@@ -18,7 +18,7 @@ import { aliveMon, hasTag, inThreat, pathClearOfThreats } from './sense.js';
 /** @typedef {import('./sense.js').Sense} Sense */
 
 /** 스킬을 고르는 차례(동작) — 방어 → 버프 → 이동 · 탈출 → 범위 → 단일. 같은 차례 안에서는 바 순서 */
-export const BEH_ORDER = ['shield', 'buff', 'blink', 'quake', 'meteor', 'nova', 'leap', 'dash', 'cone', 'spin', 'chain', 'fireball'];
+export const BEH_ORDER = ['shield', 'buff', 'blink', 'quake', 'meteor', 'nova', 'leap', 'dash', 'spinSlash', 'spin', 'chain', 'fireball'];   // 피드백 1: cone → spinSlash
 /** 피하기에 쓸 수 있는 이동 동작 */
 export const MOVE_BEHS = ['leap', 'blink', 'dash'];
 /** 정예급(「정예 대상」 · 「정예/수호자 6m 안」) */
@@ -62,18 +62,20 @@ function eliteWithin(s, R) {
 
 /**
  * 동작별 사용 규칙(§12.1 표) — 쓸 때면 목표 {x, z, hover}(hover = 대상 몬스터 ID 또는 null) · 아니면 null. 준비됨(쿨다운 · 비용)은 부르는 쪽이 본다.
- * @param {string} beh @param {Situation} s @param {any} R BOT_RULES @param {{cost:number, angleDeg?:number}} sk
+ * @param {string} beh @param {Situation} s @param {any} R BOT_RULES @param {{cost:number, angleDeg?:number, radius?:number, reserve?:number}} sk
  * @returns {{x:number, z:number, hover:number|null}|null}
  */
 export function skillRule(beh, s, R, sk) {
   const T = s.target;
   switch (beh) {
-    case 'cone': {
-      if (!T || T.d > R.cone.range + T.r) return null;
-      const shape = coneShape(s.px, s.pz, R.cone.range, yawOf(T.x - s.px, T.z - s.pz), deg2rad(sk.angleDeg ?? R.cone.angleDeg));
-      let n = 0;
-      for (const m of s.mons) if (overlaps(shape, m.x, m.z, m.r)) n++;
-      return n >= R.cone.count || ELITE_RANKS.includes(T.rank) ? { x: T.x, z: T.z, hover: T.id } : null;
+    case 'spinSlash': {
+      // 피드백 1: 회전 베기(360° 원) — 반지름(행의 radius · 없으면 규칙 값) − inner 안 ≥ count 마리 또는 정예급 대상이 그 안 · 분노 ≥ 비용 + rageKeep
+      //   inner: 판정(시작 + 0.3초)까지 물러서는 적(궁수 · 주술사 뒷걸음)이 원 밖으로 나가지 않게 가장자리를 비운다
+      if (!T) return null;
+      const r = (sk.radius ?? R.spinSlash.range) - R.spinSlash.inner;
+      if (s.resource < sk.cost + R.spinSlash.rageKeep + (sk.reserve ?? 0)) return null;
+      if (countWithin(s, s.px, s.pz, r) >= R.spinSlash.count || (ELITE_RANKS.includes(T.rank) && T.d <= r + T.r)) return { x: T.x, z: T.z, hover: T.id };
+      return null;
     }
     case 'quake': {
       if (countWithin(s, s.px, s.pz, R.quake.range) >= R.quake.count || eliteWithin(s, R.quake.range)) return { x: T ? T.x : s.px, z: T ? T.z : s.pz, hover: T ? T.id : null };
@@ -94,7 +96,7 @@ export function skillRule(beh, s, R, sk) {
       if (n >= R.leap.packCount) {
         cx /= n; cz /= n;
         const d = Math.hypot(cx - s.px, cz - s.pz);
-        if (d >= R.leap.packMin && d <= R.leap.max && countWithin(s, cx, cz, R.cone.range) >= R.leap.packCount) return { x: cx, z: cz, hover: null };
+        if (d >= R.leap.packMin && d <= R.leap.max && countWithin(s, cx, cz, R.leap.packR) >= R.leap.packCount) return { x: cx, z: cz, hover: null };
       }
       return null;
     }
@@ -587,6 +589,8 @@ function trySkills(bot, s, inp, only) {
       const sk = bot.skScratch;
       sk.cost = cost;
       sk.angleDeg = def.angleDeg;
+      sk.radius = def.radius;
+      sk.reserve = channelReserve(bar, beh, R);
       const want = skillRule(beh, s, R, sk);
       if (!want) continue;
       if (beh === 'spin') bot.holdSlot(inp, i, want.x, want.z);
@@ -596,6 +600,17 @@ function trySkills(bot, s, inp, only) {
     }
   }
   return false;
+}
+
+/**
+ * 피드백 1: 바에 채널(회오리 · spin) 스킬이 있으면 다른 분노 스킬(회전 베기)은 그 시작 분노(R.spin.rage)를 남겨 둔다 — 회오리는 분노당 피해가
+ * 회전 베기의 ~3배인데, 회전 베기가 먼저 분노를 써 버려 회오리가 거의 시작되지 않았다(프리셋 B 「학살」이 A 보다 31% 느렸다). 동작으로만 본다.
+ * @param {Array<string|null>} bar @param {string} beh @param {any} R
+ */
+function channelReserve(bar, beh, R) {
+  if (beh === 'spin') return 0;
+  for (const id of bar) if (id && behaviorOf(id) === 'spin') return R.spin.rage;
+  return 0;
 }
 
 /** hover 용 몬스터(보이는 것) @param {any} bot @param {number} id */

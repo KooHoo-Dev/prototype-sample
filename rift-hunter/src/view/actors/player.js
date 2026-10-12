@@ -10,7 +10,7 @@ import { BASES_BY_ID, getSkillDef } from '../../data/index.js';
 import { weaponVisual } from '../../sim/loot/stats.js';
 import { CHAR_DIMS, charParts } from './gear.js';
 import {
-  actionPose, attackPhase, bipedBase, bipedBreathe, bipedFall, bipedWalk, clamp01, compileKey, ease, frac, newFacingTrack, phaseStep, stepLenOf,
+  actionPose, attackPhase, bipedBase, bipedBreathe, bipedFall, bipedWalk, clamp01, compileKey, ease, frac, mixArr, newFacingTrack, phaseStep, stepLenOf,
   trackFacing,
 } from './poses.js';
 import { BJ, BP, fkBiped, makeJoints } from './rig.js';
@@ -68,9 +68,94 @@ const PLAYER_FAMILIES = {
     hit: { RSHP: 1.3, LSHP: 1.3, RSHA: 0.5, LSHA: 0.5, RELB: 0.5, LELB: 0.5, '+SPITCH': -0.1 },
   },
 };
-/** 스킬 동작(behavior) → 시전 자세 */
-const CAST_FAMILY = { cone: 'slamDown', quake: 'slamDown', buff: 'roar', nova: 'castDown', fireball: 'castFwd2', chain: 'castFwd2', meteor: 'castUp', shield: 'castChest', boltBasic: 'thrust' };
+/** 스킬 동작(behavior) → 시전 자세(피드백 1: 옛 cone → slamDown 은 뺐다 — 회전 베기는 attack 의 횡베기) */
+const CAST_FAMILY = { quake: 'slamDown', buff: 'roar', nova: 'castDown', fireball: 'castFwd2', chain: 'castFwd2', meteor: 'castUp', shield: 'castChest', boltBasic: 'thrust' };
 const ALL_FAMILIES = { ...BIPED_FAMILIES, ...PLAYER_FAMILIES };
+
+// ───────────────────────── 피드백 1 — 횡베기(가르기 cleave · 회전 베기 spinSlash) ─────────────────────────
+// 계약 §9.5: 진행 k = (now − actStart)/(actEnd − actStart) · u = clamp((k − from)/(to − from)) · 칼끝 방위 = facing + arcFrom + (arcTo − arcFrom)·ease(u)
+//   (데이터 params.swing — 판정과 무관한 연출 값). k < from 은 arcFrom 쪽으로 감는 예비 · k > to 는 후딜(쉬는 자세로 돌아옴).
+// 가르기: 발은 디딘 그대로(골반 · 가슴 yaw 를 다리 IK 가 받는다) — 몸통이 칼끝 방위의 bodyShare 를 돌고 나머지를 팔이 수평으로 쓸어 낸다.
+// 회전 베기: 팔을 뻗은 채 몸 전체(루트 yaw)가 칼끝을 따라 한 바퀴 — 발은 step 마다 번갈아 들어 옮겨 디딘다(디딘 동안은 월드 자리 그대로 — 미끄러짐 없음).
+// 양손 무기는 오른팔을 몸 앞(twoHandArm)에 두고 방위는 몸통이 다 맡는다 — 왼손이 손잡이에 닿는다(ActorLayer leftHandToGrip).
+
+/** 수평으로 베는 스킬 동작 */
+export const SWING_BEHAVIORS = Object.freeze(['cleave', 'spinSlash']);
+
+/** 횡베기 자세 손잡이(연출 — 판정 치수는 sim · 데이터가 정본) */
+export const SWING_POSE = Object.freeze({
+  droop: 0.3,            // 가르기: 팔 + 무기를 수평 아래로(rad — 숙임을 뺀 월드 값) — 판정 틱 칼끝 높이 ≈ 1.0m(몬스터 몸통)
+  spinDroop: 0.14,       // 회전 베기: 같은 값(팔을 옆으로 뻗어 더 수평)
+  lean: 0.28,            // 가르기: 상체를 가슴 앞(≈ 칼끝 쪽)으로 숙임(rad) — 어깨가 앞으로 나가 끝 반지름 +0.13
+  twoHandLean: 0.12,     // 가르기 양손: 같은 값(양손 무기는 이미 길다 — 끝이 판정 1.9 를 0.35 넘게 넘지 않게)
+  elbow: 0.1,            // 팔꿈치 굽힘(rad — 거의 편 팔)
+  wrist: PI - 0.05,      // 손목(π = 무기가 아래팔을 잇는다)
+  bodyShare: 0.75,       // 가르기(한손 · 맨손): 칼끝 방위 중 몸통 yaw 몫 — 나머지는 팔
+  hipShare: 0.4,         // 몸통 yaw 중 골반 몫(나머지는 가슴)
+  shift: 0.16,           // 가르기: 골반을 칼끝 쪽으로(m — 디딘 발은 IK 로 그대로)
+  crouch: 0.07,          // 골반 낮추기(m)
+  roll: 0.12,            // 상체를 칼끝 쪽으로 기울임(rad — 회전 베기의 원심 · 끝 반지름 +)
+  twoHandArm: 0.2,       // 양손: 오른팔 방위(가슴 기준 rad · 왼손이 손잡이에 닿는 자리)
+  spinArm: -1.35,        // 회전 베기(한손 · 맨손): 오른팔 방위(가슴 기준 rad · −π/2 = 오른쪽) — 무기를 옆으로 뻗는다
+  reach: { fist: 0.62, oneHand: 1.5, oneHandShield: 1.5, twoHand: 2.0, wand: 1.0, wandOrb: 1.0, staff: 1.8 },   // 어깨 → 칼끝 명목 길이(방위 보정)
+  step: PI / 2,          // 회전 베기 발 디딤 — 몸이 이만큼 돌 때마다 한 발씩 옮긴다(두 발은 반 칸 어긋남)
+  plant: 0.5,            // 한 칸 중 발이 디딘 채인 비율(나머지에 들어 옮긴다 — 골반과 발의 비틀림 ≤ step × plant · 0.5 = 두 발이 번갈아 · 쉬는 자세에서 둘 다 디딤)
+  lift: 0.09,            // 옮기는 발 높이(m)
+});
+
+/**
+ * 팔(어깨 → 무기 끝) 방향 — 가슴 틀 수평 방위 phi · 아래로 droop(rad) → RSHP · RSHA(비틀기 0)
+ * fkBiped 오른팔 = Rz(−RSHA)·Rx(−RSHP) · (0, −1, 0) = (−cosP·sinA, −cosP·cosA, sinP) 를 (sinφ·cosδ, −sinδ, cosφ·cosδ) 에 맞춘다.
+ * @param {Float32Array} out @param {number} phi @param {number} droop
+ */
+export function aimRightArm(out, phi, droop) {
+  const sp = Math.sin(phi), cp = Math.cos(phi), sd = Math.sin(droop), cd = Math.cos(droop);
+  const cP = Math.hypot(sp * cd, sd);
+  out[BP.RSHA] = Math.atan2(-sp * cd, sd);
+  out[BP.RSHP] = Math.atan2(cp * cd, cP);
+  out[BP.RSHT] = 0;
+}
+
+/**
+ * 가슴 틀에서 칼끝이 방위 alpha 에 오게 하는 오른팔 방위(어깨가 가운데에서 shX 만큼 오른쪽 — 반직선과 원의 교점)
+ * @param {number} alpha 원하는 칼끝 방위(가슴 기준) @param {number} s 어깨 shX @param {number} L 어깨 → 끝 수평 길이 @returns {number}
+ */
+export function armForTip(alpha, s, L) {
+  const sa = Math.sin(alpha), ca = Math.cos(alpha);
+  const t = -s * sa + Math.sqrt(Math.max(0, s * s * sa * sa - s * s + L * L));
+  return Math.atan2(t * sa + s, t * ca);
+}
+
+/** 오른팔 방위 phi 일 때 칼끝의 가슴 틀 방위 @param {number} phi @param {number} s @param {number} L */
+export function tipForArm(phi, s, L) {
+  return Math.atan2(-s + L * Math.sin(phi), L * Math.cos(phi));
+}
+
+/**
+ * 발 디딤 계단 — 몸 yaw Y 를 따라가는 발의 월드 yaw(디딘 동안 그대로 · 칸의 끝 (1 − plant) 동안 옮긴다) · 옮기는 중이면 lift 진행(0..1)
+ * @param {number} Y @param {number} step @param {number} plant @param {{yaw:number, k:number}} out
+ */
+export function footStair(Y, step, plant, out) {
+  const q = Y / step, n = Math.floor(q), t = q - n;
+  const m = t <= plant ? 0 : (t - plant) / (1 - plant);
+  out.yaw = step * (n + ease(m));
+  out.k = t <= plant ? 0 : Math.sin(PI * m);
+  return out;
+}
+
+/** 한 행동의 횡베기 진행 — 칼끝 방위(facing 기준 rad) · 쉬는 자세와의 섞음 w · 단계 @param {{from:number,to:number,arcFrom:number,arcTo:number}} sw */
+export function swingAt(sw, now, actStart, actEnd, out) {
+  const dur = actEnd - actStart;
+  const k = dur > 0 ? (now - actStart) / dur : 1;
+  const span = Math.max(1e-6, sw.to - sw.from);
+  const u = clamp01((k - sw.from) / span);
+  out.k = k;
+  out.u = u;
+  out.theta = ((sw.arcFrom + (sw.arcTo - sw.arcFrom) * ease(u)) * PI) / 180;
+  out.w = k < sw.from ? ease(sw.from > 0 ? k / sw.from : 1) : k > sw.to ? 1 - ease((k - sw.to) / Math.max(1e-6, 1 - sw.to)) : 1;
+  out.r = k > sw.to ? ease((k - sw.to) / Math.max(1e-6, 1 - sw.to)) : 0;
+  return out;
+}
 
 /** 장비 → 외형 @param {import('../../types.js').CharacterState|null} char @returns {import('./gear.js').CharLook} */
 export function playerLook(char) {
@@ -189,9 +274,101 @@ export class PlayerPoser {
     this._ph = { stage: 0, u: 0, r: 0 };
     /** 그린 방향 보간(마지막 두 틱의 facing — poses.js trackFacing) */
     this.face = newFacingTrack();
+    /** @type {Map<string, {beh:string, swing:{from:number,to:number,arcFrom:number,arcTo:number}}|null>} 스킬 → 횡베기 정의(캐시) */
+    this._sw = new Map();
+    this._swT = new Float32Array(BP.N);
+    this._sa = { k: 0, u: 0, theta: 0, w: 0, r: 0 };
+    this._fs = { yaw: 0, k: 0 };
   }
 
   reset() { this.fresh = true; this.face.fTick = -1; }
+
+  /** 그 스킬이 횡베기(cleave · spinSlash + params.swing)면 정의 · 아니면 null @param {string|null} id */
+  _swingDef(id) {
+    if (!id) return null;
+    if (this._sw.has(id)) return this._sw.get(id);
+    let v = null;
+    try {
+      const def = getSkillDef(id);
+      const swing = def.params?.swing;
+      if (SWING_BEHAVIORS.includes(def.behavior) && swing && Number.isFinite(swing.from) && Number.isFinite(swing.to)) v = { beh: def.behavior, swing };
+    } catch { v = null; }
+    this._sw.set(id, v);
+    return v;
+  }
+
+  /**
+   * 횡베기 자세(피드백 1 — 계약 §9.5). out = 쉬는 자세(걷기 · 숨쉬기)를 받아 덮어쓴다.
+   * @param {Float32Array} out @param {import('../../types.js').PlayerState} p @param {string} cls @param {string} style @param {number} now
+   * @param {string} beh @param {{from:number,to:number,arcFrom:number,arcTo:number}} sw @param {any} d
+   */
+  _swing(out, p, cls, style, now, beh, sw, d) {
+    const S = SWING_POSE;
+    const a = swingAt(sw, now, p.actStart, p.actEnd, this._sa);
+    const T = this._swT;
+    T.set(out);
+    const th = a.theta;
+    const two = style === 'twoHand';
+    const spin = beh === 'spinSlash';
+    const droop = spin ? S.spinDroop : S.droop;
+    const L = (S.reach[style] ?? S.reach.oneHand) * Math.cos(droop);
+    let phi, bodyYaw = 0;
+    if (spin) {
+      phi = two ? S.twoHandArm : S.spinArm;
+    } else if (two) {
+      phi = S.twoHandArm;
+      bodyYaw = th - tipForArm(phi, d.shX, L);
+    } else {
+      bodyYaw = th * S.bodyShare;
+      phi = armForTip(th - bodyYaw, d.shX, L);
+    }
+    // 몸통(가르기) — 골반 · 가슴 yaw(발은 IK 로 디딘 자리) · 칼끝 쪽으로 골반을 싣는다
+    T[BP.PYAW] += bodyYaw * S.hipShare;
+    T[BP.SYAW] += bodyYaw * (1 - S.hipShare);
+    T[BP.HIPY] -= S.crouch;
+    const lean = spin ? tipForArm(phi, d.shX, L) : th - bodyYaw;   // 가슴 기준 칼끝 방위
+    if (!spin) { T[BP.HIPX] += Math.sin(th) * S.shift; T[BP.HIPZ] += Math.cos(th) * S.shift; }
+    T[BP.SROLL] += -Math.sin(lean) * S.roll;
+    const pitch = spin ? 0 : two ? S.twoHandLean : S.lean;
+    T[BP.SPITCH] += pitch;
+    // 오른팔 + 무기 — 수평에서 droop 만큼 아래로 뻗는다(가슴이 숙은 만큼은 팔 방위의 앞 성분에서 덜어 월드 droop 을 맞춘다)
+    aimRightArm(T, phi, droop - pitch * Math.cos(phi));
+    T[BP.RELB] = S.elbow;
+    T[BP.RWRI] = S.wrist;
+    // 왼팔 — 한손: 반대쪽으로 벌려 균형 · 방패 · 마법구는 쉬는 자세 그대로 · 양손은 IK(ActorLayer)
+    if (style === 'oneHand' || style === 'fist' || style === 'staff' || style === 'wand') {
+      T[BP.LSHA] = 1.05; T[BP.LSHP] = spin ? 0.15 : -0.25; T[BP.LSHT] = 0; T[BP.LELB] = 0.45;
+    }
+    mixArr(out, out, T, a.w);
+    if (!spin) return;
+    // 회전 베기 — 루트 yaw(펼친 값 · 감기 0 → Y0 · 휘두름 Y(θ) · 후딜 Y_end → 가장 가까운 한 바퀴)
+    const tip0 = tipForArm(phi, d.shX, L);
+    let Y;
+    if (a.k < sw.from) Y = (((sw.arcFrom * PI) / 180) - tip0) * a.w;
+    else if (a.k <= sw.to) Y = th - tip0;
+    else {
+      const yEnd = ((sw.arcTo * PI) / 180) - tip0;
+      const yRest = 2 * PI * Math.round(yEnd / (2 * PI));
+      Y = yEnd + (yRest - yEnd) * a.r;
+    }
+    out[BP.RYAW] = Y;
+    // 발 — 몸 yaw 를 계단으로 따라간다(디딘 발은 월드 자리 그대로) · 루트 틀 목표 = Ry(발 yaw − Y) · 기본 자리
+    const base = this._base(cls, style);
+    const fs = this._fs;
+    for (let side = 0; side < 2; side++) {
+      const iX = side ? BP.RFX : BP.LFX, iY = side ? BP.RFY : BP.LFY, iZ = side ? BP.RFZ : BP.LFZ;
+      const off = side ? 0 : S.step / 2;
+      footStair(Y + off, S.step, S.plant, fs);
+      const rel = fs.yaw - Y;   // 왼발은 반 칸 앞서 옮긴다(디딘 자리는 두 발 모두 step 의 배수)
+      const c = Math.cos(rel), s = Math.sin(rel);
+      const bx = base[iX], bz = base[iZ];
+      // 쉬는 자세가 기본에서 벗어난 만큼(걷기에서 막 멈춤)은 감기 동안 사라진다
+      const ex = (out[iX] - bx) * (1 - a.w), ez = (out[iZ] - bz) * (1 - a.w);
+      out[iX] = bx * c + bz * s + ex;
+      out[iZ] = -bx * s + bz * c + ez;
+      out[iY] = base[iY] + S.lift * fs.k;
+    }
+  }
 
   /**
    * 그릴 방향 — 마지막 두 틱의 facing 을 alpha 로 최단 호 보간(위치 보간과 같은 alpha). snap = 보간 끊기(순간이동)
@@ -270,6 +447,8 @@ export class PlayerPoser {
     const ph = this._ph;
     switch (act) {
       case 'attack': {
+        const sw = this._swingDef(p.actSkill);
+        if (sw) { this._swing(out, p, cls, style, now, sw.beh, sw.swing, d); break; }
         const fam = p.actSkill === 'magicBolt' ? 'thrust' : style === 'twoHand' ? 'overhead' : style === 'fist' ? 'punch' : style === 'staff' || style === 'wand' || style === 'wandOrb' ? 'thrust' : 'slash';
         attackPhase(now, p.actStart, p.actHit, p.actEnd, ph);
         actionPose(out, out, this._fam(cls, style, fam, 'wind'), this._fam(cls, style, fam, 'hit'), ph);

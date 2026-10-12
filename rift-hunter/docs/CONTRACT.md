@@ -412,7 +412,7 @@ app의 `InputCollector`가 매 틱 하나 만든다. 봇도 같은 것을 만든
  * @property {string[]} offhandBases      낄 수 있는 보조 기본형 ID
  */
 
-/** @typedef {'meleeBasic'|'boltBasic'|'cone'|'quake'|'dash'|'spin'|'buff'|'leap'|'fireball'|'meteor'|'nova'|'shield'|'chain'|'blink'} SkillBehaviorId */
+/** @typedef {'cleave'|'boltBasic'|'spinSlash'|'quake'|'dash'|'spin'|'buff'|'leap'|'fireball'|'meteor'|'nova'|'shield'|'chain'|'blink'} SkillBehaviorId */   // 피드백 1: meleeBasic → cleave(가르기) · cone → spinSlash(회전 베기)
 /** @typedef {'aoe'|'melee'|'projectile'|'movement'|'buff'|'channel'|'dot'|'chain'} SkillTag */
 /** @typedef {Object} SkillDef   (액티브 · 기본 공격의 동작 수치 — §7.2)
  * @property {SkillBehaviorId} behavior
@@ -427,7 +427,7 @@ app의 `InputCollector`가 매 틱 하나 만든다. 봇도 같은 것을 만든
  * @property {boolean} scaled       true면 행동 길이 = action × APS_REF / stats.aps
  * @property {number} hitFrac       판정 시점 = 행동 시작 + action × hitFrac
  * @property {number} [range] @property {number} [radius] @property {number} [angleDeg] @property {number} [width]
- * @property {number} [reach]       근접 사거리 — 몸 가장자리 사이(m · 강타 1.1 · §5.2-5의 bash.reach) · 최소 거리는 params.minRange(돌진 · 도약 2)
+ * @property {number} [reach]       근접 사거리 — 몸 가장자리 사이(m · 가르기 1.2 — 피드백 1 · §5.2-5의 bash.reach · 판정 부채꼴 반지름 = 몸 r + reach + PLAYER.reachTolerance) · 최소 거리는 params.minRange(돌진 · 도약 2)
  * @property {number[]} coef        랭크별 무기 피해 계수(길이 = maxRank)
  * @property {{stun?:number[], chill?:number|number[], burnFrac?:number, shockChance?:number, knock?:number, slowPct?:number, slowSec?:number}} [status]
  *                                  적중이 싣는 상태 이상(배열이면 랭크별 [rank−1] · 비율은 0..1 — §7.2)
@@ -913,7 +913,7 @@ app의 `InputCollector`가 매 틱 하나 만든다. 봇도 같은 것을 만든
  * @property {{r:number, spec:Object, visual:string}|null} explode   끝날 때 폭발(화염구)
  */
 /** @typedef {Object} Effect
- * @property {number} id @property {string} kind    §9.8의 효과 kind(예: 'stomp' · 'quakeWave' · 'meteor' · 'jail' · 'plague' · 'mortar' · 'coldNova' · 'fireDeath' · 'bloaterBurst' · 'slam' · 'boneSpikes' · 'emberRain' · 'guardianSpawn' · 'chargeLine' · 'vortex' · 'poisonPool' · 'chainArc' …)
+ * @property {number} id @property {string} kind    §9.8의 효과 kind(예: 'spinEcho'(피드백 1 — 옛 'stomp') · 'quakeWave' · 'meteor' · 'jail' · 'plague' · 'mortar' · 'coldNova' · 'fireDeath' · 'bloaterBurst' · 'slam' · 'boneSpikes' · 'emberRain' · 'guardianSpawn' · 'chargeLine' · 'vortex' · 'poisonPool' · 'chainArc' …)
  * @property {'player'|'mon'|'env'} owner @property {number} srcId
  * @property {number} packId        적대 위협의 팩(위협 간격 §5.9 · 없으면 -1)
  * @property {boolean} cancelOnSrcDeath   출처가 죽으면 예고째 지운다(§5.16-6)
@@ -926,6 +926,7 @@ app의 `InputCollector`가 매 틱 하나 만든다. 봇도 같은 것을 만든
  * @property {Object|null} spec     hitAt 판정 정의(null = 판정 없는 표시 전용 예고 — 돌진 선 · 연출이 읽지 않는다)
  * @property {Object|null} tickSpec 지속 틱 판정 정의(null이면 spec · 비적대는 만드는 쪽이 coef = coefPerSec × 틱 초를 넣는다)
  * @property {Vec2|null} from       몰타르 포탄 · 메테오 낙하의 출발점(연출)
+ * @property {'player'} [follow]  피드백 1 — 있으면('player') 판정(hitAt) 전까지 매 틱 shape 중심 · spec 출처가 플레이어 자리로 간다(연속 회전 spinEcho · effects.js updateEffects) · 따라가지 않는 효과에는 키가 없다
  */
 /** @typedef {Object} Drop
  * @property {number} id @property {DropKind} kind
@@ -1237,9 +1238,9 @@ StatKey → PlayerStats 대응: `freezeAt` → `freezeAtReduce`(점 그대로) �
 
 | 동작(`behavior`) | 시작 | 판정(`actHit`) | 메모 |
 |---|---|---|---|
-| `meleeBasic`(강타) | 대상(또는 제자리면 커서 방향) 쪽으로 facing | 대상이 `r + reach + 0.3`(관용) 안이면 그 하나에 적중. 제자리면 원뿔 70° · 사거리 `reach` 안 가장 가까운 하나 | 분노 생성(§5.5) |
+| `cleave`(가르기 · **피드백 1** — 옛 `meleeBasic` 강타) | 대상(또는 제자리면 커서 방향) 쪽으로 facing(행동 내내 그대로) | 판정 틱에 플레이어 중심 부채꼴(반지름 = 몸 r + `reach` + `PLAYER.reachTolerance` = 0.4 + 1.2 + 0.3 = **1.9m** · 전체 각 `angleDeg` **180°** · 방향 = facing)과 몸이 겹치는 살아 있는 몬스터 **모두**(`playerHitShape` — 가까운 순) · 대상 고정: 대상이 부채꼴 밖으로 비켜도 중심 거리 ≤ 1.9 + mon.r 이면 맞는다 · 태그 [melee](aoe 아님 — 방패 해골 정면 막기 · `aoePct` 안 걸림) | 분노 생성(§5.5 — 맞힌 수 n 이면 onBasicHit 8 + min(3, n − 1)) · 연출 `params.swing`(§9.6) |
 | `boltBasic`(마력 화살) | facing → 대상/커서 | 투사체 발사(§7.2) | 비용 0 |
-| `cone`(지면 강타) | facing → 커서 | 원뿔 120° · 4.0m 적중 · 기절 · 흔들림 | 변형 「여진」: 0.5초 뒤 같은 자리 · 방향으로 60% 한 번 더(플레이어 소유 효과 `stomp` — 예고 없이 판정만 · 흔들림 · 파생 적중이라 기절 · 넉백 없음 §5.8) |
+| `spinSlash`(회전 베기 · **피드백 1** — 옛 `cone` 지면 강타) | facing → 커서(act `attack` — 무기 동작) | 판정 틱에 플레이어 중심 원 **r 2.5 · 360°** 안 모두 · 넉백 `status.knock` 0.8m(플레이어 → 몬스터 바깥쪽 · 기절 없음 — 경직은 큰 적중의 flinch §5.8) · 흔들림 없음 | 변형 「연속 회전」(키 `aftershock` 그대로): 판정 0.5초 뒤 **그때의 플레이어 자리**에서 60% 한 번 더(플레이어 소유 효과 `spinEcho` · 원 r 2.5 · `follow:'player'` — 판정 전까지 매 틱 중심이 플레이어를 따라간다 · 예고 없이 판정만 · 파생 적중이라 넉백 없음). 전설 「진동 주먹」 `shockwave`: facing 으로 선(len 10 · 폭 2.0) |
 | `quake`(지진) | 제자리 | 시전 자리 중심 원 6.0m · 파동 3번(+0.4 · +0.9 · +1.4초 — 플레이어 소유 효과 `quakeWave` 셋, 비적대 예고 고리) | 파동마다 흔들림 0.35 |
 | `dash`(돌진) | 목표 = 커서(2~10m로 자름 · 벽 앞에서 멈춤) · act `dash` · `air{kind:'dash'}` | 매 틱 `pos`가 `speed × DT`만큼 목표로 간다 · 그 틱의 이동 선분(폭 1.6m)과 겹치는 모든 몬스터 중 이번 돌진에서 아직 맞지 않은 것(`player.sk.hitIds`) 각각 한 번 적중(대상 상한 없음 · 적중 수 `player.sk.hits`) · 옆으로 밀침(§0.2 오른쪽 벡터 — 각 몬스터가 선의 어느 쪽인지로 부호) | 판정 틱 = 시작 + 1틱 · 끝 = 도착 + 0.1초. 분노 +10 |
 | `spin`(회오리) | 채널 시작(시작 비용 10) | 채널 틱마다 원 2.4m 적중(틱마다 새 actionId — §5.6) · 커서 쪽으로 이동 속도 × 0.7 직진(벽 미끄러짐 · 몬스터 통과) | 유지 비용/초 · 떼거나 분노가 모자라면 끝 → 후딜 0.15초 · 다른 입력은 채널을 끊고 바로 나간다(§5.3). 변형 「피의 회오리」 적중당 회복 |
@@ -1364,7 +1365,7 @@ PLAYER_HIT → life ≤ 0 이면 그 자리에서 ctx.hooks.onPlayerKilled(ctx, 
 | 플레이어 감속 | 냉기 강화 적중 · 냉기 노바 | 이동 × 0.6 | sec(새로 걸리면 긴 쪽) |
 | 플레이어 속박 | 감옥 | 이동 · 이동 스킬 불가(공격 · 시전은 된다) | 1.5초 · §5.9 |
 
-- **파생 적중**(여진 · 진동 주먹 충격파 · 진동 장화 지진 · 번개 잔상 · 얼음 파편 · 불타는 소용돌이 · 메테오의 불타는 바닥 · 시체 폭발 · 서리 반지 얼음 폭발 — 변형 · 전설이 만든 적중)은 기절 · 넉백을 싣지 않는다(피해 · 흔들림 · 그 행이 명시한 냉기/감전만).
+- **파생 적중**(연속 회전(옛 여진 — 피드백 1) · 진동 주먹 충격파 · 진동 장화 지진 · 번개 잔상 · 얼음 파편 · 불타는 소용돌이 · 메테오의 불타는 바닥 · 시체 폭발 · 서리 반지 얼음 폭발 — 변형 · 전설이 만든 적중)은 기절 · 넉백을 싣지 않는다(피해 · 흔들림 · 그 행이 명시한 냉기/감전만).
 
 ### 5.9 위협 간격 규칙 — 피할 수 없는 연속 손해 금지 (P2 `effects.js` · 브리프 §3.5)
 
@@ -1687,7 +1688,7 @@ export function resetPlayerForScene(ctx, {full})   // full이면 생명 · 마�
 export function onPlayerDamaged(ctx, dmg)      // P2가 ctx.hooks로 부른다 — 분노 생성 · 귀환 취소
 export function isActionable(player)
 // player/skills.js
-export const SKILL_BEHAVIORS                   // {meleeBasic, boltBasic, cone, quake, dash, spin, buff, leap, fireball, meteor, nova, shield, chain, blink}
+export const SKILL_BEHAVIORS                   // {cleave, boltBasic, spinSlash, quake, dash, spin, buff, leap, fireball, meteor, nova, shield, chain, blink} — 피드백 1: meleeBasic → cleave · cone → spinSlash
 export function skillParams(ctx, nodeId)       // 행의 skill.params + 찍은 변형의 patch + 낀 전설(패치형 · 그 스킬)의 patch → 새 객체(§8.4)
 export function describeSkill(stats, nodeId, rank)   // 순수 — {coefPct, dmgMin, dmgMax(치명타 전 · 저항 없는 대상), cost, cd, range, radius, extra:Object} · ui 툴팁 · 스킬 패널 전/후 · nodeId는 노드 ID 또는 BASIC_SKILLS ID('bash' · 'magicBolt')
 export function skillReady(state, stats, nodeId)     // 순수 — {canAfford, cooldownLeft, cooldownTotal (초), ready} · HUD 쿨다운 부채 · BASIC_SKILLS ID도 받는다
@@ -2166,17 +2167,17 @@ export const CLASSES = [
 
 | ID | 동작 | 대상 | 종류 · 태그 | 비용 | 행동 | 판정 | 모양 | coef | params |
 |---|---|---|---|---|---|---|---|---|---|
-| `bash` 강타 | meleeBasic | target | phys · melee | 0(분노 생성 §5.5) | `1/aps` | 0.45 | 대상 하나 · reach 1.1 · 제자리 원뿔 70° | 1.00 🔒 | — |
+| `bash` 가르기(**피드백 1** — 옛 강타) | cleave | target | phys · melee | 0(분노 생성 §5.5 — 맞힌 수만큼 +1 · 최대 +3) | `1/aps` | 0.45 | 대상 쪽 부채꼴 반지름 1.9(= 0.4 + reach 1.2 + 관용 0.3) · 180° · 닿는 적 모두 | 닿는 적마다 **1.00** 🔒(피드백 1 — 값 그대로 · 대상 하나 → 닿는 적 모두. 0.85 도 재 봤다 — 프리셋 B 「학살」이 A 보다 31% 느려져 1.00 으로 둔다) | swing `{from: 0.25, to: 0.5, arcFrom: -90, arcTo: 90}`(연출 — §9.5) |
 | `magicBolt` 마력 화살 | boltBasic | direction | lightning · projectile | 0 | `1/aps` | 0.40 | 투사체 r 0.25 · 22 m/s · 사거리 15 | 1.00 🔒 | visual `magicBolt` |
 
 **전사 노드** — `SKILL_NODES`(branch 0 분쇄 · 1 학살 · 2 수호)
 
 | ID | 갈래 · 단계 | 종류 · 최대 | 동작 · 대상 | 비용 · 생성 | 쿨 | 행동 · 판정 | 모양 | coef | 상태 · params |
 |---|---|---|---|---|---|---|---|---|---|
-| `groundStomp` 지면 강타 | 0 · 1 | active · 5 | cone · direction | 분노 14(W1 수정 · 20 → 14) | 0 | 0.60✓ · 0.50 | 원뿔 r 4.0 · 120° | 1.05 / +0.11(밸런스 게이트 · 옛 1.40 / +0.15) | stun [0.8, 0.9, 1.0, 1.1, 1.2] · shake 0.25 |
+| `groundStomp` 회전 베기(**피드백 1** — 옛 지면 강타 · ID 그대로) | 0 · 1 | active · 5 | spinSlash · direction | 분노 14(W1 수정 · 20 → 14) | 0 | 0.60✓ · 0.50 | 원 r 2.5 · 360°(플레이어 중심) | **1.20 / +0.09**(피드백 1 — 정타 처치 수 · 전사 균열 10 해금 §7.14 · 옛 원뿔 r 4.0 · 120° · 1.05 / +0.11) | knock 0.8(옛 stun [0.8 … 1.2] · shake 0.25 는 뺐다) · swing `{from: 0.15, to: 0.55, arcFrom: -90, arcTo: 270}` · fxAftershock `spinEcho` · fxShockwave `shockwave` |
 | `weaponMastery` 무기 숙련 | 0 · 1 | passive · 5 | — | — | — | — | — | — | `physPct` [6, 12, 18, 24, 30] |
 | `earthquake` 지진 | 0 · 2 | active · 5 | quake · self | 분노 30 | 8 | 0.50✓ · 0.40 | 원 r 6.0(시전 자리) | 파동마다 0.85 / +0.095(밸런스 게이트 · 옛 1.10 / +0.12) | waves [0.4, 0.9, 1.4] · shake 0.35 |
-| `aftershock` 여진 | 0 · 3 | transform · 1 · req `groundStomp` | — | — | — | — | — | — | patch `{aftershock: {delay: 0.5, mul: 0.6}}` |
+| `aftershock` 연속 회전(**피드백 1** — 옛 여진 · ID · 패치 키 그대로) | 0 · 3 | transform · 1 · req `groundStomp` | — | — | — | — | — | — | patch `{aftershock: {delay: 0.5, mul: 0.6}}` — 0.5초 뒤 그때의 플레이어 자리에서 한 번 더 돈다 |
 | `crusher` 분쇄자 | 0 · 4 | passive · 3 | — | — | — | — | — | — | cond `targetDisabled` · `allPct` [10, 20, 30] |
 | `charge` 돌진 | 1 · 1 | active · 5 | dash · point | 생성 10 | 6 | 거리/22 + 0.1 · 1틱 | 선 폭 1.6 · 2~10 | 1.20 / +0.15 | knock 2.5 · speed 22 |
 | `bloodthirst` 피의 갈증 | 1 · 1 | passive · 5 | — | — | — | — | — | — | `lifePctOnHit` [0.3, 0.6, 0.9, 1.2, 1.5] |
@@ -2210,7 +2211,7 @@ export const CLASSES = [
 | `arcaneLore` 비전 지식 | 2 · 4 | passive · 3 | — | — | — | — | — | — | `critDamage` [10, 20, 30] · `cdr` [4, 8, 12] |
 
 - 쿨다운이 랭크별 배열이면 그 랭크의 값. 스킬 패널은 「찍기 전 · 후」를 `describeSkill`(P1)과 `previewLearn`(P6)으로 나란히 보인다(§10.6).
-- **종류 · 태그**(`skill.type` · `skill.tags` — `aoePct` · 정면 방패 우회(aoe) · 종류 피해 % · 연소(화염 적중) · 저항이 여기에 걸린다): groundStomp phys · [aoe, melee] · earthquake phys · [aoe] · charge phys · [movement, melee] · whirlwind phys · [aoe, channel, melee] · warCry null · [buff] · leap phys · [movement, aoe] · fireball fire · [projectile, aoe] · meteor fire · [aoe, dot] · frostNova cold · [aoe] · energyShield null · [buff] · chainLightning lightning · [chain] · teleport null · [movement]. 파생 적중: 여진 phys [aoe] · 진동 주먹 충격파 phys [aoe] · 진동 장화 지진 phys [aoe] · 불타는 소용돌이 fire [aoe, dot] · 메테오 불타는 바닥 fire [aoe, dot] · 분열 화염구 fire [projectile, aoe] · 얼음 파편 cold [projectile] · 번개 잔상 lightning [aoe] · 시체 폭발 phys [aoe] · 서리 반지 얼음 폭발 cold [aoe].
+- **종류 · 태그**(`skill.type` · `skill.tags` — `aoePct` · 정면 방패 우회(aoe) · 종류 피해 % · 연소(화염 적중) · 저항이 여기에 걸린다): bash phys · [melee](피드백 1 — 가르기는 여럿을 맞혀도 aoe 태그가 아니다) · groundStomp phys · [aoe, melee] · earthquake phys · [aoe] · charge phys · [movement, melee] · whirlwind phys · [aoe, channel, melee] · warCry null · [buff] · leap phys · [movement, aoe] · fireball fire · [projectile, aoe] · meteor fire · [aoe, dot] · frostNova cold · [aoe] · energyShield null · [buff] · chainLightning lightning · [chain] · teleport null · [movement]. 파생 적중: 연속 회전 phys [aoe] · 진동 주먹 충격파 phys [aoe] · 진동 장화 지진 phys [aoe] · 불타는 소용돌이 fire [aoe, dot] · 메테오 불타는 바닥 fire [aoe, dot] · 분열 화염구 fire [projectile, aoe] · 얼음 파편 cold [projectile] · 번개 잔상 lightning [aoe] · 시체 폭발 phys [aoe] · 서리 반지 얼음 폭발 cold [aoe].
 
 ### 7.3 균열 레벨 곡선 — `data/rift.js` (P2 · 시드)
 
@@ -2475,8 +2476,8 @@ export const COMPARE = { minGain: 0.005 };    // 업그레이드 판정 · 봇 �
 
 ```js
 export const TREASURE = [   🔒 (전부)
-  { id: 'normal',   picks: 1, goldMul: 1.0, w: { none: 732, gold: 90,  potion: 5,  globe: 80, material: 8,   gear: 85 } },   // W1 수정: globe 25 → 80(none 787 → 732)
-  { id: 'minion',   picks: 1, goldMul: 1.2, w: { none: 450, gold: 150, potion: 30, globe: 150, material: 20, gear: 200 } },  // W1 수정: globe 80 → 150(none 520 → 450)
+  { id: 'normal',   picks: 1, goldMul: 1 / 3, w: { none: 552, gold: 270, potion: 5,  globe: 80, material: 8,   gear: 85 } },   // W1 수정: globe 25 → 80(none 787 → 732) · 피드백 1: gold 90 → 270 · goldMul 1.0 → 1/3(none 732 → 552)
+  { id: 'minion',   picks: 1, goldMul: 0.6, w: { none: 300, gold: 300, potion: 30, globe: 150, material: 20, gear: 200 } },  // W1 수정: globe 80 → 150(none 520 → 450) · 피드백 1: gold 150 → 300 · goldMul 1.2 → 0.6(none 450 → 300)
   { id: 'champion', picks: 2, goldMul: 1.6, w: { none: 315, gold: 250, potion: 25, globe: 90, material: 45,  gear: 275 } },
   { id: 'elite',    picks: 4, goldMul: 2.2, w: { none: 150, gold: 300, potion: 50, globe: 60, material: 40,  gear: 400 } },
   { id: 'guardian', picks: 8, goldMul: 4.0, w: { none: 0,   gold: 400, potion: 50, globe: 0,  material: 100, gear: 450 }, guaranteed: 2 },
@@ -2499,6 +2500,8 @@ export const GOLD = { base: 3 };   🔒
 export const MATERIAL_DROP = { scrap: 70, dust: 25, essence: 5 };
 ```
 
+- **피드백 1(Jay 2026-10-12 「일반 몬스터가 골드 · 아이템을 드랍하는지」)**: 일반 몬스터는 처음부터 드랍했다(일반 처치 골드 9% · 장비 8.5% — 그 장비의 ~57% 가 Alt 를 눌러야 이름표가 보이는 일반 등급). 「적게 잡으면 아무것도 안 떨어진다」로 보여서 골드 더미를 **더 자주 · 더 작게** 했다 — normal · minion 의 none 무게를 gold 로 옮기고 goldMul 을 그만큼 낮춘다. 처치당 기대 골드 = 무게 × `expectedGoldPile(GOLD.base × goldMul × riftRow(L).goldMul)`(반올림 · 최소 1 을 넣은 정확한 적분)은 균열 1 · 6~30 에서 ±1% · 2~5 에서 ±3.6% · 30레벨 평균 +0.13%(normal) · −0.06%(minion) — §7.14 의 골드 · 경제 산수는 그대로다(`theory.test` 「피드백 1」). 장비 · 구슬 · 포션 · 재료 무게는 그대로. 「떨어지는 순간 흰 장비도 잠깐 이름표 · 골드 줍기 표시」는 ui(§10.4 — `Drop.born` · `DROP_PICKED{kind:'gold', amount}` · 문자열 `label.goldPicked`).
+
 ### 7.9 전설 · 세트 — `data/legendaries.js` (P5 · 시드 · 훅은 P1 `equipHooks.js`)
 
 | ID | 이름 | 기본형 · 클래스 | hook | params | 추가 옵션 |
@@ -2507,7 +2510,7 @@ export const MATERIAL_DROP = { scrap: 70, dust: 25, essence: 5 };
 | `quakeTreads` | 진동 장화 | boots · warrior | `leapQuake` | `{mul: 0.6}` — 도약 착지가 지진(파동 셋 · 비용 없음) | 3~4 |
 | `ragingHorn` | 분노의 뿔 | helm · warrior | `chargeRefund` | `{ragePerHit: 5, resetAt: 3, resetTo: 1.0}` — 돌진 적중당 분노 · 한 돌진에 3마리 이상 맞히면 남은 쿨다운을 1초로(넉백 면역 1초와 함께 무한 넉백 루프가 없다) | 3~4 |
 | `ancestorBelt` | 선조의 허리띠 | belt · warrior | `warCryHeal` | `{pct: 0.25}` | 3~4 |
-| `tremorFists` | 진동 주먹 | gloves · warrior | `stompShockwave` | `{len: 10, width: 2.0, coef: 1.0}` — 지면 강타가 앞으로 충격파 | 3~4 |
+| `tremorFists` | 진동 주먹 | gloves · warrior | `stompShockwave` | `{len: 10, width: 2.0, coef: 1.0}` — 회전 베기가 앞으로 충격파(피드백 1 — 옛 지면 강타) | 3~4 |
 | `piercingFlame` | 꿰뚫는 화염 | wand · mage | `fireballPierce` | `{pierce: 3}` — 화염구가 관통하며 맞힐 때마다 폭발 | 3~4 |
 | `stormOrb` | 폭풍의 구체 | orb · mage | `chainBounce` | `{extra: 2}` | 3~4 |
 | `frostWalkers` | 서리 걸음 | boots · mage | `teleportNova` | `{}` — 순간이동 도착에 서리 노바(그 랭크 · 없으면 1랭크 · 비용 없음) | 3~4 |
@@ -2642,7 +2645,7 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 |---|---|---|
 | 한 판 5~8분 · 분당 처치 40~80 | 일반 300 + 기타 ≈ 320처치 / 분당 ~58 ≈ 5.5분 + 수호자 ~45초 + 줍기 | **약 6.3분 · 분당 ~58** |
 | 첫 판(균열 1 · 시작 장비 · 스킬 0점에서 시작) ≤ 9분(measure.test 3~9분) | W1 수정: 레벨 2 = 일반 ~12처치(첫 팩 · 실측 0.7분) → 액티브 1개(지면 강타 · 화염구) → 레벨 3 ≈ 72처치(실측 2.3분) → 레벨 4 ≈ 212처치(실측 4.6~5.3분) → 게이지 100% ≈ 처치 220(`earlyGaugeMul` 1.6 · 실측 6.3~6.7분) + 수호자(28 × 1.1배 · 실측 46~88초 · 중앙 68초 — 잿빛 마녀는 W1 스텁이라 공격하지 않는다) · 받는 피해는 `RIFT.earlyDmg`(균열 1 × 0.205 — W1 수정 2 · 3) | **실측 중앙 7.4분(전사) · 8.0분(마법사)** — `scriptedClear`(피하기 없음) 두 클래스 × 시드 1~8(NOTES-W1FIX · W1 수정 3 값) · 손잡이 `RIFT.earlyGaugeMul` · `XP.reqEarly` · `RANKS.guardian.hp` · `RIFT.earlyDmg[0]` |
-| 일반 몬스터 기본 공격 2~4방 | 구울 생명 = 19 × 1.14^(L−1). 시작 전사(검 5 × 1.10 × 1.025 = 5.64) L1 **3.4방** · 시작 마법사(마법봉 4.5) **3.7방**. 적정 장비(ilvl L−1 · 옵션 2~4.8) L5 2.9 / L10 2.5 / L20 2.4 / L30 3.0(전사 · L > 20은 hpLate 1.12) · 마법사는 ×0.9. 종류 배율(소인 0.8 · 방패 1.2 · 짐승 1.3)을 곱해도 2~4(방패 해골 정면은 50% — 옆 · 뒤 · 범위 · 밀치기 뒤 후딜이면 그대로) | ✓ |
+| 일반 몬스터 기본 공격 2~4방 | 구울 생명 = 19 × 1.14^(L−1). 시작 전사(검 5 × 1.10 × 1.025 = 5.64) L1 **3.4방** · 시작 마법사(마법봉 4.5) **3.7방**. 적정 장비(ilvl L−1 · 옵션 2~4.8) L5 2.9 / L10 2.5 / L20 2.4 / L30 3.0(전사 · L > 20은 hpLate 1.12) · 마법사는 ×0.9. 종류 배율(소인 0.8 · 방패 1.2 · 짐승 1.3)을 곱해도 2~4(방패 해골 정면은 50% — 옆 · 뒤 · 범위 · 밀치기 뒤 후딜이면 그대로) · **피드백 1**: 가르기는 닿는 적마다 같은 계수 1.00(대상 하나 → 반원 안 모두) — 이 줄의 산수는 그대로 · 봇 실측 2.0방 | ✓ |
 | 챔피언 팩 8~20초 · 정예 팩 15~35초 · 수호자 30~70초 | 기본 공격 DPS × 스킬 순환 1.7(단일) × 범위 효율 1.9(팩) · 속성 보정 +20~25%. 챔피언 팩(3 × 3.5배): L1 11.7 / L10 8.3 / L20 7.7초(전사) · 정예 팩(7배 + 하수인 4 × 2배): 23.7 / 16.7 / 15.5초 · 수호자(28 × 1.1배 — W1 수정 · 35 → 28): 51 / 36 / 34초(35였으면 64 / 45 / 42 · 균열 1은 강인함(생명 × 1.5)이 63%라 시작 장비 실측 50~95초 · **고레벨 실측은 계산보다 짧다**: 재검증(개발 캐릭터 · 무적) 전사 균열 5 / 10 / 15 = 51.6 / 24.3 / 23.2초 · 마법사 42.2 / 7.5 / 8.2초 — W1 설계 값이면 전사 68.8 / 39.8 / 43.8초. 하나씩 되돌리면 `guardian.hp` 35만 66.4 / 30.5 / 29.1 · 분노 6 · 지면 강타 20만 56.0 / 30.2 / 31.7 · 흡혈 0.01만 55.5 / 24.7 / 24.7 — 개발 장비만이 아니라 `guardian.hp` 28과 분노 8 / 지면 강타 14가 각각 약 절반씩 줄였다 · W2 봇으로 다시) · 마법사는 약 10% 빠르다 · 수호자 저항은 종류 0.15뿐(속성 저항 없음 — 화염 마법사 대 잿빛 마녀 ≈ ÷ 0.85) | 수호자 ✓ · 정예 ✓(경계) · 챔피언은 L10 이상에서 8초 경계 — 게이트가 `RANKS.champion.hp`를 3.5~4.0에서 본다 |
 | 드랍(한 판 · MF 0) 장비 30~60 · 마법 10~25 · 희귀 3~8 · 전설 0.2~0.5 · 세트 0.05~0.15 | §7.8 표의 기대값(L5): 장비 42.5(수호자 전 36.9) · 일반 20.0 · 마법 16.9 · 희귀 5.24 · 전설 0.311(불운 보정 켬 ~0.41) · 세트 0.085. L1 → L30: 전설 0.28 → 0.47 · 희귀 5.0 → 6.5 | ✓ |
 | 첫 전설 2~5판 | 몬테카를로 400캐릭터 × 20판(레벨 경로 1→7): 불운 보정 켬 첫 전설 판수 중앙 3 · 25% 2 · 75% 4 · 90% 6 / 끔 중앙 3 · 75% 5 · 90% 8. 전설 사이 장비 드랍 수 최대 = `BLP.hard` 400(끔: 687) | ✓ |
@@ -2663,6 +2666,23 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 **W1 수정 실측(NOTES-W1FIX — 최종에 바뀐 🔒 값은 `TREASURE` 구슬 맞교환 · `RANKS.guardian.hp` 28 · `XP.reqEarly` 셋이다)**: 받는 피해의 총량이 회복(포션 5 · 구슬)을 크게 넘었고(실측 한 판 전사 ~10,000 · 마법사 ~6,500 — 생명 120/90), 그 절반이 몸 둘레 제한이 없는 궁수 화살이었다. 첫 수정은 🔒 `MON.dmgBase`(3.5 → 0.9)와 궁수 dmg(0.8 → 0.5)를 전역으로 낮췄는데, 검증이 균열 5 이상의 위협이 사라졌음을 실측으로 냈다(개발 캐릭터 · 해금 최고 + 3 붕괴 0/36 · 받는 피해 W1의 16~29%). **W1 수정 2**: `dmgBase` 3.5 · 궁수 0.8로 되돌리고, 첫 판 완화를 균열 레벨에 묶었다 — `RIFT.earlyDmg` [0.2, 0.3, 0.45, 0.67] → **W1 수정 3** [0.205, 0.305, 0.453, 0.673](§7.3 · 균열 5부터 × 1 · 레벨 비 ≤ 1.25). 남은 것: 🔒 `TREASURE` normal · minion의 globe ↔ none 맞교환(25 → 80 · 80 → 150 — 장비 · 골드 · 포션 · 재료의 뽑기당 확률은 그대로라 위 드랍 · 골드 · 경제 · 재료 행은 변하지 않는다) · 🔒 `RANKS.guardian.hp` 35 → **28**(위 수호자 행 · 35면 균열 1 수호자 ~90초에 사망이 몰린다) · 🔒 `XP.reqEarly`(위 경험치 행) · 궁수 · 주술사 뒷걸음 0.3 · 흡혈 재생 0.01 → 0.003 · 초반 경사(`MON.linkMinDepth` 2) · 깊은 방 파도(`MON.linkRadius` 11) · 첫 판(`earlyGaugeMul` 1.6 · 분노 8 · 지면 강타 14) · 사망 진정(§5.10). 결과(`scriptedClear` learn — 피하기 · 우선 대상 없음 · W1 수정 3 값): 균열 1 첫 판(시작 장비 · 두 클래스 × 시드 1~8) 완료 8/8 · 8/8 · 붕괴 0 · 사망 중앙 0 · 0(평균 0.75 · 0.50) · 판 길이 중앙 7.4 · 8.0분(최대 8.6) · 최저 생명 비율 중앙 0.388 · 0.394 · 25마리 이상 순간 중앙 4.5 · 3.5(시드 9~16도 완료 8/8 · 8/8 · 사망 중앙 0 · 0). 균열 5 이상(개발 캐릭터 (R, 레벨) = (5, 10) · (10, 18) · (15, 24) · 시드 1~6): 해금 최고 + 3 붕괴 7/36(W1 수정 2 6 · W1 수치 14 · 첫 수정 0 — W1 수정 3의 부활 규칙 몫 +1) · 적정 사망 평균 전사 0.67 · 0 · 0 · 받는 피해 W1의 67~117% — 남은 차이는 설계 수정(뒷걸음 · 흡혈 재생 · 분노 · 수호자 생명)의 몫이다(NOTES-W1FIX §3.3). 레벨 비(어려움 · 보상 0.8~1.25)는 균열 5~20은 그대로(1.02~1.03)이고 균열 1~5는 경사로 1.2475~1.2485다. 봇으로 다시 잴 것: 적정 레벨 사망 0.2~1.0 · 무회피 2배 · 해금 최고 + 3 붕괴 ≥ 50%(하네스로는 W1 수치로도 못 미친다 — 특히 마법사) · 시작 장비 균열 8 붕괴 ≥ 80%(하네스 8/8) · 속성 효과 ≥ 5% · 수호자 30~70초(재검증 무적 실측 전사 균열 10 · 15 = 24.3 · 23.2초 · 마법사 7.5 · 8.2초 — `guardian.hp` 28 · 분노 8 / 지면 강타 14가 각각 약 절반 · 개발 장비 몫과 섞여 있다).
 
 **밸런스 게이트(NOTES-BALANCE) — 위 표의 산수 중 낡은 줄**: 이 문단 앞의 계산은 설계 · W1 값(🔒 `MON.dmgBase` 3.5 · `hpBase` 19 · `RANKS` 챔피언 3.5 · 정예 7 · 수호자 28 · `earlyGaugeMul` 1.6 · 수리 57.2 · `XP.req.a` 1100 · `BOT.reactSec` 0.22)로 했다. 게이트가 바꾼 값(§7.1 · 7.2 · 7.3 · 7.4 · 7.5 · 7.5b · 7.10 · 7.11 · 7.12 · 7.13 의 「밸런스 게이트」 표시)은 봇 실측(`npm run measure` → `docs/MEASURE.md` · 시드 1 · 9시간 세션)이 산수를 대신한다 — 한 판 6.0 / 5.2분(전사 / 마법사) · 첫 판 완료 사망 0 · 수리/수입 14 / 13% · 분당 처치 64 / 68 · 기본 공격 2.0방 · 챔피언 팩 11.9 / 8.8초 · 정예 팩 20.4 / 17.3초 · 수호자 50.6 / 38.7초 · 적정 사망/판 0.33 / 0.54 · 무회피 1.87 / 1.92배 · 해금 + 3 붕괴 88 / 60% · 레벨 곡선 비 1.19 / 1.20. 낡은 줄: 「첫 판」(일반 처치 수는 `earlyGaugeMul` [1.5, 1.35, 1.2, 1.1] 로 · 받는 피해는 `earlyDmg` · `earlyHp` 11칸으로 — §7.3) · 「챔피언 · 정예 · 수호자」(배율 8 · 15 · 32) · 「사망 수리비」(71.5 × G^(ilvl−1) → 장착 ilvl = L−1 이면 16.0% — 실측 13~14%) · 「경험치」(a 1300 → 레벨 10 = 18,368 · 30 = 486,866) · 「레벨 비」(균열 1~11 경사 · 성장을 더한 레벨당 어려움 +36.3% · 비 ≤ 1.2467 · 균열 12~20 1.02~1.03 그대로 — 실측 직선 맞춤 1.19 · 1.20). 「진행 속도」는 봇이 9시간 세션에서 잰 것이 정본이다(시드 1: 균열 5 29 / 24분 · 균열 10 1.83 / 1.77시간 · 레벨 30 6.52 / 4.99시간 — 시드마다 흔들린다 · 4시드는 NOTES-BALANCE §2).
+
+**피드백 1(Jay 2026-10-12 · 게임플레이 담당) — 가르기 · 회전 베기 · 골드 더미 · 봇 규칙**: 바뀐 것 — `bash` 동작 meleeBasic → cleave(부채꼴 r 1.9 · 180° · 닿는 적 모두 · reach 1.1 → 1.2 · coef 1.00 🔒 그대로) · `groundStomp` cone(원뿔 r 4.0 · 120° · 1.05 / +0.11 · 기절) → spinSlash(원 r 2.5 · 360° · **1.20 / +0.09** · 넉백 0.8) · `aftershock` → 연속 회전(효과 `spinEcho` · `follow:'player'`) · `TREASURE` normal · minion 의 골드 무게 · goldMul(§7.8 — 기대 골드 그대로) · `BOT_RULES.spinSlash`(inner 0.5) · `spin.count` 3 → 2 · 회오리를 바에 둔 빌드는 회전 베기가 분노 30 을 남긴다 · 수호자 단계에서 미니맵의 수호자 점으로.
+- **정타 처치 수(회전 베기 한 번 = 그 랭크의 판정 정의 그대로 · 넉백 빼고 같은 자리 · 60회 평균)** — 「적정 레벨」 = 봇 basic 4시드(601~604 · 4.5시간) 세션이 그 균열을 돌 때의 캐릭터 레벨(중앙). 구울 / 소인 / 궁수 / 방패 해골(정면 — 회전 베기는 aoe 라 정면 막기 없음):
+
+| 균열 | 캐릭터 레벨 · 랭크 | 개발 장비(`makeDevCharacter` — 기준) | 봇 장비(그 판 시작의 봇 캐릭터) |
+|---|---|---|---|
+| 1 | 4.5 · 2 | 1.48 / 1.15 / 1.18 / 1.85 | 1.64 / 1.31 / 1.37 / 1.98 |
+| 3 | 8 · 3 | 1.94 / 1.54 / 1.68 / 2.10 | 1.55 / 1.19 / 1.23 / 1.85 |
+| 5 | 11.5 · 3 | 2.15 / 1.98 / 2.03 / 2.63 | 1.54 / 1.18 / 1.23 / 1.82 |
+| 10 | 19 · 5 | 2.61 / 2.21 / 2.14 / 2.93 | 1.65 / 1.29 / 1.34 / 1.95 |
+| 15 | 26 · 5 | 1.99 / 1.75 / 1.92 / 2.22 | 1.78 / 1.44 / 1.53 / 2.02 |
+| 모두 | | 중앙 **1.99** · 평균 1.97 | 중앙 1.53 · 평균 1.54 |
+
+  시작 장비 첫 판(새 캐릭터 검 · 갑옷 · 균열 1~3 · 레벨 2~8 · 랭크 1~3): 평균 **2.82**(2.15~3.97 · 같은 표에 옛 지면 강타 계수를 넣으면 3.06). 기준을 개발 장비로 둔 까닭: 봇 장비는 개발 장비의 약 2배 힘이고(봇 레벨이 판마다 +1 · 6분 규칙에 묶여 캐릭터 힘보다 늦게 오른다) 그 기준으로 2~3번이면 시작 장비 첫 판이 3.5~4번이 된다 — Jay가 처음 만지는 첫 판과 README 「바로 해 보기」 개발 캐릭터 둘 다 2~3번 안에 두는 값을 골랐다(`balance.test` 「피드백 1」이 데이터를 바꾸면 깨진다). 마법사 첫 광역(같은 표 · 2시드): 화염구 개발 1.72 · 봇 1.41 · 시작 2.9 / 서리 노바 개발 3.12 · 봇 2.44 · 시작 3.8 — 기준(개발 장비 1.5~3.5) 안이라 그대로.
+- **가르기(기본 공격 · 개발 장비)**: 구울 1.9~3.6 · 소인 · 궁수 1.5~3.1 · 방패 해골 정면 3.6~7.9(정면 막기 50% — aoe 아님) · 등 뒤 2.0~4.3 / 봇 장비 구울 2.0~2.8. 봇 세션 「기본 공격 타수」 중앙 2.0(목표 2~4).
+- **회귀(같은 하네스 · 옛 코드 = HEAD 사본 · 전사 시드 601~604 · 마법사 601 · 602 · 4.5시간 · 옛 → 새 · 아래 수치는 전사 4시드)**: 한 판 중앙 5.95~6.17 → 5.87~6.11분 · 분당 처치 58~64 → 59~68 · 사망/판 0.15~0.49 → 0.29~0.49 · 챔피언 팩 10.3~12.5 → 8.9~10.9초 · 정예 팩 17.4~18.6 → 16.2~21.0초 · 수호자 45.9~49.6 → 43.2~54.7초 · 전사 균열 10 해금 1.04~1.68 → 1.40~1.53시간(+0.12 성장이면 1.06~1.33 — 그래서 +0.09) · 처치당 골드(두 클래스 6세션 · ÷ 균열 골드 배율) 0.362 → 0.359 · 마법사(바뀐 것은 골드 · 봇 수호자 찾기뿐) 한 판 5.83~5.95 → 5.97~6.36분 · 사망/판 0.23~0.27 → 0.23~0.26. 첫 판(새 캐릭터 · basic 봇 · 시드 6 · 7 · 21~28): 전사 10/10 완료 · 사망 0 · 4.95~7.87분(옛 5.73~7.69) · 마법사 10/10 · 4.19~7.04분. 빌드 비교(레벨 12 · 균열 6 · 15판): 전사 A 6.77 / B 9.04분 → A 6.72 / B 8.53분(시드 1 · 2 평균) · 마법사 A 7.50 / B 8.64분. `npm run measure`(시드 1 · 9시간 · 새 코드): ✓ 26 · ✗ 11(옛 MEASURE.md ✓ 24 · ✗ 13) — 무회피 배수 2.27 / 2.26(✓ · 옛 1.87 / 1.92) · 경제 남는 골드 ✓ · 두 프리셋끼리 전사 26%(옛 26%) · 시작 장비 균열 8 붕괴 전사 50%(옛 75% — ✗ 넓어짐) · 균열 10 해금 1.72 / 2.06시간 · 클래스 차 11% · 20%.
+
 
 ---
 
@@ -2736,7 +2756,8 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 
 | 동작 | 읽는 params 키(기본값) | 패치하는 것 |
 |---|---|---|
-| `cone` | `shake` · `aftershock(null)` · `shockwave(null)` | 여진 `{aftershock:{delay:0.5, mul:0.6}}` · 진동 주먹 `{shockwave:{len:10, width:2.0, coef:1.0}}` |
+| `cleave`(피드백 1) | `swing`(연출) | — |
+| `spinSlash`(피드백 1 — 옛 `cone`) | `shake(0)` · `swing`(연출) · `fxAftershock` · `fxShockwave` · `aftershock(null)` · `shockwave(null)` | 연속 회전 `{aftershock:{delay:0.5, mul:0.6}}` · 진동 주먹 `{shockwave:{len:10, width:2.0, coef:1.0}}` |
 | `quake` | `waves` · `shake` | — |
 | `dash` | `speed` · `refund(null)` | 분노의 뿔 `{refund:{ragePerHit:5, resetAt:3, resetTo:1.0}}` |
 | `spin` | `moveMul` · `endRecover` · `healPerTarget(0)` · `healTargetsCap(0)` · `vortex(null)` | 피의 회오리 `{healPerTarget:0.006, healTargetsCap:3}`(최대 생명 비율 · 채널 틱당) · 불타는 소용돌이 `{vortex:{everySec:0.6, r:2.0, dur:2.0, tick:0.5, coefPerSec:0.35}}` |
@@ -2832,14 +2853,16 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 |---|---|
 | idle | 숨쉬기(실제 시간 OK) |
 | move | 걷기 주기 = **이동한 거리 / 보폭**(보폭 1.4m at 6 m/s · 속도에 비례) — 발이 미끄러지지 않는다 |
-| attack | `[actStart, actHit)` 예비(무기를 뒤로) → **`actHit`에 무기가 대상 쪽 끝에 닿는 자세** → 후딜에서 돌아옴. 양손 무기는 위에서 내려치기 · 한손은 대각 베기 · 마법봉은 찌르기 |
-| cast | 두 손을 앞으로(화염구 · 연쇄) · 위로(메테오) · 아래로(서리 노바 · 지면 강타 = 무기를 바닥에) |
+| attack | `[actStart, actHit)` 예비(무기를 뒤로) → **`actHit`에 무기가 대상 쪽 끝에 닿는 자세** → 후딜에서 돌아옴. 양손 무기는 위에서 내려치기 · 한손은 대각 베기 · 마법봉은 찌르기. **피드백 1 — 횡베기(가르기 `cleave` · 회전 베기 `spinSlash`)**: `getSkillDef(p.actSkill)`의 `behavior`가 둘 중 하나면 무기 종류와 무관하게 수평으로 벤다 — 행의 `params.swing {from, to, arcFrom, arcTo}`로: 진행 k = (tick + alpha − actStart) / (actEnd − actStart) · u = clamp((k − from) / (to − from), 0, 1) · 칼끝 방위 = `p.facing` + deg2rad(arcFrom + (arcTo − arcFrom) × ease(u))(§0.2 — 몸의 오른쪽 = facing − 90° · 왼쪽 = + 90° · 가르기 −90 → +90(오른쪽 → 앞 → 왼쪽 180°) · 회전 베기 −90 → +270(오른쪽에서 시작해 앞 · 왼쪽 · 뒤를 지나 한 바퀴 — 위에서 보면 반시계)) · k < from 은 arcFrom 쪽으로 감는 예비 · k > to 는 후딜. 회전 베기는 몸통 yaw 도 칼끝을 따라 한 바퀴(발은 제자리) · 판정 틱(`actHit` — 가르기 k 0.45 · 회전 베기 k 0.50)은 u 0.8~0.9 |
+| cast | 두 손을 앞으로(화염구 · 연쇄) · 위로(메테오) · 아래로(서리 노바) — 피드백 1: 회전 베기는 cast 가 아니라 attack(아래 swing) |
 | channel(회오리) | 몸 전체 회전 초당 3바퀴 · 무기 수평 |
 | dash | 앞으로 숙임 · 어깨 앞 |
 | leap | `air` 진행: 웅크림 0.1 → 포물선(최고 2.0m at 중간) → 착지 찌그러짐 |
 | blink | 시작 + 0.15초에 위치가 바뀐다 — 그 전후 0.1초 투명도(섬광 없음) |
 | recall | 무릎 꿇고 손에 빛(P13) |
 | dead | 0.6초에 쓰러짐 · 그대로 — **화면 패스 확정**: 쓰러지는 동안 몸을 화면 가로(카메라 방위 ± π/2 중 가까운 쪽 — `deadYawOffset`)로 돌려 눕힌다(시선 방향으로 누우면 55° 카메라에서 서 있는 T자로 읽혔다) |
+
+- **피드백 1(view 단계 · `view/actors/player.js`)**: `PlayerPoser`는 `SWING_BEHAVIORS`(`cleave` · `spinSlash`)의 attack 을 `_swing`으로 그린다(칼끝 방위 = 위 식 `swingAt(sw, now, actStart, actEnd)`). **가르기** — 발은 디딘 채 골반 · 가슴이 칼끝 방위의 `bodyShare` 0.75 를 돌고(골반 몫 `hipShare` 0.4) 팔이 나머지 · 골반을 칼끝 쪽으로 `shift` 0.16m · 상체 숙임 `lean` 0.28(양손 0.12) · 양손 무기는 오른팔을 가슴 앞(`twoHandArm`)에 두고 몸이 돌아 왼손이 손잡이에 남는다. **회전 베기** — 오른팔을 옆으로 뻗고(`spinArm` −1.35rad) 몸 전체가 칼끝을 따라 한 바퀴 · 발은 몸이 `step` π/2 돌 때마다 번갈아 옮긴다(`plant` 0.5 · 드는 높이 `lift` 0.09m — 디딘 발 미끄럼 ≤ 2mm) · 끝에 두 발이 제자리 · 앞을 본다. 손잡이 표 `SWING_POSE`(view 튜닝 — `KIND_STYLE`과 같은 꼴) · 새 export `SWING_BEHAVIORS` · `SWING_POSE` · `aimRightArm` · `armForTip` · `tipForArm` · `footStair` · `swingAt`. 판정 틱의 칼끝: 방위는 식과 5~6° 안 · 높이 0.85~1.2m(몬스터 몸통) · 반지름은 §9.6 표. 가르기는 aps 1.4에서 판정 틱에 칼이 +80° 근처(반원 가운데를 지나는 것은 판정 2틱 ≈ 67ms 전) — 반원 안의 적은 모두 같은 틱에 맞으므로 식을 그대로 둔다(손잡이 `bash.params.swing.to`). 쓰이지 않게 된 옛 attack 포즈(slash · overhead · punch)와 `CAST_FAMILY.cone`(slamDown)은 `magicBolt` 찌르기만 옛 길을 쓴다 — 예비로 남겨 둔다.
 
 **몬스터 템플릿 5** — 파라메트릭 로우폴리. 부위마다 `InstancedMesh` 하나(템플릿 × 부위 · 용량 `MAX_DRAWN = 160`) — **드로콜이 몬스터 수에 비례하지 않는다**(브리프 §8.7). 매 프레임 보이는 몬스터의 부위 행렬을 포즈로 계산해 넣는다.
 
@@ -2871,8 +2894,9 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 | 대상 | 판정(sim) | 보이는 것(view) | 차이 |
 |---|---|---|---|
 | 플레이어 몸 | 원 r 0.40 | 어깨 폭 0.48~0.52 · 발 사이 0.35 | ≤ 0.1 |
-| 강타 사거리 | 중심 거리 ≤ 0.4 + mon.r + 1.1(+ 관용 0.3) | 검 1.0 + 팔 0.3(한손) · 양손 1.5 | ≤ 0.3 |
-| 지면 강타 | 원뿔 r 4.0 · 120° | 바닥 충격 고리 4.0 · 120° 부채(P13) | 0 |
+| 가르기(피드백 1 — 옛 강타 사거리) | 다가가기: 중심 거리 ≤ 0.4 + mon.r + reach 1.2 · 판정: 플레이어 중심 부채꼴 r **1.9**(0.4 + 1.2 + 관용 0.3) · **180°** · 방향 facing · 몸 겹침 | 칼끝 높이 궤적 띠(바깥 r 1.9) + 판정 순간 바닥 칼자국 반원 r 1.9 · 180°(P13 — 궤적이 정본) · 판정 틱 무기 끝(aps 1.4 실측 — view 단계): 검 1.72 · 도끼/둔기 1.58 · 대검 2.22 · 대도끼 2.13 · 맨손 0.80~0.84 | 0(호가 정본) · 무기 끝 ≤ 0.32 · 맨손 1.1(예외 — 호가 정본) |
+| 회전 베기(피드백 1 — 옛 지면 강타 원뿔 r 4.0 · 120°) | 플레이어 중심 원 r **2.5** · 360° | 칼끝 높이 궤적 띠(바깥 r 2.5) + 판정 순간 바닥 칼자국 고리 r 2.5(P13 — 궤적이 정본) · 몸통이 한 바퀴 · 판정 틱 무기 끝(실측): 검 1.76 · 도끼/둔기 1.61 · 대검 2.05 · 대도끼 1.95 | 0(고리가 정본 — 회오리와 같은 규칙 · 무기 끝은 0.45~0.89 짧다: 팔 길이로 2.5에 닿지 않는다) |
+| 연속 회전(피드백 1 — 옛 여진) | 원 r 2.5 · 판정(hitAt) 때의 플레이어 자리(`follow:'player'`) | 대기 `[start, hitAt)` 동안 플레이어(그린 자리)를 따라가는 옅은 바닥 호 → 판정 전 0.2초 잔상이 한 바퀴 → 판정 틱 바닥 고리 r 2.5 + 칼끝 높이 잔상 고리 — 효과 `spinEcho`의 지금 `shape` 중심 | 0 |
 | 지진 | 원 r 6.0 · 파동 셋 | 퍼지는 고리 6.0(P13) | 0 |
 | 회오리 | 원 r 2.4 | 바람 고리 2.4 + 무기 끝 회전 반지름 0.4 + 1.0 = 1.4~2.0 | ≤ 0.35(고리가 정본) |
 | 돌진 | 선 폭 1.6 | 먼지 자취 폭 1.6 | 0 |
@@ -2910,17 +2934,18 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 - **몰타르 포탄 · 메테오 바위**: `from` → 표식 중심 포물선(진행 = 틱).
 - **속성 오라**(상태 `mon.affixes`): 빠름 바람 줄 · 강인함 금속광(P8 재질 — P13은 입자 없음) · 화염 강화 주황 발광 · 냉기 강화 서리 입자 · 번개 강화 전기 아크 · 흡혈 붉은 오라 · 순간이동 보라 잔상(`vanish`) · 감옥 쇠사슬 고리 · 보호막 금빛 반짝임(`ax.shielding.warnUntil` 동안) → 금빛 구체(`invulnUntil` 동안) · 분열 몸 균열 무늬 · 역병 연두 기포 · 몰타르 등의 포신.
 - **상태 표시**: 화상 불꽃 · 빙결 얼음 껍질(몸 크기) · 감전 불꽃 튐 · 기절 머리 위 별 · 냉기 푸른 기.
-- **스킬 연출**(`ACTION_HIT` · 효과 · 상태): 지면 강타 충격 부채 · 지진 고리 · 회오리 바람 기둥 · 돌진 먼지 · 도약 착지 먼지 · 전투 함성 금빛 고리 + 버프 오라 · 마력 보호막 푸른 구체(흡수량 비율로 불투명도) · 서리 노바 · 연쇄 번개 꺾은선(0.2초) · 순간이동 출발/도착 빛 · 귀환 시전 빛기둥.
+- **스킬 연출**(`ACTION_HIT` · 효과 · 상태): 가르기 반원 칼자국 · 회전 베기 원 칼자국(피드백 1 — 옛 지면 강타 충격 부채) · 연속 회전 잔상 칼자국(`spinEcho`) · 지진 고리 · 회오리 바람 기둥 · 돌진 먼지 · 도약 착지 먼지 · 전투 함성 금빛 고리 + 버프 오라 · 마력 보호막 푸른 구체(흡수량 비율로 불투명도) · 서리 노바 · 연쇄 번개 꺾은선(0.2초) · 순간이동 출발/도착 빛 · 귀환 시전 빛기둥.
 - **타격**: `HIT` → 종류별 불꽃(물리 흰 주황 · 화염 주황 · 냉기 하늘색 · 번개 흰 보라) · 치명타 크게 · `MON_DIED` → 먼지 · 뼈 조각(템플릿별).
 - **포털 소용돌이** · 레벨업 금빛 기둥(플레이어 주변만 · 화면을 덮지 않는다) · 수호자 출현 예고(검은 균열 + 보라 소용돌이 2초).
 - 화질: 입자 수 × `QUALITY.particles`. 입자 · 데칼 풀 상한(입자 2,000 · 데칼 200 — 브리프 §5 「투사체 · 바닥 효과 200」).
+- **피드백 1(view 단계 · `FxLayer.js` · `fx/actors.js` · `fx/style.js`)**: 횡베기 연출은 셋 — ① **칼끝 궤적**(`swingTrail` — 매 프레임 상태로: `player.act === 'attack'` · `actStart/actEnd` · `facing` · `params.swing`) 칼끝 높이 `SWING_FX.y` 0.95m 의 띠(바깥 = 판정 반지름 · 안쪽 = × `inner` 0.72 · 꼬리 `tailDeg` 110° 로 흐려짐 · 휘두름이 끝나면 `fadeK` 0.14 안에 사라짐) — 가산 배치 `swoosh`(새 · 상한 `CAP.swooshVerts` 6000 · `info().swooshVerts`) ② **바닥 칼자국**(순간 연출 새 종류 `'slash'` — `ACTION_HIT{bash}` 반원 r = `slashReach(def)`(몸 r + reach + `PLAYER.reachTolerance`) · `angleDeg` · `ACTION_HIT{groundStomp}` 고리 r = `radius` · 띠 폭 `ground` 0.16m · 세기 `groundA` 0.55 · 0.3초) · 색 `PLAYER_FX.slash` 0xfff0d6(따뜻한 흰색 — 붉은색 없음 · 옛 `stomp` 충격 부채 · 균열 무늬 · 먼지는 없다) ③ **연속 회전**(`KIND_STYLE.spinEcho` — 예고 표식 없음 · pre `'spinGhost'`: 대기 동안 바닥 호가 진행만큼 자라며 `follow:'player'`면 그린 플레이어 자리를 따라간다(`echoPreA` 0.16) · 판정 전 `echoGhostSec` 0.2초 잔상이 한 바퀴를 돌아 판정 틱에 마친다 · hit `'slash'` 바닥 고리 + 칼끝 높이 잔상 고리(`sheet` 0.35 · `echoSheetSec` 0.15초) · 잔상 색 `SWING_FX.echo` 0xcfe6ff). 놓친 `ACTION_HIT`은 `HIT_ACTS`에 `'attack'`을 더해 상태(`actId` · `actHit`)로 한 번 세우고, 놓친 `EFFECT_HIT`은 `rift.effects`에서 `hitAt`이 막 지난 효과로(효과 ID마다 한 번) 세운다. 손잡이 표 `SWING_FX`(view 튜닝).
 - **W2 확정(P13)**: 궁수 조준선(공격 행 `telegraph: 'aimLine'` · `mon.aim` · `aimLocked`면 굵게)과 시전 빛(`'glow'` · cast + aim이면 대상 자리 빛기둥)은 P13이 상태로 그린다(P8은 그리지 않는다). 입자 상한 2,000 = 시뮬 입자(가산 1,100 + 먼지 300) + 프레임 스프라이트(오라 · 상태 · 포털 · 후광) 600 · 데칼 200 = 상태 효과 + 순간 표식 합. 몰타르 · 잿불 비 낙하체는 효과의 `from`이 있을 때만(없으면 바닥 표식만). 순간 연출은 이벤트 + 상태 대체 경로(놓친 `EFFECT_HIT` · `ACTION_HIT`을 효과 ID · `player.actId`로 한 번 세운다).
 
 ### 9.8 연출 ID 목록 (효과 `kind` · 투사체 `visual` — 만드는 쪽 / 그리는 쪽 P13)
 
 | 효과 kind | 만드는 쪽 | 적대 | 모양 |
 |---|---|---|---|
-| `stomp` · `quakeWave` · `shockwave` · `meteor`(지속 구간 [hitAt, end)은 불타는 바닥) · `vortex` · `afterimageBlast` · `corpseBlast` · `iceBurst` · `chainArc` | P1 | ✗ | 원뿔 · 원 · 선 · 꺾은선 |
+| `spinEcho`(피드백 1 — 옛 `stomp` · 원 · `follow:'player'`) · `quakeWave` · `shockwave` · `meteor`(지속 구간 [hitAt, end)은 불타는 바닥) · `vortex` · `afterimageBlast` · `corpseBlast` · `iceBurst` · `chainArc` | P1 | ✗ | 원뿔 · 원 · 선 · 꺾은선 |
 | `chargeLine` · `bloaterBurst` · `poisonPool` | P3 | ✓ | 선 · 원 |
 | `fireDeath` · `coldNova` | P3 | ✓ | 원 |
 | `jail` · `plague` · `mortar` | P16 | ✓ | 원 |
@@ -2939,7 +2964,7 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 
 | 이벤트 | fx(P13) | 카메라(P7) | 소리(P14) |
 |---|---|---|---|
-| `ACTION_START` | 시전 빛(손) | — | 휘두름 · 시전 시작 |
+| `ACTION_START` | 시전 빛(손) | — | 휘두름 · 시전 시작 — 피드백 1: 가르기 = 휘두름(`swing` — 옛 강타와 같다) · 회전 베기 = 한 바퀴 휘두름(`spinSwoosh`) |
 | `ACTION_HIT` | 스킬 순간 연출 | — | 스킬별 타격(종류마다 질감) |
 | `HIT` | 불꽃 | — | 몬스터 피격(템플릿별 · 상한) |
 | `HITSTOP` | — | — | — (app이 멈춘다) |
@@ -2947,7 +2972,7 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 | `MON_DIED` | 먼지 · 뼈 | — | 사망(템플릿별) |
 | `MON_ACT` | 발광 예고(glow) | — | 예고음(공격 kind별 · 정예는 크게) |
 | `AFFIX` | 속성 순간 연출 | — | 감옥 · 몰타르 · 보호막 · 냉기 노바는 고유 예고음 |
-| `EFFECT_SPAWN` · `EFFECT_HIT` | (상태로 그림) · 폭발 | 큰 효과면 흔들림(발행 쪽이 `SHAKE`) | 예고음 · 쾅 |
+| `EFFECT_SPAWN` · `EFFECT_HIT` | (상태로 그림) · 폭발 | 큰 효과면 흔들림(발행 쪽이 `SHAKE`) | 예고음 · 쾅 — 피드백 1: 연속 회전(`spinEcho`) 판정 = 잔상 휘두름(`echoSwoosh`) |
 | `DROP_SPAWN` | — | — | 등급별 · 전설 · 세트 고유 종소리 |
 | `DROP_PICKED`(gold) | — | — | 짤랑 |
 | `POTION` · `PLAYER_HEAL` | 붉은/녹색 기 | — | 마심 |
@@ -2975,6 +3000,7 @@ export const BOT = { reactSec: 0.30, reactSd: 0.08, dodgeNotice: 0.85, missClick
 - 지속음: 회오리(`player.channel`) · 귀환 시전(`player.recall`) · 환경음(마을 모닥불 `townFire` · 묘지 바람 `cryptWind` · 동굴 용암 `cavernLava` — `state.scene` · `rift.tileset`). 탭 숨김 · 일시정지 · 판 끝(장면 전환)에서 정리(QUALITY §5).
 - 소리 목록(§9.9의 열 + UI 클릭 · 패널 열기/닫기 · 거래 · 실패음).
 - **W2 확정(P14)**: UI 버스 볼륨 = `volSfx × MIX.ui`(설정에 UI 볼륨이 없다). 일시정지 둘 — `setPaused(true)`(탭 숨김) = 모든 소리를 끊고 suspend · `PAUSED{menu|modal|blur|debug|context}` = 전투 지속음만 멈추고 환경음 × 0.35(UI · 거래 · 실패음은 난다). 0.06초 안 4개를 넘는 몰림은 그 뒤 소리를 줄인다(우선순위 5 — 고유 예고 · 정예 경보 · 전설/세트 종 · 레벨업 · 사망 · 수호자는 제외). 일반 버튼 클릭 이벤트는 없다(딸깍은 `PANEL_OPENED/CLOSED` · `BAG` · `SKILLS` · `SETTINGS_CHANGED` · `TRADE` · 실패음으로).
+- **피드백 1(수정 단계 · `audio/sounds.js`)**: `START_BY_BEHAVIOR` `cleave` → `swing`(옛 강타와 같은 휘두름) · `spinSlash` → `spinSwoosh`(새 레시피 — 대역 잡음이 올라갔다 내려오는 한 바퀴 휘두름 · 행동 0.6초 중 휘두르기 0.09~0.33초에 맞춘 층 지연) · `HIT_BY_BEHAVIOR` 둘 다 `null`(판정 틱의 소리는 맞은 적마다의 `HIT` 타격 — 30ms 합치기 · 옛 지면 강타의 쿵 `stomp`은 없다) · `EFFECT_BOOM.spinEcho` → `echoSwoosh`(새 — 가볍고 높은 잔상 휘두름 + 옅은 쇳소리 · 플레이어 소유라 `EFFECT_SPAWN`에는 소리가 없다). sim 이 더 만들지 않는 열(`meleeBasic` · `cone` · 효과 `stomp`)은 지웠다 — 레시피 `stomp`은 진동 주먹(`shockwave`)이 그대로 쓴다. `audio.test` 「피드백 1」이 실제 이벤트(`ACTION_START{bash|groundStomp}` · `EFFECT_HIT{spinEcho}`)로 세 소리가 나고 서로 다른 음색인지 본다.
 
 ---
 
@@ -3038,6 +3064,7 @@ export class UIRoot {
 
 - 모든 거래 패널은 **전 · 후 수치를 나란히** 보인다(골드 · 재료 · 시트 DPS · 생명 · 방어 · 저항 — QUALITY §3). 패널을 연 채 명령을 부르고, 결과 `{ok:false}`면 `t('reason.' + reason, params)`를 패널 안에 보인다.
 - **봇이 켜져 있는 동안**(`BOT{on:true}`) ui는 `INTERACT` · `HINT` · `PLAYER_DIED` · `RIFT_COMPLETE`로 패널을 열지 않는다(봇이 모달에 막히지 않게 — §11.13) · 봇을 끄면 상태에 맞는 패널(사망 · 완료)을 연다.
+- **피드백 1(ui 단계) — 저생명 포션 안내**: 첫 판들(`char.runs ≤ 3` · `UIRoot.POTION_NUDGE_RUNS`)에서 처음으로 `potionUrge`(§10.3)가 참이 되면(모달 없음 · 봇 끔 · 균열) 비모달 안내 `hint.potion.title|body`(`ui.notice(…, {big:true})` · 6초)를 한 번 낸다. ui 전용이다 — `HINT` 이벤트가 아니고 `HINT_IDS`에 없으며 저장하지 않는다(세션 · 캐릭터마다 한 번 · `CHAR_LOADED`에 되돌린다 · 새로 읽으면 다시 날 수 있다). 위 비모달 안내 여섯과 별개다.
 - **안내 큐**: `PLAYER_DIED`부터 다음 `PLAYER_SPAWNED{reason:'portal'}`까지 받은 `HINT`는 큐에 두었다가 그 뒤 비모달 안내로 낸다(재도전 경로에 카드가 끼지 않는다 — 키 2번 · QUALITY §3).
 - **W2 확정**: 새 캐릭터 덮어쓰기 확인은 **패널이** 한 번 받는다(`account.chars[slot]`이 차 있으면 confirm → `actions.newChar({slot, cls, name, confirmed:true})`) · app은 확인을 다시 묻지 않고 저장소에 `char:<slot>` 키가 있으면 백업만 한다. 사망 패널의 Escape는 패널을 닫지 않고 일시정지를 위에 연다(쓰러진 채 패널이 없는 상태 금지). Enter 버퍼 둘: ① 쓰러진 뒤 사망 패널이 뜨기 전의 Enter → 패널이 뜨는 틱에 `actions.respawn()`(겹쳐 보는 패널보다 먼저) ② 전환 막(FADE)이 걷히는 동안의 Enter → 막이 걷힌 뒤 복귀 안내가 떠 있으면 `actions.returnToRift()`(유효 1.2초 · 실제 시간). 봇이 켜져 있으면 모달 안내(town · controls)도 비모달 꼴로 내고 본 것으로 적는다. 막 · 알림 · 배너 · 피해 숫자는 `dtReal`(디버그 step이면 막과 Enter 버퍼만 벽시계)로 흐른다 — `__game.step` 정지 화면에서 막의 걷힘은 실제 시간이 지나야 끝난다(헤드리스 흐름 검사는 전환 뒤 실제 시간을 기다린다).
 
@@ -3045,8 +3072,8 @@ export class UIRoot {
 
 | 자리 | 요소 | 읽는 것 |
 |---|---|---|
-| 하단 중앙 왼쪽 | **생명 구슬** · 보호막 겹 · 저생명 맥동(섬광 아님) · 포션 수(Q) + 쿨다운 부채 | `player.life/lifeMax` · `shield` · `lowLife` · `char.potions` · `potionReadyAt` |
-| 하단 중앙 | **스킬 바** 6칸: [좌클릭 기본] [우클릭] [1] [2] [3] [4] — 아이콘(이름 두 글자 + 갈래 색 — **화면 패스 확정** `skillGlyph`: 여러 낱말이면 낱말마다 첫 글자 · 한 낱말이면 앞 두 글자 · 첫 글자만이면 「지면 강타 · 지진」이 겹쳤다 · **리뷰 수정**: 규칙대로면 다른 낱말로 읽히는 것은 문자열 `glyph.<노드 ID>` 예외 — 전투 함성 「함성」 · 연쇄 번개 「연쇄」 · 화염구 「화구」) · 키 표시 · 쿨다운 부채 · 자원 부족이면 흐림 · 빈 칸 점선 | `char.skills.bar` · `skillReady` |
+| 하단 중앙 왼쪽 | **생명 구슬** · 보호막 겹 · 저생명 맥동(섬광 아님) · 포션 수(Q) + 쿨다운 부채 — **피드백 1(ui 단계)**: 포션 칸은 구슬 왼쪽의 붉은 병(`.consum-potion` · 병 목 · 몸통 · 액체 · 큰 수 · Q 배지 · 아래 「포션」 · 쿨다운 부채는 병 몸통 위 `is-cd` · 0개면 빈 병 · 붉은 0 `is-empty` · 툴팁 `hud.potionTip`) · **재촉** `is-urge` = 순수 함수 `hud.potionUrge(p, ch, tick)`(살아 있고 `lowLife` · `potions > 0` · `potionReadyAt ≤ tick`) — 병과 Q 가 금빛으로 까딱인다(구슬의 붉은 맥동과 색 · 주기 · 자리가 다르다) | `player.life/lifeMax` · `shield` · `lowLife` · `char.potions` · `potionReadyAt` |
+| 하단 중앙 | **스킬 바** 6칸: [좌클릭 기본] [우클릭] [1] [2] [3] [4] — 아이콘(이름 두 글자 + 갈래 색 — **화면 패스 확정** `skillGlyph`: 여러 낱말이면 낱말마다 첫 글자 · 한 낱말이면 앞 두 글자 · 첫 글자만이면 「지면 강타 · 지진」이 겹쳤다 · **리뷰 수정**: 규칙대로면 다른 낱말로 읽히는 것은 문자열 `glyph.<노드 ID>` 예외 — 전투 함성 「함성」 · 연쇄 번개 「연쇄」 · 화염구 「화구」 · 피드백 1: 회전 베기 「회전」(규칙대로면 「회베」)) · 키 표시 · 쿨다운 부채 · 자원 부족이면 흐림 · 빈 칸 점선 | `char.skills.bar` · `skillReady` |
 | 하단 중앙 오른쪽 | **자원 구슬**(분노 붉은 주황 · 마나 파랑) · 두루마리 수(T) — **최종 게이트**: 완료한 균열(요약 있음 · 살아 있음)에서는 수 대신 녹색 「마을」(T = 무료 · 즉시 마을로 · controller.handleEdges 와 같은 조건) | `resource/resourceMax` · `char.scrolls` · `rift.phase` · `rift.summary` |
 | 하단 끝 | **경험치 바**(전체 폭 · 레벨 숫자 · 캡이면 「최대」) · 스킬 포인트가 있으면 「S — 스킬」 표시 | `char.xp` · `xpReq` · `pointsFree` |
 | 생명 구슬 위 | 버프 · 상태 아이콘(전투 함성 · 마력 보호막 · 감속 · 속박 · 부서진 장비 경고) | `player.buffs` · `st` · `stats.broken` |
@@ -3064,6 +3091,7 @@ export class UIRoot {
 ### 10.4 바닥 이름표 · 피해 숫자 (P10 `labels.js`)
 
 - **이름표**: 등급색(일반 `#e8e8e8` · 마법 `#6f9bff` · 희귀 `#ffd84a` · 전설 `#ff9a2e` · 세트 `#4fe07a`) · 희귀 이상은 늘 · 그 아래는 `Alt`를 누르거나 「늘 이름표」 설정일 때 · 「일반 등급 숨기기」면 일반 등급 이름표를 감춘다(드랍은 그대로 있다) · 골드 · 재료는 `Alt`일 때만. 위치 = `project(drop.pos, y 0.4)` · 겹치면 화면 y 순으로 아래로 밀어 쌓는다 · 마우스를 올리면 `labelHover()`가 그 드랍(`src:'label'` — 쌓여 밀린 이름표도 sim이 받는다 §5.2-1 · 클릭 = 줍기 · 몬스터 원기둥과 겹치면 Alt를 누를 때만 이름표가 앞선다 §11.5). DOM 풀(상한 64).
+- **피드백 1(ui 단계) — 떨어진 직후 이름표**: `labelVisible(drop, o)`가 선택 `o.fresh`를 받는다 — 떨어진 틱(`Drop.born`)부터 `FRESH_LABEL_SEC` 2.2초(게임 시간) 동안은 일반 · 마법 장비 · 골드 · 재료 · 포션도 이름표를 낸다(「일반 등급 숨기기」면 흰 장비는 그래도 숨김 · 구슬은 이름표가 없다). 불투명도 = 순수 `freshAlpha(born, tick)`(끝 0.4초에 1 → 0 · 그 뒤 0 — Alt · 「늘 이름표」 · 희귀 이상은 그대로 1). **주운 골드 숫자**: `DROP_PICKED{kind:'gold', amount}` → `labels.addGold(x, z, amount)` — 플레이어 머리 위(y 2.6) 「+n 골드」(`label.goldPicked`) · 0.6초 안의 줍기는 한 숫자로 합친다(실제 시간 — `__game.step` 정지 화면에서는 계속 합쳐진다) · 1.3초 · 피해 숫자 설정과 무관하게 낸다.
 - **피해 숫자**(설정 `damageNumbers`): 플레이어가 준 `HIT`(amount > 0) · 같은 대상 0.1초 안이면 합친다 · 0.8초 떠오름 · 치명타 1.5배 크기 · 노랑 주황 · 화상 등 dot은 작은 회색 · 면역은 「면역」. 받은 피해는 플레이어 위에 작은 붉은 숫자. DOM 풀 48 — 넘으면 가장 오래된 것을 재사용.
 - **최종 게이트**: 받은 피해 · 회복 숫자도 0.1초 안이면 합친다(전에는 몬스터 대상만 — 떼에게 맞으면 머리 위에 「22222」처럼 겹쳤다) · 1 미만의 양수는 「0」이 아니라 소수 한 자리(최소 0.1 — `format.fmtDmg` · 균열 1 몬스터 한 방 ≈ 0.3).
 
@@ -3082,7 +3110,7 @@ export class UIRoot {
 
 - **인벤토리**: 왼쪽 장비 10칸(인형 배치) · 오른쪽 가방 8 × 5 · 정렬 버튼(Z) · 골드 · 재료. 칸을 고르면(마우스 위 · 방향키) **툴팁**. Enter = 장착/해제 · L = 잠금(자물쇠 표시 — 일괄 판매 · 분해에서 빠진다). 상점 · 보관함 · 신비술사에서는 같은 격자(`pnlBagGrid`)가 그 패널 안에 그려지고 X = 팔기 · D = 분해(대장장이) · F = 옮기기(보관함)가 더해진다. 끌어서 놓기(마우스)는 같은 명령.
 - **툴팁**(P11 `tooltip.js` · `itemText.js`): 이름(등급색) · 등급 · 기본형(단계) · 기본 값(피해 · aps · 방어도 · 막기) · 옵션 줄(접두 · 접미 · 전설 효과 · 세트 효과와 낀 조각 수) · 요구 레벨(못 끼면 붉게) · 판매가 · 내구도(0이면 붉게 「능력치 꺼짐」). **장착 중인 것과 나란히**(같은 부위 · 반지는 둘 다) + 변화 줄(시트 DPS · 생명 · 방어도 · 저항 넷 — 오름 녹 `#5ad06a` / 내림 적 `#ff6a5a` · `compareEquip`). **고급 툴팁**(`Alt` 누름 · 또는 설정 늘 켜기): 옵션마다 `[T3 16–25]`처럼 티어와 값 범위(pow 옵션은 그 ilvl 배율을 곱한 범위).
-- **스킬 트리**: 3갈래 × 4단계 격자 · 노드(이름 · 랭크/최대 · 잠김 사유) · 선택한 노드의 **찍기 전 · 후 수치**(피해 범위 · 비용 · 쿨다운 · 시트 DPS — `describeSkill` 두 번 + `previewLearn`) · 남은 포인트 · Enter = 찍기 · 액티브면 R(우클릭 칸) · 1~4(바 칸)로 배정 · 스킬 바 미리보기. 변형은 대상 액티브에 붙은 작은 노드로.
+- **스킬 트리**: 3갈래 × 4단계 격자 · 노드(이름 · 랭크/최대 · 잠김 사유) · 선택한 노드의 **찍기 전 · 후 수치**(피해 범위 · 비용 · 쿨다운 · 시트 DPS — `describeSkill` 두 번 + `previewLearn` · **피드백 1(ui 단계)**: 범위 스킬은 반경 줄 `skill.radius` 「반경 {n}m」(`describeSkill().radius`) · extra 줄 `skill.x.knock` 「넉백 0.8m」(`extra.knock` — 회전 베기 · 돌진 · `pnlLogic.SKILL_EXTRA_KEYS`) · 회전 베기는 기절 줄이 없다) · 남은 포인트 · Enter = 찍기 · 액티브면 R(우클릭 칸) · 1~4(바 칸)로 배정 · 스킬 바 미리보기. 변형은 대상 액티브에 붙은 작은 노드로.
 - **캐릭터 시트**: 주 능력치 · 활력 · 생명 · 자원 · 시트 DPS · 공격 속도 · 치명타 · 방어도(그 레벨 감소율 %) · 저항 넷(감소율 %) · 피해 보너스(종류 · 범위 · 정예) · 쿨다운 감소 · 비용 감소 · 이동 속도 · 적중 회복 · 재생 · 가시 · 골드/아이템 발견(유효 MF 함께) · 경험치 % · 플레이 시간 · 해금 균열.
 - **대장장이**: 탭(`[` `]`): 사기(재고 9) · 되사기(최근 10) · 분해(가방의 칸 · 결과 재료 미리보기 · 「일반 전부 분해」 = `salvageMany` 확인) · 제작(부위 고르기 · 비용 · ilvl · **결과 분포**: 옵션 수 `affixCountDist('rare')` · 티어 `tierDist(PL)` · 그 부위 기본형 단계 확률 — 도박의 확률 공개와 비교된다) · 위에 「일괄 수리 R — 비용」(골드가 모자라면 「부분 수리」 — 고칠 수 있는 부위만) · 「일괄 판매 V」(가방의 일반 · 마법 중 `isUpgrade`가 아니고 잠기지 않은 것 → confirm(개수 · 합계 골드) → `sellMany`). 오른쪽에 가방 격자(§10.5-8).
 - **잡화상**: 포션 · 두루마리(수량 −/+ · 상한까지 · 가격) · 장신구 재고 4 · 무료 버튼(자격일 때만 보인다) · 「일괄 판매 V」 · 오른쪽에 가방 격자.
@@ -3090,11 +3118,11 @@ export class UIRoot {
 - **신비술사**: 왼쪽 아이템 고르기(가방 · 장착) → 옵션 고르기(이미 고정된 옵션이 있으면 그것만) → 비용(골드 · 가루 · 망각의 정수 — `priceReroll(item).essence`를 그대로 보인다: 식 `rerolls ≥ essenceFrom(3)`이라 그 아이템의 **4번째** 재굴림부터 · W1 확정 · 이번이 n번째) → 「굴리기」 → 후보 3(기존 + 새 둘) 중 고르기(Enter) — 취소하면 비용 없음 · 아래 「스킬 초기화 — 비용」(confirm).
 - **보관함**: 위 보관함 60(10 × 6) · 아래 가방 40 · Enter/F로 옮기기 · 정렬.
 - **균열석**: 레벨 목록(1 ~ 해금 + 3 · 잠긴 것 회색) · 고른 레벨의 몬스터 레벨 · 생명/피해 배율 · 보상 배율(아이템 레벨 · 등급 · 골드 · 경험치) · 챔피언/정예 속성 수 · 최고 기록 · 「균열 열기 Enter」 · 「클리어 +1 · 무사망 +2 해금」 안내. **기본 포커스**(Enter 한 번이 다음 판): `last = char.records[0]` — 없으면 1 · 완료이고 사망 0이면 `min(riftUnlocked, last.level + 1)` · 붕괴 또는 사망 ≥ 2면 `max(1, last.level − 1)` · 그 밖은 `last.level`(봇 basic의 레벨 규칙과 같은 식 · 「추천」 표시).
-- **균열 완료**: 시간 · 처치(등급별) · 사망 · 떨어진 장비(등급별 장비 수 — 주운 것이 아니다) · 골드 · 경험치 · 그중 더 나은 장비 수 · 다음 레벨 해금(무사망이면 +2 강조) · 최고 기록이면 표시. **리뷰 수정**: 해금 배지는 이번 판이 해금을 실제로 올렸을 때만(UIRoot가 `RIFT_OPENED`에 적은 열 때의 `riftUnlocked`보다 `summary.unlockedTo`가 클 때 · 무사망 배지는 +2가 `max(열 때, L + 1)`보다 더 열었을 때 — `pnlLogic.completeBadges`).
+- **균열 완료**: 시간 · 처치(등급별) · 사망 · 떨어진 장비(등급별 장비 수 — 주운 것이 아니다) · 골드(**피드백 1**: 문면 「주운 골드」 — `rift.summary.gold` = 수호자 처치 순간까지 이번 판에 실제로 주운 골드 `rift.stats.gold` · 그 뒤 줍는 수호자 보장 드랍의 골드는 들지 않는다) · 경험치 · 그중 더 나은 장비 수 · 다음 레벨 해금(무사망이면 +2 강조) · 최고 기록이면 표시. **리뷰 수정**: 해금 배지는 이번 판이 해금을 실제로 올렸을 때만(UIRoot가 `RIFT_OPENED`에 적은 열 때의 `riftUnlocked`보다 `summary.unlockedTo`가 클 때 · 무사망 배지는 +2가 `max(열 때, L + 1)`보다 더 열었을 때 — `pnlLogic.completeBadges`).
 - **사망**: 「쓰러졌다」 · 처치자(`player.killedBy` — 정예면 생성된 이름) · 남은 목숨(0이면 다음 사망 붕괴 경고) · 수리비 · 「Enter — 마을에서 부활」 · 붕괴면 붕괴 문구 + 그 판 요약 · 잃은 것 줄(**리뷰 수정**: 해금 +n은 그 판을 깼다면 새로 열렸을 단계 수 — 이미 열려 있으면 「수호자 보장 드랍 2」만 · `pnlLogic.lostUnlock`).
 - **겹쳐 보는 패널의 자리(리뷰 수정)**: 인벤토리는 화면 오른쪽 · 캐릭터 시트는 왼쪽에 붙는다(폭 ≤ 50vw − 30px · 1280 폭에서 가운데의 플레이어를 가리지 않고 둘을 나란히) · 아래에 깔린 쪽도 보이고 누르면 맨 위로(`UIRoot._raiseFrom` — 누름이 게임으로 새지 않는다). 스킬 트리(폭 1000px)는 가운데 그대로다.
-- **타이틀 · 캐릭터 · 새 캐릭터**: 계속하기(마지막 캐릭터) · 캐릭터 선택(칸 4) · 새 캐릭터(클래스 좌우 · 이름 입력 최대 12자 · 빈 이름이면 기본 이름) · 저장 불가 안내 · 터치 기기 안내(§11.12).
-- **안내**: 모달 카드 둘 — `town`(시설 안내 + 「균열석을 클릭해 균열 1을 연다 · 좌클릭 이동」) · `controls`(클릭 이동 · 기본 공격 · 우클릭/1~4 스킬 · Shift 제자리 · Q 포션 · T 귀환 · Alt 이름표 · I/S/C 패널 · Tab 지도). 비모달 안내 여섯(`ui.notice(…, {big:true})` · 6초 · 「자세히: 일시정지 → 도움말」) — labels · elites · bagFull · death · skills(「배운 스킬은 빈 칸에 자동으로 놓인다 · S — 스킬 트리」) · gauge. 각 한 번.
+- **타이틀 · 캐릭터 · 새 캐릭터**: 계속하기(마지막 캐릭터) · 캐릭터 선택(칸 4) · 새 캐릭터(클래스 좌우 · 이름 입력 최대 12자 · 빈 이름이면 기본 이름 · **피드백 1**: 시작 지급 줄 `newChar.kit` — `START.potions` · `START.scrolls`를 읽는다) · 저장 불가 안내 · 터치 기기 안내(§11.12).
+- **안내**: 모달 카드 둘 — `town`(시설 안내 + 「균열석을 클릭해 균열 1을 연다 · 좌클릭 이동」) · `controls`(클릭 이동 · 기본 공격 · 우클릭/1~4 스킬 · Shift 제자리 · Q 포션 · T 귀환 · Alt 이름표 · I/S/C 패널 · Tab 지도). 비모달 안내 여섯(`ui.notice(…, {big:true})` · 6초 · 「자세히: 일시정지 → 도움말」) — labels · elites · bagFull · death · skills(「배운 스킬은 빈 칸에 자동으로 놓인다 · S — 스킬 트리」) · gauge. 각 한 번. **피드백 1(ui 단계)**: `controls` 카드의 Q 줄(`help.controls.3`)은 `hint.controls.potion`(지금 개수 `char.potions` · 회복 `POTION.heal` % · 재사용 `POTION.cd`초)으로 바꾸고 강조한다(`.hint-potion`) · 저생명 포션 안내는 §10.2.
 
 ### 10.7 키보드만으로의 조작
 
@@ -3257,12 +3285,12 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 | ID | 무엇 | 쓰는 패키지 |
 |---|---|---|
 | `town` | 마을 · 전사 레벨 12 · 열린 균열(포털 켜짐) · 복귀 안내 | P7 · P8 · P10 |
-| `riftSwarm` | 지하 묘지 방 · 전사 강타 판정 직후 · 일반 8종 + 새끼 40마리(걷기 · 예비 · 판정 · 경직 · 기절 · 빙결 · 사망 · 날아가는 시체 섞임) | P8 · P13 |
+| `riftSwarm` | 지하 묘지 방 · 전사 가르기(`bash` — 피드백 1 · 옛 강타) 판정 직후 · 일반 8종 + 새끼 40마리(걷기 · 예비 · 판정 · 경직 · 기절 · 빙결 · 사망 · 날아가는 시체 섞임) | P8 · P13 |
 | `riftElites` | 잿빛 동굴 · 챔피언 팩(파랑 · 속성 2) + 정예(노랑 · 속성 4) + 하수인 4 · 대상 프레임 hover | P8 · P10 · P13 |
 | `riftAffixes` | 정예 12마리가 줄지어 각 속성 하나 + 그 효과(감옥 원 · 역병 웅덩이 · 몰타르 예고 · 냉기 노바 예고 · 보호막 구체 · 사라짐 · 불꽃 · 화염 사망 원) | P13 · P16 · P10(도움말 대조) |
 | `riftGuardian` | 뼈 거인 대지 분쇄 예고 중 · 수호자 바 | P8 · P13 · P10 |
 | `riftWitch` | 잿빛 마녀 잿불 비 예고 + 하수인 | P8 · P13 · P16 |
-| `riftWarrior` | 전사 회오리 채널 중 · 지진 파동 · 지면 강타 부채 · 도약 공중 · 전투 함성 버프 | P8 · P13 |
+| `riftWarrior` | 전사 회오리 채널 중 · 지진 파동 · 연속 회전 대기(피드백 1 — `spinEcho` 원 r 2.5 · `follow:'player'` · 판정 7틱 전 · 옛 지면 강타 원뿔 `stomp` r 4.0 · 120°) · 도약 공중 · 전투 함성 버프 | P8 · P13 |
 | `riftMage` | 마법사 화염구 · 메테오 예고 · 서리 노바 · 연쇄 번개 꺾은선 · 마력 보호막 · 순간이동 직후 | P8 · P13 |
 | `riftLoot` | 드랍 전 등급(전설 · 세트 빛기둥) · 골드 더미 3단계 · 포션 · 구슬 · 재료 · 이름표 겹침 | P8 · P10 |
 | `riftDeath` | 플레이어 사망(생명 1 남음) · 사망 패널 | P10 |
@@ -3322,12 +3350,12 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 
 | 동작 | 쓰는 때 |
 |---|---|
-| cone | 전방 4m 원뿔 안 ≥ 2마리 또는 정예 대상 · 자원 충분 |
+| spinSlash(**피드백 1** — 옛 cone 「전방 4m 원뿔 안 ≥ 2마리 또는 정예 대상」) | 원(행의 radius 2.5 − `inner` 0.5 = 2.0 · 몸 반지름 포함) 안 ≥ 2마리 또는 정예급 대상이 그 안 · 분노 ≥ 비용 + `rageKeep`(0) — 등 뒤도 센다. inner: 판정(시작 + 0.3초)까지 물러서는 적(궁수 · 주술사 뒷걸음)이 원 밖으로 나가 헛돌았다(첫 판 챔피언 궁수 팩 72~148초) · 수치는 `BOT_RULES.spinSlash` |
 | quake | 6m 안 ≥ 5마리 또는 정예/수호자 6m 안 |
 | dash | 대상이 6~10m · 또는 피하기 이동 |
-| spin | 2.4m 안 ≥ 3마리 · 분노 ≥ 30 — 누르고 있는 동안 커서는 가장 촘촘한 쪽 |
+| spin | 2.4m 안 ≥ 2마리(**피드백 1** — 옛 3) · 분노 ≥ 30 — 누르고 있는 동안 커서는 가장 촘촘한 쪽. 바에 회오리가 있으면 다른 분노 스킬(회전 베기)은 비용 + 30 이 있을 때만(`channelReserve` — 회오리는 분노당 피해가 회전 베기의 ~3배인데 회전 베기가 분노를 먼저 써 회오리가 거의 시작되지 않았다 · 프리셋 B) |
 | buff | 전투 중(10m 안 깨어 있는 몬스터) · 준비됨 |
-| leap | 대상 6~9m · 또는 피하기 · 또는 정예 팩 한가운데 |
+| leap | 대상 6~9m · 또는 피하기 · 또는 정예 팩 한가운데(정예 · 챔피언 · 하수인 무게중심의 `leap.packR` 4m 안 ≥ 2 — 피드백 1: 옛 `cone.range`를 빌려 쓰던 값) |
 | fireball | 대상 · 자원 충분(마나 > 비용 + 20 — 보호막 여유) |
 | meteor | 3.5m 안에 4마리 이상 모인 점 또는 정예 · 수호자 |
 | nova | 5m 안 ≥ 3마리 |
@@ -3339,7 +3367,7 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 - **생존**: 생명 < `potionAt`(40%)면 포션 · 생명 < 70%이고 8m 안에 구슬이 있고 그 길에 적대 예고가 없으면 구슬로.
 - **줍기**: 10m(`lootSafeR`) 안에 깨어 있는 몬스터가 없을 때 12m(`lootRadius`) 안의 장비를 전부(전설 · 세트 · 희귀 먼저) 줍는다 · 주운 장비는 `compareEquip`로 바로 비교해 `equipMinGain` 넘게 좋으면 장착. **리뷰 수정**: 화면 안 드랍은 닿는 것만 고른다(흐름장 걸음 수 ≤ 직선 칸 × `reachMul` + `reachPad` — 몬스터 대상과 같은 규칙) · 쫓던 드랍은 화면(`viewR`) · `lootRadius`를 `lootMemoryPad`만큼 넘어도 그대로 고른다 · 드랍 ID 시계와 따로, 줍기를 이어 가는 동안 바닥 드랍 수가 `lootGiveUpSec` 넘게 줄지 않으면 지금 것을 버린다(`bot.lootStall`) — 벽 너머 긴 우회의 마법 드랍과 바로 닿는 일반 드랍을 6틱마다 번갈아 눌러 균열에 영영 멈췄다(`bot.test`).
 - **가방**: 가방이 차서 줍지 못한 장비가 있고 두루마리가 있으면 귀환 → 마을 정비 → 포털로 복귀(`rift.stats.bagFullRecall`).
-- **탐색**: 탐색하지 않은 가장 가까운 방 가운데로(방/통로 그래프) · 게이지 100%면 수호자 자리로 · 완료 뒤 남은 장비를 줍고 나가는 포털.
+- **탐색**: 탐색하지 않은 가장 가까운 방 가운데로(방/통로 그래프) · 게이지 100%면 수호자 자리로(**피드백 1**: 수호자가 탐색한 칸에 있으면 — 미니맵의 수호자 점 — 그 자리로. 출현 자리에서 멀리 쫓아온 뒤 잠든 수호자를 출현 자리에서 영영 기다렸다 · 빌드 비교 1/150판 20분 포기) · 완료 뒤 남은 장비를 줍고 나가는 포털.
 - **사망**: 반응 지연 뒤 Enter(부활) → 마을에서 Enter(복귀).
 - **마을 정비**: 대장장이 → 가방 전부 팔기(`sellMany` · 장착 후보로 남길 것 없음) → 일괄 수리 → 잡화상 → 포션 `potionsTo`(10) · 두루마리 `scrollsTo`(5)까지 → 스킬(프리셋 순서대로 남은 포인트) → 균열석 → 레벨 선택 → 열기. 도박 · 재굴림 · 제작 · 보관함은 쓰지 않는다(측정의 한계 — §12.6). 상점마다 명령 뒤 `BOT.townSec`(대장장이 20 · 잡화상 8 · 균열석 4초)만큼 마을에서 서서 step한다(사람이 패널을 보는 시간의 모델 — `playSec`에 들어간다).
 - **레벨 선택**(전략): `basic` — 첫 판 1 · 직전 판이 완료 · 사망 0 · `timeSec ≤ upMaxSec`(360)이면 +1(해금 안에서) · 사망 ≥ `downDeaths`(2) 또는 붕괴면 −1(최소 1) · 그 밖은 같은 레벨 / `noDodge` — basic과 같고 피하지 않는다 / `challenge` — 늘 해금된 최고. 「적정 레벨」 = basic이 고르는 레벨.
@@ -3394,6 +3422,9 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 | `content.test.js` | P16 | 속성 6(번개 강화 · 순간이동 · 감옥 · 분열 · 역병 · 몰타르) 각각 + 잿빛 마녀(잿불 비 배치 · 하수인 상한 · 순간이동) · 위협 간격과 함께 |
 
 - 스텁 상태에서는 패키지 테스트 파일이 `test.todo` 자리로 있다(P0) — 실패 0.
+
+- **피드백 1(게임플레이 담당)이 더한 검사**: `skills.test` 회전 베기 360°(앞 · 옆 · 뒤 · 반지름 밖) · 가르기 반원(부채꼴 밖 · 등 뒤 · 사거리 밖 · 분노 = 8 + min(3, n − 1)) · 대상 고정 · Shift 반원 · 연속 회전(follow) / `balance.test` 회전 베기 정타 처치 수(개발 캐릭터 균열 3 · 5 · 10 · 15 중앙 1.9~3 · 시작 장비 첫 판 평균 2.2~3.0 — 수정 단계가 3.2 → 3.0) / `theory.test` 일반 · 하수인 골드 기대값 불변(균열 1~30) · 굴림 표본 / `save.test` 옛 세이브의 groundStomp · aftershock 랭크 · 바 / `bot.test` spinSlash 규칙(inner · 회오리 분노 남기기) · 회오리 2마리 · 수호자 미니맵 찾기. ~~todo 2~~ → 0: `view.fx.test` 「회전 베기 고리 r 2.5 · 가르기 호 r 1.9 · 180°」 · 칼끝 궤적 · 연속 회전(view 단계) / `audio.test` 「가르기 휘두름 · 회전 베기 spinSwoosh · 연속 회전 echoSwoosh — 실제 이벤트로」(수정 단계).
+- **피드백 1(view · ui · 수정 단계가 더한 검사)**: `view.actors.test` 가르기 무기 5종(판정 틱 칼끝 반지름 1.9 ± 0.35 · 방위 식 ± 12° · 되돌아 휘두르지 않음 · 발 제자리 · 양손 손잡이) · 회전 베기 무기 5종(한 바퀴 · 판정 틱 90% 넘게 · 디딘 발 미끄럼 < 2mm · 끝에 제자리) / `ui.feedback1.test` 떨어진 직후 이름표 · `freshAlpha` · `potionUrge` · 새 문자열 · 넉백 줄 · 완료 골드 = 주운 골드 합 · 새 캐릭터 시작 포션 `START.potions`(> 0)을 받고 첫 균열에서 Q 로 마신다 / `fixtures.test` 효과 `follow` 선택 키 · `spinEcho` / `balance.test` 시작 장비 첫 판 위 끝 3.2 → 3.0(Jay 「두세 번」 — 옛 계수 1.05/+0.11은 3.02 로 걸린다).
 
 ### 12.3 순수 계층 · 규칙 검사 — `purity.test.js` (P0)
 
@@ -3574,7 +3605,7 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 | `mat.<id>` | 고철 · 비전 가루 · 망각의 정수 | |
 | `mon.<id>` | §7.4 「이름」 열 · 수호자 §7.5b | |
 | `affix.<id>.name` · `affix.<id>.desc` | 빠름 / 「이동 · 공격 속도가 빠르다 · 몸 주변 바람 줄 · 붙어서 처치하라」 | §7.5 이름 + 브리프 §3.5의 효과 · 표시 · 대응을 한 문장 |
-| `node.<id>.name` · `node.<id>.desc` | 지면 강타 / 「전방 원뿔을 내려찍어 기절시킨다」 | §7.2 + 브리프 §3.3 개념 |
+| `node.<id>.name` · `node.<id>.desc` | 회전 베기 / 「무기를 뻗어 한 바퀴 돌며 둘레의 적 모두를 베고 살짝 밀어낸다」(피드백 1) | §7.2 + 브리프 §3.3 개념 |
 | `branch.<cls>.<0..2>` | 분쇄 · 학살 · 수호 / 화염 · 냉기 · 번개 · 비전 | |
 | `base.<id>.<tier>` | `base.sword.0` 낡은 검 | §7.7 단계 이름 |
 | `afx.<id>.line` | `afx.str.line` 「힘 +{v}」 · `afx.skillDmg.line` 「{skill} 피해 +{v}%」 · `afx.cdr.line` 「재사용 대기시간 −{v}%」 | 아래 표 |
@@ -3625,7 +3656,7 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 - `settings.*`: `volMaster` 마스터 볼륨 · `volSfx` 효과음 · `volAmbient` 환경음 · `quality` 화질 · `quality.low/medium/high` 낮음/보통/높음 · `damageNumbers` 피해 숫자 · `alwaysLabels` 늘 이름표 · `hideNormal` 일반 등급 숨기기 · `advancedTooltips` 고급 툴팁 늘 켜기 · `meterHud` 계측 HUD · `screenShake` 화면 흔들림.
 - `help.*`: `tab.controls` 조작 · `tab.affixes` 정예 속성 · `tab.rules` 규칙 · `controls.<n>`(§10.6 안내 카드의 줄들) · `rules.lives` 균열마다 생명 3 — 생명 0에서 쓰러지면 균열이 무너지고 수호자 보상과 해금을 잃는다 · `rules.repair` 쓰러지면 장착 장비 내구도 −10% · `rules.unlock` 클리어하면 다음 레벨 · 무사망이면 +2 · `rules.telegraph` 붉은 테두리 표식은 적의 공격이다 — 걸어서 피할 수 있다.
 - `death.*`: `title` 쓰러졌다 · `lives` 남은 생명 {n} · `lastLife` 다음에 쓰러지면 균열이 무너진다 · `repair` 수리비 {n} 골드 · `respawn` Enter — 마을에서 부활 · `collapse` 균열 붕괴 — 수호자 보상과 해금을 잃었다(주운 것은 남는다) · `toTown` Enter — 마을로 · `killedBy` {name}에게 쓰러졌다 · `lost` 잃은 것: 수호자 보장 드랍 2 · 해금 +{n}.
-- `complete.*`: `title` 균열 {n} 완료 · `time` 시간 · `kills` 처치 · `deaths` 사망 · `drops` 획득 · `gold` 골드 · `xp` 경험치 · `upgrades` 업그레이드 · `unlock` 균열 {n} 해금 · `noDeathBonus` 무사망 +2 · `record` 최고 기록 · `ok` Enter — 계속 줍기 · `toTown` T — 마을로.
+- `complete.*`: `title` 균열 {n} 완료 · `time` 시간 · `kills` 처치 · `deaths` 사망 · `drops` 획득 · `gold` 골드 · `xp` 경험치 · `upgrades` 업그레이드 · `unlock` 균열 {n} 해금 · `noDeathBonus` 무사망 +2 · `record` 최고 기록 · `ok` Enter — 계속 줍기 · `toTown` T — 마을로. (피드백 1: `gold` 문면 → 「주운 골드」)
 - `inv.*`: `equip` 장착 · `unequip` 해제 · `sell` 팔기 X · `salvage` 분해 D · `toStash` 보관 F · `sort` 정렬 Z · `gold` 골드 · `compare` 장착 중 · `delta` 변화 · `req` 요구 레벨 {n} · `sellPrice` 판매가 {n} · `dur` 내구도 {n}/{m} · `durZero` 내구도 0 — 능력치 꺼짐 · `tier` 티어 {t} · `range` {a}–{b} · `setCount` ({n}/4) · `lock` 잠금 L · `locked` 잠김 · `area` E — 영역 바꾸기.
 - `skill.*`: `points` 남은 포인트 {n} · `rank` {r}/{m} · `learn` 찍기 Enter · `bindRmb` 우클릭 칸 R · `bind` 칸 {n} · `before` 지금 · `after` 찍으면 · `locked.tier` {n}점을 더 써야 열린다 · `locked.req` {name}이(가) 먼저 필요하다 · `cost` 비용 {n} · `cd` 재사용 {n}초 · `dmg` 피해 {a}–{b} · `transform` 변형.
 - `char.*`: 시트 줄 이름(= `stat.*`) · `drArmor` 피해 감소 {p}% · `drRes` {type} 감소 {p}% · `effMf` (유효 {p}%) · `playTime` 플레이 시간.
@@ -3634,3 +3665,5 @@ export const MOUSE = { move: 0, skill0: 2 };   // event.button
 - `analytics.*`: `tab.sim` 드랍 시뮬레이터 · `tab.tables` 표 보기 · `tab.session` 세션 기록 · `tab.bot` 봇 · `run` 굴리기 · `cancel` 취소 · `n` 횟수 · `theory` 이론값 · `sim` 시뮬값 · `err` 오차 · `killsToLegend` 전설 하나까지 처치 수 · `json` JSON 내려받기 · `csv` CSV 내려받기 · `botOn` 봇 자동 사냥 켜기 · `botOff` 끄기 · `strategy.<id>` 기본 · 무회피 · 도전 · `meter.<key>`(DPS · 받은 피해/초 · 분당 처치 · 시간당 경험치 · 시간당 골드 · 이번 판 장비 · 경과 · 게이지 속도 · 노리는 수).
 - `confirm.yes` 예 Enter · `confirm.no` 아니오 Esc · `fatal.webglTitle` 그래픽을 시작하지 못했다 · `fatal.webglBody` 이 브라우저나 기기에서 WebGL을 쓸 수 없다 — 다른 브라우저로 열어 본다 · `audio.hint` 클릭하거나 키를 누르면 소리가 켜진다.
 - **W2 확정(통합 게이트)**: `strings.ko.js`에 더한 키 — P10 W2 단락(`hud.status.slow|root` · `hud.immune` · `hud.portal.recall|exit` · `hud.gaugeDone` · `hud.collapsed` · `label.gold|potion|material` · `notice.potionFull|noPotion|lifeFull|recallCancel|skillEmpty|saveFuture` · `title.charLine|slot|deleteHint|back|navHint|version|continueNone` · `newChar.*` · `pause.quitConfirm|hint` · `settings.on|off|hint` · `help.hint|affixes.intro|rules.potion|rules.recall` · `death.summary` · `complete.other` · `hint.close|openHelp` · `map.hint`) · P12 단락(`analytics.f.*` · `analytics.sec.*` · `analytics.state.*` · `analytics.hist.*` · `analytics.hint.*` · `analytics.tbl.*` · `analytics.ses.*` · `analytics.result.complete|collapse|abandon` · `analytics.bot.*` · `analytics.log.*` · `analytics.gearPerKill|goldPerKill|legPerKill|killsToLegendMean|maxGap|errNote` — 59개) · `shop.salvageConfirm` {name}을(를) 분해한다 — 되돌릴 수 없다(전설 · 세트 한 개 분해 확인). `reason.level` 문면은 「레벨 {n} 이상이어야 한다」(숫자 뒤 조사가 수마다 달라서 — 꼴만 고정). `notice.saveFuture`는 §11.6의 「미래 버전 세이브 — 읽기 전용 안내」.
+- **피드백 1(2026-10-12 · 게임플레이 담당)**: 바꾼 문면 — `skill.bash.name|desc` 가르기 · 「앞쪽 반원을 가로로 베어 닿는 적 모두를 친다 …」 · `node.groundStomp.name|desc` 회전 베기 · 「무기를 뻗어 한 바퀴 돌며 둘레의 적 모두를 베고 살짝 밀어낸다」 · `node.aftershock.name|desc` 연속 회전 · 「회전 베기 0.5초 뒤 한 번 더 돈다 — 그때 서 있는 자리에서 약하게」 · `skill.x.aftershock` 연속 회전 · `legfx.tremorFists` 「회전 베기가 앞으로 뻗는 충격파를 낸다」. 더한 키(ui 단계가 쓴다 — 지금은 아무도 읽지 않는다): `skill.x.knock|.v` 「넉백」 「{v}m」(스킬 패널 extra — `describeSkill().extra.knock`) · `label.goldPicked` 「+{n} 골드」(골드를 주운 순간 머리 위 숫자 — `DROP_PICKED{kind:'gold', amount}`) · `newChar.kit` 「시작 지급 — 체력 포션 {potions} · 귀환 두루마리 {scrolls} · 기본 무기 · 갑옷」(`data/economy.js` `START.potions` 5 · `START.scrolls` 3) · `hint.potion.title|body` — ui 단계가 문면을 바꿨다: 「Q — 체력 포션」 · 「생명이 낮다 — Q로 체력 포션을 마시면 생명을 바로 {heal}% 채운다(지금 {n}개 · 재사용 대기 {cd}초) …」(`POTION.heal` · `POTION.cd`).
+- **피드백 1(ui 단계가 더하거나 바꾼 키)**: `hud.potionTip` 「체력 포션 — Q 로 마신다(생명을 바로 채운다)」 · `hint.controls.potion` 「Q: 체력 포션 — 지금 {n}개 · 생명을 바로 {heal}% 채운다(재사용 대기 {cd}초) · 생명 구슬 왼쪽의 붉은 병」 · `skill.radius` 「반경 {n}m」 · `glyph.groundStomp` 「회전」(규칙대로면 「회베」) · `complete.gold` 「골드」 → 「주운 골드」 · `hint.potion.*` 새 문면(위). 이제 읽는 곳: `skill.x.knock|.v`(pnlLogic) · `label.goldPicked`(labels.addGold) · `newChar.kit`(새 캐릭터 패널) · `hint.potion.*`(UIRoot 저생명 안내).

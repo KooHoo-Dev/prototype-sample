@@ -4,6 +4,7 @@
 // 이름 칸에 포커스가 있으면 글자 키는 입력 칸만 받는다(창까지 올라가지 않게 막는다 — Enter · Esc · ↑ ↓ · Tab 만 올라간다 · IME 조합 중엔 전부 막는다).
 
 import { CHAR_SLOTS, CLASS_IDS } from '../../core/constants.js';
+import { START } from '../../data/economy.js';
 
 /** @typedef {import('../../types.js').Panel} Panel */
 
@@ -48,6 +49,8 @@ export function createNewCharPanel(ctx) {
   // 시작
   const rowGo = form.appendChild(w.el('div', 'menu-item form-row form-go'));
   rowGo.appendChild(w.el('div', 'menu-label', t('newChar.create')));
+  // 피드백 1 — 시작 보급이 보이게(포션 · 두루마리를 받는 줄 몰랐다)
+  el.appendChild(w.el('div', 'newchar-kit', t('newChar.kit', { potions: START.potions, scrolls: START.scrolls })));
   const err = el.appendChild(w.el('div', 'panel-error'));
   const foot = el.appendChild(w.el('div', 'panel-foot'));
   foot.appendChild(w.el('div', 'panel-hint', t('newChar.hint')));

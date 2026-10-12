@@ -82,7 +82,7 @@ const STAT_KEYS = ['str', 'int', 'vit', 'weaponDmgPct', 'attackSpeedPct', 'critC
   'skillPct', 'cdr', 'costReduce', 'lifePct', 'lifeRegen', 'lifeOnHit', 'lifePctOnHit', 'armor', 'armorPct', 'allRes', 'resPct', 'physRes', 'fireRes',
   'coldRes', 'lightningRes', 'moveSpeed', 'aoePct', 'elitePct', 'thorns', 'goldFind', 'magicFind', 'xpPct', 'potionPct', 'globePct', 'manaRegenPct',
   'dmgTakenReduce', 'rageOnHit', 'allPct', 'burnFrac', 'freezeAt', 'freezeDurPct'];
-const SKILL_BEHAVIOR_IDS = ['meleeBasic', 'boltBasic', 'cone', 'quake', 'dash', 'spin', 'buff', 'leap', 'fireball', 'meteor', 'nova', 'shield', 'chain', 'blink'];
+const SKILL_BEHAVIOR_IDS = ['cleave', 'boltBasic', 'spinSlash', 'quake', 'dash', 'spin', 'buff', 'leap', 'fireball', 'meteor', 'nova', 'shield', 'chain', 'blink'];   // 피드백 1: meleeBasic → cleave · cone → spinSlash
 /** 구조 어휘 — 콘텐츠 ID 와 글자가 같아도 열거 · 키로 쓰는 것은 된다(부위 · 능력치 · 행동 · 등급 · 버프 ID 'warCry' · 'energyShield') */
 const RESERVED = new Set([
   ...ITEM_SLOTS, ...EQUIP_SLOTS, ...STAT_KEYS, ...Object.keys(computeStats(null)), ...PLAYER_ACTS, ...MON_ACTS, ...MON_RANKS, ...RARITIES,

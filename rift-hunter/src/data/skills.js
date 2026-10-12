@@ -26,11 +26,14 @@ export const TREE = { tierPoints: [0, 5, 10, 15], pointsPerLevel: 1 };
 
 /** 기본 공격 — 키 = 스킬 ID(BASIC_SKILLS[CLASSES[cls].basic]) @type {Record<string, SkillDef & {id:string}>} */
 export const BASIC_SKILLS = {
+  // 피드백 1(Jay 2026-10-12): 강타(meleeBasic · 대상 하나 내려치기) → 가르기(cleave) — 대상 쪽 전방 반원(angleDeg 180) 횡베기 · 닿는 적 모두.
+  //   부채꼴 반지름(플레이어 중심) = 몸 r + reach + PLAYER.reachTolerance(0.4 + 1.2 + 0.3 = 1.9m) · 대상 고정 · 다가가기는 reach 그대로(controller).
+  //   swing = 연출(view) — 행동 진행 [from, to](행동 길이의 비율)에 칼끝이 facing + arcFrom° → facing + arcTo° 를 지난다(판정 hitFrac 은 그 안 · −90° = 오른쪽).
   bash: {
-    id: 'bash', behavior: 'meleeBasic', targeting: 'target', type: 'phys', tags: ['melee'],
+    id: 'bash', behavior: 'cleave', targeting: 'target', type: 'phys', tags: ['melee'],
     cost: 0, cd: 0, action: 1 / 1.4, scaled: true, hitFrac: 0.45,
-    reach: 1.1, angleDeg: 70, coef: [1.00],   // 🔒 §7.14
-    params: {},
+    reach: 1.2, angleDeg: 180, coef: [1.00],   // 🔒 §7.14 · 피드백 1: 대상 하나 → 닿는 적마다 1.00(0.85 는 프리셋 B 「학살」이 A 보다 31% 느려졌다) · reach 1.1 → 1.2
+    params: { swing: { from: 0.25, to: 0.5, arcFrom: -90, arcTo: 90 } },   // 칼끝 방위 = facing + arc°(§0.2 — −90° = 몸의 오른쪽 · +90° = 왼쪽): 오른쪽 → 앞 → 왼쪽
   },
   magicBolt: {
     id: 'magicBolt', behavior: 'boltBasic', targeting: 'direction', type: 'lightning', tags: ['projectile'],
@@ -43,17 +46,21 @@ export const BASIC_SKILLS = {
 /** @type {SkillNode[]} */
 export const SKILL_NODES = [
   // ── 전사 · 0 분쇄 ──
+  // 피드백 1(Jay 2026-10-12): 지면 강타(cone · 전방 120° 원뿔 내려찍기 · 기절) → 회전 베기(spinSlash) — 플레이어 중심 360° 원 횡베기 ·
+  //   작은 넉백(경직은 큰 적중의 flinch 가 낸다) · 적정 레벨 일반 몬스터가 정타 2~3번에 쓰러진다(계약 §7.14 · balance.test 「피드백 1」). ID 는 세이브 호환으로 그대로.
   { id: 'groundStomp', cls: 'warrior', branch: 0, tier: 1, kind: 'active', maxRank: 5,
     // W1 수정(NOTES-W1FIX): cost 20 → 14 — 첫 범위 스킬을 더 자주(분노 흐름 · 전사 판 길이)
-    skill: { behavior: 'cone', targeting: 'direction', type: 'phys', tags: ['aoe', 'melee'], cost: 14, cd: 0,
-      action: 0.60, scaled: true, hitFrac: 0.50, radius: 4.0, angleDeg: 120, coef: ranks(1.05, 0.11),   // 밸런스 게이트: 1.40/+0.15 → 1.05/+0.11(프리셋 A 가 B 보다 49% 빨랐고 전사가 균열 10 에 마법사보다 42% 일찍 닿았다 — 1.25 에서 한 번 더 · 전사 4시드 균열 10 해금 1.31 → 1.62시간)
-      status: { stun: [0.8, 0.9, 1.0, 1.1, 1.2] }, params: { shake: 0.25, fxAftershock: 'stomp', fxShockwave: 'shockwave' } } },
+    skill: { behavior: 'spinSlash', targeting: 'direction', type: 'phys', tags: ['aoe', 'melee'], cost: 14, cd: 0,
+      action: 0.60, scaled: true, hitFrac: 0.50, radius: 2.5, coef: ranks(1.20, 0.09),   // 피드백 1: 원뿔 r 4.0 · 120° · 1.05/+0.11 → 원 r 2.5 · 360° · 1.20/+0.09(정타 처치 수 · 전사 균열 10 해금 — 계약 §7.14)
+      status: { knock: 0.8 },
+      params: { fxAftershock: 'spinEcho', fxShockwave: 'shockwave', swing: { from: 0.15, to: 0.55, arcFrom: -90, arcTo: 270 } } } },   // 오른쪽에서 앞 · 왼쪽 · 뒤를 지나 한 바퀴
   { id: 'weaponMastery', cls: 'warrior', branch: 0, tier: 1, kind: 'passive', maxRank: 5,
     stats: { physPct: [6, 12, 18, 24, 30] } },
   { id: 'earthquake', cls: 'warrior', branch: 0, tier: 2, kind: 'active', maxRank: 5,
     skill: { behavior: 'quake', targeting: 'self', type: 'phys', tags: ['aoe'], cost: 30, cd: 8,
       action: 0.50, scaled: true, hitFrac: 0.40, radius: 6.0, coef: ranks(0.85, 0.095),   // 밸런스 게이트: 1.10/+0.12 → 0.85/+0.095(같은 까닭)
       params: { waves: [0.4, 0.9, 1.4], shake: 0.35, fx: 'quakeWave' } } },
+  // 피드백 1: 「여진」 → 「연속 회전」(키 aftershock 그대로) — 0.5초 뒤 플레이어 자리에서 한 번 더 돈다(효과 spinEcho · follow 'player')
   { id: 'aftershock', cls: 'warrior', branch: 0, tier: 3, kind: 'transform', maxRank: 1, req: 'groundStomp', transforms: 'groundStomp',
     patch: { aftershock: { delay: 0.5, mul: 0.6 } } },
   { id: 'crusher', cls: 'warrior', branch: 0, tier: 4, kind: 'passive', maxRank: 3,
@@ -142,7 +149,8 @@ export const PATCH_KEYS = ['aftershock', 'split', 'shards', 'blast', 'shockwave'
 
 /** §8.4 — 동작별로 패치될 수 있는 키(데이터 검사 · 문서) */
 export const PATCH_KEYS_BY_BEHAVIOR = {
-  cone: ['aftershock', 'shockwave'],
+  cleave: [],
+  spinSlash: ['aftershock', 'shockwave'],   // 피드백 1: cone → spinSlash
   quake: [],
   dash: ['refund'],
   spin: ['healPerTarget', 'healTargetsCap', 'vortex'],

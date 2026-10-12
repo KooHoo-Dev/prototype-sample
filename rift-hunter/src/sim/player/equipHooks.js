@@ -36,7 +36,7 @@ export const EQUIP_HOOKS = {
   leapQuake: patchHook(),         // 도약 착지 → 지진(leap · landQuake)
   chargeRefund: patchHook(),      // 돌진 적중당 분노 · 3마리 이상이면 남은 쿨 1초(dash · refund)
   warCryHeal: patchHook(),        // 전투 함성 회복(buff · castHeal)
-  stompShockwave: patchHook(),    // 지면 강타 앞 충격파(cone · shockwave)
+  stompShockwave: patchHook(),    // 회전 베기 앞 충격파(spinSlash · shockwave — 피드백 1 · 옛 지면 강타 cone)
   fireballPierce: patchHook(),    // 화염구 관통(fireball · pierce)
   chainBounce: patchHook(),       // 연쇄 번개 튕김 +(chain · bouncesAdd)
   teleportNova: patchHook(),      // 순간이동 도착 서리 노바(blink · arrivalNova)

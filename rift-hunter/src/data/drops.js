@@ -9,8 +9,12 @@
  * @type {TreasureDef[]}
  */
 export const TREASURE = [
-  { id: 'normal', picks: 1, goldMul: 1.0, w: { none: 732, gold: 90, potion: 5, globe: 80, material: 8, gear: 85 } },
-  { id: 'minion', picks: 1, goldMul: 1.2, w: { none: 450, gold: 150, potion: 30, globe: 150, material: 20, gear: 200 } },
+  // 피드백 1(Jay 2026-10-12 「골드나 아이템을 드랍하는지」): 골드 더미를 더 자주 · 더 작게 — none → gold 로 무게를 옮기고 goldMul 을 그만큼 낮춘다.
+  //   normal gold 90 → 270(처치당 골드 확률 9% → 27%) · goldMul 1.0 → 1/3 · minion gold 150 → 300 · goldMul 1.2 → 0.6.
+  //   처치당 기대 골드(정확 적분 expectedGoldPile — 반올림 · 최소 1 포함)는 균열 1 · 6 이상에서 같고 2~5 에서 ±3.6% 안(theory.test 「피드백 1」) — §7.14 경제 산수 그대로.
+  //   장비 · 구슬 · 포션 · 재료 가중치와 합(1000)은 그대로다.
+  { id: 'normal', picks: 1, goldMul: 1 / 3, w: { none: 552, gold: 270, potion: 5, globe: 80, material: 8, gear: 85 } },
+  { id: 'minion', picks: 1, goldMul: 0.6, w: { none: 300, gold: 300, potion: 30, globe: 150, material: 20, gear: 200 } },
   { id: 'champion', picks: 2, goldMul: 1.6, w: { none: 315, gold: 250, potion: 25, globe: 90, material: 45, gear: 275 } },
   { id: 'elite', picks: 4, goldMul: 2.2, w: { none: 150, gold: 300, potion: 50, globe: 60, material: 40, gear: 400 } },
   { id: 'guardian', picks: 8, goldMul: 4.0, w: { none: 0, gold: 400, potion: 50, globe: 0, material: 100, gear: 450 }, guaranteed: 2 },

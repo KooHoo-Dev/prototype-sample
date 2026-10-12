@@ -43,6 +43,7 @@ export const CAP = {
   decals: 200,          // 바닥 표식(상태의 효과 + 순간 표식) 한 프레임 상한
   decalVerts: 60000,    // 보통 혼합 데칼 정점 예산
   glowVerts: 30000,     // 가산 데칼 정점 예산
+  swooshVerts: 6000,    // 횡베기 궤적(칼끝 높이의 가산 띠 — 피드백 1) 정점 예산
   particlesAdd: 1100,   // 가산 입자(불꽃 · 불씨 · 서리 · 번개)
   particlesDust: 300,   // 보통 혼합 입자(먼지 · 뼈 조각 · 점액)
   glyphs: 600,          // 프레임마다 다시 그리는 스프라이트
@@ -100,7 +101,9 @@ export const KIND_STYLE = {
   boneSpikes: { inner: 0xe8dcc0, tele: true, pattern: 'spikes', hit: 'flash', burst: 'spikes' },
   emberRain: { inner: 0xd8743a, tele: true, fall: 'ember', hit: 'flash', burst: 'embers' },
   // ── 플레이어 소유(흰 · 주황 · 하늘색 — 붉은색 없음) ──
-  stomp: { inner: 0xffc46b, border: 0xfff2d6, tele: false, hit: 'fan', burst: 'dust', fade: 0.3 },
+  // 피드백 1: 연속 회전(옛 여진 stomp — 원뿔 충격 부채) — 예고 없이 판정만 · 대기 [start, hitAt) 동안 플레이어를 따라가는 옅은 호(pre) ·
+  //   판정 직전 잔상 한 바퀴 · 판정에 바닥 칼자국 고리(slash) + 칼끝 높이 잔상 고리(sheet = 그 세기)
+  spinEcho: { inner: 0xcfe6ff, border: 0xf2f8ff, tele: false, pre: 'spinGhost', hit: 'slash', burst: null, fade: 0.3, sheet: 0.35 },
   quakeWave: { inner: 0xe8c890, border: 0xf3e6c8, tele: true, faint: DECAL.faint, hit: 'ring', burst: 'dustRing', grow: 0.25, fade: 0.3 },
   shockwave: { inner: 0xffc46b, border: 0xfff2d6, tele: false, hit: 'line', burst: 'dustLine', fade: 0.3 },
   meteor: { inner: 0xff9a2e, border: 0xffc36b, tele: true, faint: DECAL.faint, fall: 'meteor', pool: 'burning', hit: 'flash', burst: 'fire' },
@@ -196,7 +199,7 @@ export const MON_TELE = {
 export const PLAYER_FX = {
   wind: 0xdff4ff,           // 회오리 바람 고리 · 기둥
   dust: 0x8a7a66,           // 돌진 먼지 자취 · 도약 먼지 고리
-  stomp: 0xffe2a8,
+  slash: 0xfff0d6,          // 가르기 · 회전 베기 칼자국(따뜻한 흰색 — 피드백 1 · 붉은색 금지)
   frost: 0x9fdcff,
   gold: 0xffcf4a,           // 전투 함성 · 레벨업
   shield: 0x7fd4ff,         // 마력 보호막
@@ -209,6 +212,25 @@ export const PLAYER_FX = {
   hurt: 0xc0182a,           // 맞을 때 붉은 튐(작게)
   castPhys: 0xfff0d0, castFire: 0xffa23a, castCold: 0x9fdcff, castLightning: 0xc8b8ff, castNone: 0xfff0d0,
   windupHand: 0.45,         // 손 빛 최대 크기(m)
+};
+
+/**
+ * 피드백 1 — 횡베기 칼자국(가르기 cleave · 회전 베기 spinSlash · 연속 회전 spinEcho). 치수는 판정 그대로(§9.6 — 바깥 가장자리 = 판정 반지름 ·
+ * 가르기 = 몸 r + reach + PLAYER.reachTolerance(1.9) · 180° · 회전 베기 = radius(2.5) · 360°). 얇게 · 짧게 — 맞은 대상의 자세가 계속 보인다(QUALITY §4).
+ */
+export const SWING_FX = {
+  y: 0.95,                  // 칼끝 궤적 높이(m — 판정 틱 칼끝 0.74~1.2 의 가운데 · view.actors.test)
+  inner: 0.72,              // 궤적 띠 안쪽 반지름 = 판정 반지름 × 이 값(가르기 1.37 · 회전 베기 1.8 — 칼끝 1.58~2.27 에서 판정 가장자리까지 이어진다)
+  sheetA: 0.5,              // 궤적 머리 세기(바깥 가장자리 · 안쪽은 0 으로 그러데이션)
+  tailDeg: 110,             // 궤적 꼬리 길이(도 — 칼끝 뒤로)
+  pieces: 8,                // 꼬리 그러데이션 조각 수
+  fadeK: 0.14,              // 휘두름이 끝난 뒤(k > swing.to) 궤적이 사라지는 길이(행동 비율)
+  ground: 0.16,             // 판정 순간 바닥 칼자국 띠 폭(m — 판정 반지름 안쪽)
+  groundA: 0.55,            // 그 세기(0.3초에 사라진다 — 순간 연출 fade)
+  echo: 0xcfe6ff,           // 연속 회전 잔상(푸른 흰색 — 첫 회전과 구분)
+  echoPreA: 0.16,           // 연속 회전 대기 중 바닥 호(진행만큼 자란다 · 플레이어를 따라간다)
+  echoGhostSec: 0.2,        // 판정 전 잔상이 한 바퀴 도는 시간(판정 틱에 한 바퀴를 마친다)
+  echoSheetSec: 0.15,       // 판정 뒤 잔상 고리가 사라지는 시간
 };
 
 /** 포털 소용돌이 */

@@ -170,6 +170,36 @@
 .consum-cd { position: absolute; inset: 0; background: conic-gradient(rgba(0, 0, 0, 0.7) calc(var(--cd, 0) * 1turn), transparent 0); }
 .consum-key, .consum-n { position: relative; }
 .consum.is-empty .consum-n { color: var(--bad); }
+/* 포션 칸(피드백 1 — 「포션이 있는지 몰랐다」): 작은 「Q 5」 상자 대신 생명 구슬 왼쪽의 붉은 병 · 개수 크게 · Q 키 단추 · 「포션」 글자 · 쿨다운 부채는 병 몸통 */
+.consum-potion { left: -70px; bottom: 0; width: 60px; height: 80px; border: none; border-radius: 0; background: none; overflow: visible; display: block; }
+.flask { position: absolute; left: 50%; top: 6px; width: 48px; height: 58px; transform: translateX(-50%); }
+.flask-neck { position: absolute; left: 50%; top: 2px; width: 16px; height: 15px; transform: translateX(-50%); box-sizing: border-box;
+  border: 2px solid #9a7a56; border-bottom: none; border-radius: 3px 3px 0 0; background: linear-gradient(90deg, #3a1a1a, #6a2a24 50%, #3a1a1a); }
+.flask-neck::before { content: ''; position: absolute; left: -4px; right: -4px; top: -6px; height: 6px; border-radius: 2px; background: linear-gradient(#c09060, #7a5430); box-shadow: 0 1px 1px #000; }
+.flask-body { position: absolute; left: 0; right: 0; bottom: 0; height: 44px; border-radius: 50%; overflow: hidden; box-sizing: border-box;
+  border: 2px solid #9a7a56; background: #1a0c0c; box-shadow: 0 0 0 1px #120d0a, 0 2px 6px rgba(0, 0, 0, 0.7), inset 0 0 8px #000; }
+.flask-liquid { position: absolute; left: 0; right: 0; bottom: 0; top: 16%; border-radius: 0 0 50% 50%;
+  background: radial-gradient(circle at 40% 30%, #ff7a62, #c81c1c 55%, #5c0606); }
+.flask-gloss { position: absolute; left: 20%; top: 12%; width: 26%; height: 34%; border-radius: 50%; background: radial-gradient(rgba(255, 255, 255, 0.45), transparent 70%); }
+.consum-potion .consum-cd { border-radius: 50%; }
+.consum-potion .consum-n { position: absolute; left: 0; right: 0; bottom: 9px; text-align: center; font-size: 20px; font-weight: 800; line-height: 1;
+  color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000, 0 0 2px #000; }
+.consum-potion .consum-key { position: absolute; left: -1px; top: 2px; min-width: 18px; height: 18px; box-sizing: border-box; padding: 0 3px;
+  font-size: 12px; font-weight: 800; line-height: 16px; text-align: center; color: #fff; background: #2a2430; border: 1px solid #c8b490; border-radius: 4px;
+  box-shadow: 0 2px 0 #0a080c; }
+.consum-name { position: absolute; left: -6px; right: -6px; bottom: 0; font-size: 11px; font-weight: 700; line-height: 14px; text-align: center; color: #ffb4a6;
+  text-shadow: 0 1px 2px #000, 0 0 3px #000; white-space: nowrap; }
+.consum-potion.is-empty .flask-liquid { display: none; }
+.consum-potion.is-empty .consum-n { color: var(--bad); }
+.consum-potion.is-empty .consum-name { color: var(--ui-dim); }
+.consum-potion.is-cd .flask-liquid { filter: saturate(0.55) brightness(0.8); }
+/* 저생명 + 마실 수 있다: 금빛 테두리 · Q 단추 · 병이 위로 까딱(구슬의 붉은 저생명 맥동과 색 · 주기 · 자리가 다르다) */
+.consum-potion.is-urge .flask-body, .consum-potion.is-urge .flask-neck { border-color: #ffd25a; }
+.consum-potion.is-urge .consum-key { background: #ffd25a; color: #2a1a00; border-color: #fff2c0; }
+.consum-potion.is-urge .consum-name { color: #ffd25a; }
+.consum-potion.is-urge .flask { animation: ui-potion-urge 0.7s ease-in-out infinite; }
+@keyframes ui-potion-urge { 0%, 100% { transform: translate(-50%, 0); filter: drop-shadow(0 0 2px rgba(255, 210, 90, 0.5)); }
+  50% { transform: translate(-50%, -4px); filter: drop-shadow(0 0 9px rgba(255, 210, 90, 1)); } }
 .consum.is-free { border-color: var(--good); }
 .consum.is-free .consum-n { color: var(--good); font-size: 11px; letter-spacing: -0.5px; }
 
@@ -218,6 +248,7 @@
 .dmg-immune { font-size: 12px; font-weight: 600; color: #d8d0c8; }
 .dmg-taken { font-size: 13px; color: #ff5a4a; }
 .dmg-heal { font-size: 13px; color: #6fe07a; }
+.dmg-gold { font-size: 15px; font-weight: 800; color: #ffd25a; text-shadow: 0 1px 2px #000, 0 0 4px #000, 0 0 2px #3a2a00; }   /* 피드백 1 — 주운 골드 「+n 골드」 */
 
 /* ── 알림 · 배너 ── */
 .notice-big-col { position: absolute; right: 16px; top: 224px; width: 300px; display: flex; flex-direction: column; gap: 8px; }
@@ -331,7 +362,11 @@
 .complete-record { border: 1px solid var(--r-legendary); color: var(--r-legendary); }
 .pnl-confirm { width: 420px; text-align: center; }
 .confirm-text { font-size: 15px; margin: 6px 0 0; }
-.pnl-hint { width: 520px; }
+.pnl-hint { width: 560px; }
+/* 피드백 1 — 조작 카드의 포션 줄(실제 개수) · 새 캐릭터의 시작 보급 줄 */
+.hint-list .hint-potion { color: #ffd0c4; font-weight: 700; }
+.hint-list .hint-potion::marker { color: #ff6a5a; }
+.newchar-kit { margin: 10px 12px 0; padding: 6px 10px; font-size: 13px; color: #ffd0c4; background: rgba(120, 24, 20, 0.22); border: 1px solid rgba(255, 106, 90, 0.45); border-radius: 4px; }
 .hint-body { font-size: 14px; margin: 0; }
 .panel-map { pointer-events: none; padding: 8px; background: rgba(6, 5, 8, 0.42); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; }
 .map-canvas { display: block; }

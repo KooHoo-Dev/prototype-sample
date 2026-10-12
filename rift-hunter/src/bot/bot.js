@@ -4,7 +4,7 @@
 // step 뒤(afterStep): (autoCommit) 전환 commit · 스킬 배분 · 장착 · 사망이면 부활 · 마을 정비 명령 · 균열 레벨 선택.
 // 봇의 난수는 자기 {s}(생성자의 seed) — sim 의 난수 줄기를 쓰지 않는다(결정성). bot/* 는 GameSim.js 를 import 하지 않는다(sim 인스턴스를 인자로 받는다).
 
-import { SKILL_BAR } from '../core/constants.js';
+import { SKILL_BAR, TILE } from '../core/constants.js';
 import { hash32 } from '../core/hash.js';
 import { makeRng, seedRng } from '../core/rng.js';
 import { ticks } from '../core/time.js';
@@ -20,6 +20,13 @@ import { planTown, townAfter, townFrame } from './town.js';
 
 /** @typedef {import('../types.js').InputFrame} InputFrame */
 /** @typedef {import('../types.js').MonsterState} MonsterState */
+
+/** 그 점의 칸을 탐색했는가(미니맵이 정예급 점을 그리는 조건 — ui/minimap seenAt 과 같은 식 · 피드백 1) */
+function exploredAt(map, explored, x, z) {
+  if (!map || !explored) return false;
+  const i = Math.floor(x / TILE), j = Math.floor(z / TILE);
+  return i >= 0 && j >= 0 && i < map.w && j < map.h && !!explored[j * map.w + i];
+}
 
 export { RANDOM_BUILD };
 
@@ -66,7 +73,7 @@ export class Bot {
     this.sv = createSense();
     this.sit = { px: 0, pz: 0, life: 1, resource: 0, combat: false, mons: [], target: null, meleeNear: 0, kiteCount: this.params.kiteCount, walkable: null };
     this.sitPool = [];
-    this.skScratch = { cost: 0, angleDeg: 120 };
+    this.skScratch = { cost: 0, angleDeg: 120, radius: /** @type {number|undefined} */ (undefined), reserve: 0 };
     this.dodgeCand = [];
     /** 위협 ID → {noticed, at, last} */
     this.threatSeen = new Map();
@@ -492,6 +499,12 @@ export class Bot {
     const tick = st.tick;
     if (!map || !g) return;
     if (rift.guardianSpawn) mem.guardian = { x: rift.guardianSpawn.x, z: rift.guardianSpawn.z };
+    // 피드백 1 회귀에서 찾음: 수호자가 플레이어를 쫓아 출현 자리에서 멀리 간 뒤 잠들면(먼 흐름장) 봇은 출현 자리에서 영영 기다렸다(20분 포기 —
+    // 빌드 비교 1/150판). 사람은 미니맵(탐색한 칸의 수호자 점 — ui/minimap)에서 그 자리를 본다 — 봇도 그 점으로 간다.
+    if (rift.phase === 'guardian' && rift.guardianId !== null) {
+      const gm = rift.mons.find((m) => m.id === rift.guardianId);
+      if (gm && !gm.dead && !gm.gone && exploredAt(map, rift.explored, gm.pos.x, gm.pos.z)) mem.guardian = { x: gm.pos.x, z: gm.pos.z };
+    }
     // 들어선 방
     const ri = roomAt(map, p.pos.x, p.pos.z);
     if (ri >= 0) {

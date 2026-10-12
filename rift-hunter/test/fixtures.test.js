@@ -18,7 +18,7 @@ import { isWalkable } from '../src/sim/world/nav.js';
 import { assertFiniteDeep, makeTestCtx, makeTestState } from './helpers.js';
 
 const IDS = ['town', 'riftSwarm', 'riftElites', 'riftAffixes', 'riftGuardian', 'riftWitch', 'riftWarrior', 'riftMage', 'riftLoot', 'riftDeath', 'riftComplete', 'bag', 'shops', 'skillTree', 'lowLife'];
-const EFFECT_KINDS = new Set(['stomp', 'quakeWave', 'shockwave', 'meteor', 'vortex', 'afterimageBlast', 'corpseBlast', 'iceBurst', 'chainArc', 'chargeLine',
+const EFFECT_KINDS = new Set(['spinEcho', 'quakeWave', 'shockwave', 'meteor', 'vortex', 'afterimageBlast', 'corpseBlast', 'iceBurst', 'chainArc', 'chargeLine',
   'bloaterBurst', 'poisonPool', 'fireDeath', 'coldNova', 'jail', 'plague', 'mortar', 'slam', 'boneSpikes', 'emberRain', 'guardianSpawn']);
 const PROJ_VISUALS = new Set(['magicBolt', 'fireball', 'fireballSplit', 'iceShard', 'arrow', 'shamanFire', 'spark', 'ashBolt']);
 
@@ -33,6 +33,8 @@ const T = {
   rift: Object.keys(createRiftState({ level: 1, seed: 1, tileset: 'crypt', mapId: 'x', map: tCtx.map })),
   mon: Object.keys(spawnMonster(tCtx, { typeId: 'ghoul', rank: 'normal', level: 1, x: tCtx.map.spawn.x, z: tCtx.map.spawn.z })),
   effect: Object.keys(spawnEffect(tCtx, { kind: 'jail', owner: 'mon', srcId: 1, hostile: true, shape: circle(1, 1, 1), delay: 0.8, spec: null })),
+  // 피드백 1: follow 'player'(연속 회전)는 따라가는 효과에만 있는 선택 키 — 그 효과는 이 꼴과 비교한다
+  effectFollow: Object.keys(spawnEffect(tCtx, { kind: 'spinEcho', owner: 'player', srcId: 0, hostile: false, shape: circle(1, 1, 1), delay: 0.5, spec: null, follow: 'player' })),
   proj: Object.keys(spawnProjectile(tCtx, { visual: 'arrow', owner: 'mon', srcId: 1, x: 5, z: 5, facing: 0, speed: 10, range: 10, r: 0.2, spec: {} })),
   drop: Object.keys(spawnDrops(tCtx, [{ kind: 'gold', item: null, amount: 3, mat: null }], 10, 10)[0]),
   char: Object.keys(createCharacter({ slot: 0, cls: 'warrior', name: 'x', newId: () => 'i1' })),
@@ -100,7 +102,8 @@ for (const id of IDS) {
         ids.push(m.id);
       }
       for (const e of rift.effects) {
-        sameKeys(e, T.effect, `effect ${e.id}`);
+        sameKeys(e, 'follow' in e ? T.effectFollow : T.effect, `effect ${e.id}`);
+        if ('follow' in e) assert.equal(e.follow, 'player', `effect ${e.id} follow`);
         assert.ok(EFFECT_KINDS.has(e.kind), `effect kind ${e.kind}(§9.8)`);
         assert.ok(e.start <= e.hitAt && e.hitAt < e.end && e.end > state.tick, `effect ${e.id} 시각`);
         assert.ok(isWalkable(rmap, e.shape.x, e.shape.z), `effect ${e.id}(${e.kind}) 기준점이 걷기 가능`);

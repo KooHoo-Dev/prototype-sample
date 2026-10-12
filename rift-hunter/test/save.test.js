@@ -408,3 +408,24 @@ test('createCharacter → 저장 → 읽기: 새 캐릭터 그대로 · xp 는 �
   const big = serializeChar({ ...ch, level: 5, xp: 99999 });
   assert.equal(loadChar(JSON.stringify(big), 3).char.xp, xpReq(5) - 1);
 });
+
+// 피드백 1: 스킬 노드 ID 는 세이브에 들어 있다 — 지면 강타(groundStomp) · 여진(aftershock) · 강타(bash) 의 ID 는 그대로 두고 동작만 회전 베기 · 연속 회전 · 가르기로 바꿨다.
+test('피드백 1 세이브 호환: 옛 세이브(같은 SAVE_VERSION)의 groundStomp · aftershock 랭크와 스킬 바가 그대로 읽히고, 그 칸이 회전 베기(spinSlash)로 돈다', async () => {
+  const { getNode, getSkillDef } = await import('../src/data/index.js');
+  const { skillParams } = await import('../src/sim/player/skills.js');
+  const { CLASSES } = await import('../src/data/classes.js');
+  const { ch } = richState();
+  // 피드백 1 전의 세이브가 담던 그대로(레벨 15 · 14점: 지면 강타 5 · 무기 숙련 5 · 여진 1 · 지진 2 · 바 0 = 지면 강타)
+  const raw = serializeChar({ ...ch, level: 15, skills: { ranks: { groundStomp: 5, weaponMastery: 5, aftershock: 1, earthquake: 2 }, bar: ['groundStomp', 'earthquake', null, null, null] } });
+  assert.equal(raw.v ?? raw.version ?? SAVE_VERSION, SAVE_VERSION);
+  const r = loadChar(JSON.stringify(raw), 0);
+  assert.equal(r.broken, false);
+  assert.deepEqual(r.char.skills.ranks, { groundStomp: 5, weaponMastery: 5, aftershock: 1, earthquake: 2 }, '랭크 그대로(이전 없음)');
+  assert.deepEqual(r.char.skills.bar, ['groundStomp', 'earthquake', null, null, null], '바 그대로');
+  assert.equal(getNode('groundStomp').skill.behavior, 'spinSlash');
+  assert.equal(getSkillDef(CLASSES.find(c => c.id === 'warrior').basic).behavior, 'cleave', '기본 공격 bash = 가르기');
+  const state = makeTestState({ cls: 'warrior' });
+  state.char = r.char;
+  const ctx = makeTestCtx(state);
+  assert.deepEqual(skillParams(ctx, 'groundStomp').aftershock, { delay: 0.5, mul: 0.6 }, '여진 랭크 → 연속 회전 패치');
+});

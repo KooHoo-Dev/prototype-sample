@@ -1100,6 +1100,36 @@ test('dispose: 구독을 모두 풀고 컨텍스트를 닫는다 · 그 뒤 호�
 
 // ───────────────────────── 소리 표 완결성 ─────────────────────────
 
+// 피드백 1: 기본 공격 cleave(가르기) · 회전 베기 spinSlash 동작과 연속 회전 효과 spinEcho — 옛 강타(meleeBasic) · 지면 강타(cone) · 여진(stomp)이
+// 내던 소리를 잇는다(소리 없이 조용해지는 회귀를 막는다). sim 이 더 만들지 않는 옛 열(meleeBasic · cone · 효과 stomp)은 표에 없다.
+test('피드백 1: 가르기는 휘두름 · 회전 베기는 한 바퀴 휘두름(옛 휘두름과 다른 음색) · 연속 회전은 판정 때 잔상 휘두름 — 실제 이벤트로', () => {
+  assert.equal(START_BY_BEHAVIOR.cleave, 'swing', '가르기 시작 = 옛 강타와 같은 휘두름');
+  assert.equal(HIT_BY_BEHAVIOR.cleave, null, '가르기 판정 틱은 HIT(맞은 적마다 타격 — 30ms 합치기)가 맡는다');
+  assert.ok(START_BY_BEHAVIOR.spinSlash && SOUNDS[START_BY_BEHAVIOR.spinSlash], '회전 베기 시작음');
+  assert.ok('spinSlash' in HIT_BY_BEHAVIOR, '회전 베기 판정 열');
+  assert.ok(EFFECT_BOOM.spinEcho && SOUNDS[EFFECT_BOOM.spinEcho], '연속 회전 판정음');
+  const sigs = ['swing', START_BY_BEHAVIOR.spinSlash, EFFECT_BOOM.spinEcho].map(id => signature(SOUNDS[id]));
+  assert.equal(new Set(sigs).size, 3, '가르기 · 회전 베기 · 연속 회전이 서로 다르게 들린다');
+  for (const k of ['meleeBasic', 'cone']) assert.ok(!(k in START_BY_BEHAVIOR) && !(k in HIT_BY_BEHAVIOR), `죽은 열 ${k}`);
+  assert.ok(!('stomp' in EFFECT_BOOM), '죽은 효과 열 stomp');
+
+  const { bus, audio, ctx } = setup();
+  audio.update(riftState(), 0);
+  const x = 20, z = 20;
+  ctx.advance(1);
+  bus.emit(EV.ACTION_START, { skillId: 'bash', act: 'attack', x, z, facing: 0, tx: x, tz: z + 1, dur: 0.71, hitIn: 0.33 });
+  assert.equal(voicesOf(audio, 'swing').length, 1, '가르기(bash) 시작 → 휘두름');
+  ctx.advance(1);
+  bus.emit(EV.ACTION_START, { skillId: 'groundStomp', act: 'attack', x, z, facing: 0, tx: x, tz: z + 1, dur: 0.6, hitIn: 0.3 });
+  assert.equal(voicesOf(audio, START_BY_BEHAVIOR.spinSlash).length, 1, '회전 베기(groundStomp) 시작 → 회전 휘두름');
+  ctx.advance(1);
+  const shape = { type: 'circle', x, z, r: 2.5 };
+  bus.emit(EV.EFFECT_SPAWN, { id: 80, kind: 'spinEcho', hostile: false, shape, sec: 0.5, dur: 0 });
+  bus.emit(EV.EFFECT_HIT, { id: 80, kind: 'spinEcho', hostile: false, shape, hitPlayer: false, targets: 3 });
+  assert.equal(voicesOf(audio, EFFECT_BOOM.spinEcho).length, 1, '연속 회전 판정 → 잔상 휘두름');
+  assert.equal(audio.debugStats().errors, 0);
+});
+
 test('소리 표: 모든 레시피가 유효하고 · 모든 연결 표가 있는 소리를 가리키고 · 데이터의 모든 행(동작 · 템플릿 · 예고 · 환경음)을 덮는다', () => {
   const OSC = ['sine', 'square', 'sawtooth', 'triangle'];
   const FLT = ['lowpass', 'highpass', 'bandpass'];
@@ -1148,7 +1178,7 @@ test('소리 표: 모든 레시피가 유효하고 · 모든 연결 표가 있�
   }
   for (const t of TILESETS) assert.ok(LOOPS[t.ambience] && LOOPS[t.ambience].bus === 'amb', `환경음 ${t.ambience}`);
   // 계약 §9.8 · §4.2 의 ID
-  for (const k of ['stomp', 'quakeWave', 'shockwave', 'meteor', 'vortex', 'afterimageBlast', 'corpseBlast', 'iceBurst', 'chainArc', 'chargeLine', 'bloaterBurst',
+  for (const k of ['spinEcho', 'quakeWave', 'shockwave', 'meteor', 'vortex', 'afterimageBlast', 'corpseBlast', 'iceBurst', 'chainArc', 'chargeLine', 'bloaterBurst',
     'poisonPool', 'fireDeath', 'coldNova', 'jail', 'plague', 'mortar', 'slam', 'boneSpikes', 'emberRain', 'guardianSpawn']) assert.ok(k in EFFECT_BOOM, `효과 ${k}`);
   for (const k of ['chargeLine', 'bloaterBurst', 'poisonPool', 'fireDeath', 'coldNova', 'jail', 'plague', 'mortar', 'slam', 'boneSpikes', 'emberRain', 'guardianSpawn']) {
     assert.ok(k in EFFECT_WARN, `적대 효과 예고 ${k}`);
