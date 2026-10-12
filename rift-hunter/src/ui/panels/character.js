@@ -65,7 +65,7 @@ export function createCharacterPanel(ctx) {
 
     // 기본 · 생존
     sec(t('stat.lifeMax') + ' · ' + t('stat.armor') + ' · ' + t('stat.res'));
-    row(t('stat.main'), fmtInt(s.main));
+    row(t('stat.main.' + char.cls), fmtInt(s.main));             // 「힘(주 능력치)」 · 「지능(주 능력치)」 — 아이템의 힘 · 지능 줄과 같은 낱말
     row(t('stat.vit'), fmtInt(s.vit));
     row(t('stat.lifeMax'), fmtInt(s.lifeMax));
     row(t('res.' + (s.cls === 'mage' ? 'mana' : 'rage')), fmtInt(s.resourceMax));
@@ -110,7 +110,7 @@ export function createCharacterPanel(ctx) {
     row(t('stat.globePct'), '+' + fmtPct(s.globePct, 0));
     xpEl = row(t('hud.xp'), xpText(char));
     playEl = row(t('char.playTime'), fmtSec(char.playSec));
-    row(t('npc.riftStone'), t('riftStone.level', { n: L }));
+    row(t('char.riftUnlocked'), t('riftStone.level', { n: L }));
   }
 
   return {

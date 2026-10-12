@@ -329,3 +329,84 @@ test('app.input: 휠 → 줌(한 칸 = 한 단계 · 트랙패드 잔 이벤트�
   inp.handleWheel(w(100));
   assert.equal(zooms.length, 4);
 });
+
+test('app.input: 뗌은 창의 캡처 단계에서 눌림을 푼다 — 처리기(이름 칸)가 keyup 전파를 막아도 Shift · 스킬 키 · Alt 가 남지 않는다', () => {
+  const bus = new EventBus();
+  const ui = fakeUi();
+  /** 단계를 나눠 받는 가짜 창 — 캡처(창 먼저) → 대상(이름 칸) → 버블(창) */
+  const capture = new Map(), bubble = new Map();
+  const win = {
+    addEventListener(type, fn, opt) { const m = opt === true || (opt && opt.capture) ? capture : bubble; if (!m.has(type)) m.set(type, []); m.get(type).push(fn); },
+    removeEventListener() {},
+  };
+  const inp = new InputCollector({ canvas: null, bus, ui, rc, keybinds: KEYBINDS, settings: /** @type {any} */ ({ alwaysLabels: false }), win, doc: null, pick });
+  /** @param {string} type @param {string} code @param {boolean} [onField] 이름 칸에서(keyup 전파를 막는다 — newChar.js) */
+  const dispatch = (type, code, onField = false) => {
+    let stopped = false;
+    const e = key(type, code, { stopPropagation() { stopped = true; } });
+    for (const fn of capture.get(type) ?? []) fn(e);
+    if (onField && type === 'keyup') e.stopPropagation();
+    if (!stopped) for (const fn of bubble.get(type) ?? []) fn(e);
+  };
+  ui.modal = true;                                              // 새 캐릭터(모달)가 Shift 누름을 먹는다 → 눌림으로 남는다
+  dispatch('keydown', 'ShiftLeft');
+  dispatch('keydown', 'Digit2');
+  dispatch('keydown', 'AltLeft');
+  assert.equal(inp.held.has('ShiftLeft'), true);
+  assert.equal(inp.alt, true);
+  dispatch('keyup', 'ShiftLeft', true);                         // 이름 칸에서 뗐다 — 버블은 막혔다
+  dispatch('keyup', 'Digit2', true);
+  dispatch('keyup', 'AltLeft', true);
+  ui.modal = false;
+  const f = inp.frame(STATE, null);
+  assert.equal(f.shift, false, 'Shift 가 눌린 채 남지 않는다');
+  assert.equal(f.slot[2], false);
+  assert.equal(inp.alt, false, 'Alt 이름표도');
+});
+
+test('app.input: 마우스 이벤트의 shiftKey — Alt 를 누른 채 Shift+클릭도 제자리 · false 면 놓친 Shift 뗌을 바로잡는다', () => {
+  const { inp } = make();
+  inp.handleKeyDown(key('keydown', 'AltLeft', { altKey: true }));
+  inp.handleKeyDown(key('keydown', 'ShiftLeft', { altKey: true, shiftKey: true }));   // 조합 — keydown 은 버린다
+  assert.equal(inp.held.has('ShiftLeft'), false);
+  inp.handleMouseDown(mouse('mousedown', MOUSE.move, { shiftKey: true, altKey: true }));
+  let f = inp.frame(STATE, null);
+  assert.equal(f.shift, true, 'Alt + Shift + 클릭 = 제자리');
+  assert.equal(f.lmbDown, true);
+  inp.handleKeyUp(key('keyup', 'ShiftLeft', { altKey: true }));
+  assert.equal(inp.frame(STATE, null).shift, false, 'Shift 를 떼면 끝');
+  // 놓친 뗌 — held 에 남은 Shift 를 다음 마우스 이벤트(shiftKey false)가 푼다
+  inp.handleKeyUp(key('keyup', 'AltLeft'));
+  inp.held.add('ShiftLeft');
+  inp.handleMouseMove(mouse('mousemove', 0, { shiftKey: false, altKey: false }));
+  f = inp.frame(STATE, null);
+  assert.equal(f.shift, false);
+  // shiftKey 가 없는 가짜 이벤트는 그대로(키로 누른 Shift 유지)
+  inp.handleKeyDown(key('keydown', 'ShiftLeft'));
+  inp.handleMouseMove(mouse('mousemove', 0));
+  assert.equal(inp.frame(STATE, null).shift, true);
+});
+
+test('app.input: dropEdges(rearm) — 버린 틱에 아직 누르고 있던 좌클릭은 다음 틱의 누름 · 뗐으면 없음 · 패널 닫힘(rearm 없음)은 그대로', () => {
+  const { inp, bus } = make();
+  inp.handleMouseDown(mouse('mousedown', MOUSE.move));
+  inp.dropEdges(1, { rearm: true });
+  let f = inp.frame(STATE, null);
+  assert.deepEqual([f.lmb, f.lmbDown], [true, false], '버리는 틱');
+  f = inp.frame(STATE, null);
+  assert.deepEqual([f.lmb, f.lmbDown], [true, true], '다음 틱의 누름');
+  assert.equal(inp.frame(STATE, null).lmbDown, false, '한 번만');
+  // 막 동안 눌렀다 뗐다 — 버린다
+  inp.handleMouseUp(mouse('mouseup', MOUSE.move));
+  inp.handleMouseDown(mouse('mousedown', MOUSE.move));
+  inp.handleMouseUp(mouse('mouseup', MOUSE.move));
+  inp.dropEdges(1, { rearm: true });
+  assert.equal(inp.frame(STATE, null).lmbDown, false);
+  assert.equal(inp.frame(STATE, null).lmbDown, false);
+  // 패널 닫힘 — 누르고 있어도 새 누름을 내지 않는다(이어지는 이동 의도가 그대로라)
+  inp.handleMouseDown(mouse('mousedown', MOUSE.move));
+  inp.frame(STATE, null);
+  bus.emit(EV.PANEL_CLOSED, { panel: 'inventory', depth: 0, by: 'key' });
+  inp.frame(STATE, null);
+  assert.equal(inp.frame(STATE, null).lmbDown, false);
+});

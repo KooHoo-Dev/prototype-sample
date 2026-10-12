@@ -234,7 +234,10 @@ export function findPath(map, from, to, { r = 0.4, maxNodes = PATHING.maxNodes }
       const du = NB[k][0], dv = NB[k][1];
       const uu = u + du, vv = v + dv;
       if (!pass(uu, vv)) continue;
-      if (du !== 0 && dv !== 0 && (!pass(u + du, v) || !pass(u, v + dv))) continue;   // 모서리 자르기 금지
+      // 모서리 자르기 금지 — 단 시작 칸에서는 실제 시작점에서 그 칸 가운데까지 몸이 곧장 지나가면 된다(최종 게이트: 벽을 눌러 r 만큼 앞에 선 자리는
+      //   몸은 맞지만 시작 칸 가운데가 맞지 않고 맞는 이웃이 대각선뿐이라 시작 칸을 떠나지 못했다 — 시야 밖 목적지가 모두 [] · 생성 맵 벽 앞 정지의 1.2%)
+      if (du !== 0 && dv !== 0 && (!pass(u + du, v) || !pass(u, v + dv))
+        && !(i === start && rr > 0 && segClear(map, from, { x: (uu + 0.5) * NAV_CELL, z: (vv + 0.5) * NAV_CELL }, rr))) continue;
       const j = vv * nw + uu;
       if (closed[j] === gen) continue;
       const ng = gi + NB[k][2];

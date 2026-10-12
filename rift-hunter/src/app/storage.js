@@ -193,6 +193,20 @@ export function createStorage({ ls = undefined, now = () => Date.now() } = {}) {
       }
       return { account, broken: false, rebuilt: false, future: false, reason: r.reason };
     },
+    /**
+     * 저장된 계정의 savedAt(ms — 없거나 읽지 못하면 null) — 여러 탭: 이 탭이 마지막으로 보거나 쓴 값보다 새로우면 다른 탭이 썼다(Game 이 쓰기 전에 본다)
+     * @returns {number|null}
+     */
+    accountSavedAt() {
+      const raw = get(SAVE_KEYS.account);
+      if (raw === null) return null;
+      try {
+        const v = JSON.parse(raw)?.savedAt;
+        return typeof v === 'number' && Number.isFinite(v) ? v : null;
+      } catch {
+        return null;
+      }
+    },
     /** 계정 쓰기(serializeAccount · savedAt) @param {import('../types.js').GameState} state @returns {boolean} */
     writeAccount(state) {
       try {

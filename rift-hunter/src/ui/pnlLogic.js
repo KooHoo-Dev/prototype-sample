@@ -203,6 +203,59 @@ export function nodeStatRows(nodeId, rankBefore, rankAfter) {
   return out;
 }
 
+/** 소수 한 자리(끝 0 없이) @param {number} v */
+const f1 = (v) => (Math.round(Number(v) * 10) / 10).toString();
+/** 비율 → 퍼센트 숫자 @param {number} v */
+const pct = (v) => f1(Number(v) * 100);
+
+/**
+ * describeSkill().extra 에서 보이는 수치(동작 params · 상태 · 변형 patch) — 랭크 효과가 피해 · 비용 · 재사용에 없는 노드(변형 6 · 전투 함성 · 마력 보호막 …)도
+ * 찍기 전 · 후가 숫자로 달라지게(리뷰 수정 — 브리프 §3.3). get 이 undefined 면 그 줄이 없다(그 쪽은 「—」).
+ * @type {Array<{key:string, get:(x:any) => any, p:(v:any, x:any) => Object, more:boolean}>}
+ */
+const EXTRA_ROWS = [
+  { key: 'skill.x.armorBuff', get: (x) => (x.buffSec !== undefined ? x.value : undefined), p: (v) => ({ v: pct(v) }), more: true },
+  { key: 'skill.x.buffSec', get: (x) => x.buffSec, p: (v) => ({ v: f1(v) }), more: true },
+  { key: 'skill.x.absorb', get: (x) => x.absorbPct, p: (v, x) => ({ v: pct(v), n: Math.round(Number(x.absorb) || 0) }), more: true },
+  { key: 'skill.x.shieldSec', get: (x) => (x.absorbPct !== undefined ? x.dur : undefined), p: (v) => ({ v: f1(v) }), more: true },
+  { key: 'skill.x.burn', get: (x) => x.burn?.coefPerSec, p: (v, x) => ({ v: pct(v), s: f1(x.burn?.dur ?? 0) }), more: true },
+  { key: 'skill.x.bounces', get: (x) => x.bounces, p: (v) => ({ v: f1(v) }), more: true },
+  { key: 'skill.x.stun', get: (x) => x.stun, p: (v) => ({ v: f1(v) }), more: true },
+  { key: 'skill.x.chill', get: (x) => x.chill, p: (v) => ({ v: f1(v) }), more: true },
+  { key: 'skill.x.shock', get: (x) => x.shockChance, p: (v) => ({ v: pct(v) }), more: true },
+  { key: 'skill.x.aftershock', get: (x) => x.aftershock?.mul, p: (v, x) => ({ v: pct(v), s: f1(x.aftershock?.delay ?? 0) }), more: true },
+  { key: 'skill.x.healPerTarget', get: (x) => x.healPerTarget, p: (v, x) => ({ v: pct(v), n: Number(x.healTargetsCap) || 0 }), more: true },
+  { key: 'skill.x.landStun', get: (x) => x.landStun, p: (v) => ({ v: f1(v) }), more: true },
+  { key: 'skill.x.split', get: (x) => x.split?.mul, p: (v, x) => ({ n: Number(x.split?.n) || 0, v: pct(v) }), more: true },
+  { key: 'skill.x.shards', get: (x) => x.shards?.mul, p: (v, x) => ({ n: Number(x.shards?.n) || 0, v: pct(v), c: f1(x.shards?.chill ?? 0) }), more: true },
+  { key: 'skill.x.blast', get: (x) => x.blast?.coef, p: (v, x) => ({ v: pct(v), r: f1(x.blast?.r ?? 0) }), more: true },
+];
+
+/** 스킬 수치 줄의 문자열 키(라벨 key · 값 key + '.v') — 테스트가 다 있는지 본다 */
+export const SKILL_EXTRA_KEYS = EXTRA_ROWS.flatMap((r) => [r.key, r.key + '.v']);
+
+/**
+ * 찍기 전 · 후 describeSkill 결과 둘(없으면 null) → 동작 수치 줄(라벨 t(key) · 값 t(key + '.v', 전/후)). 값이 한쪽에만 있으면 다른 쪽은 null(「—」).
+ * @param {{extra?:any}|null} a @param {{extra?:any}|null} b
+ * @returns {Array<{key:string, before:Object|null, after:Object|null, dir:number}>} dir 1 = 오름(좋음) · 0 = 같음/모름
+ */
+export function skillExtraRows(a, b) {
+  const xa = a?.extra ?? null, xb = b?.extra ?? null;
+  /** @type {Array<{key:string, before:Object|null, after:Object|null, dir:number}>} */
+  const out = [];
+  for (const row of EXTRA_ROWS) {
+    const va = xa ? row.get(xa) : undefined;
+    const vb = xb ? row.get(xb) : undefined;
+    const ha = typeof va === 'number' && Number.isFinite(va), hb = typeof vb === 'number' && Number.isFinite(vb);
+    if (!ha && !hb) continue;
+    const before = ha ? row.p(va, xa) : null;
+    const after = hb ? row.p(vb, xb) : null;
+    const d = ha && hb ? Math.sign(Math.round((vb - va) * 1000)) : hb && !ha && xa ? 1 : 0;
+    out.push({ key: row.key, before, after, dir: d === 0 ? 0 : (d > 0) === row.more ? 1 : -1 });
+  }
+  return out;
+}
+
 /**
  * 제작 결과 분포(§10.6) — 옵션 수 affixCountDist('rare') · 옵션 티어 tierDist(PL) · 그 부위 기본형 단계 baseTierDist(PL)(단계마다 그 부위 · 클래스 기본형 이름)
  * @param {CharacterState|null} char @param {string} slot
@@ -272,4 +325,31 @@ export function mysticEquipList(char) {
 export function baseNameKey(item) {
   if (!item || !BASES_BY_ID[item.baseId]) return null;
   return 'base.' + item.baseId + '.' + (item.tier | 0);
+}
+
+/**
+ * 균열 완료 패널의 배지(§10.6 — 다음 레벨 해금 · 무사망 +2) — 이번 판이 해금을 실제로 올렸을 때만.
+ * 요약의 unlockedTo = max(지금, min(maxLevel, L + 몫))이라 같은 레벨을 되풀이하면 「이미 열린 값」도 L + 1 ~ L + 2 안에 든다(리뷰 수정).
+ * @param {{level:number, unlockedTo:number, noDeath:boolean}} s RunSummary
+ * @param {number|null} from 균열을 열 때의 char.riftUnlocked(모르면 null — 옛 식: 범위만 본다)
+ * @returns {{raised:boolean, bonus:boolean}} bonus = 무사망 +2 가 사망이 있었을 때(+1)보다 더 열었다
+ */
+export function completeBadges(s, from) {
+  if (!s) return { raised: false, bonus: false };
+  const L = Math.max(1, Math.floor(Number(s.level)) || 1);
+  const to = Math.floor(Number(s.unlockedTo)) || 1;
+  const known = typeof from === 'number' && Number.isFinite(from);
+  const raised = known ? to > from : to >= L + RIFT.unlockClear && to <= L + (s.noDeath ? RIFT.unlockNoDeath : RIFT.unlockClear);
+  const withoutBonus = Math.min(RIFT.maxLevel, known ? Math.max(/** @type {number} */ (from), L + RIFT.unlockClear) : L + RIFT.unlockClear);
+  return { raised, bonus: raised && !!s.noDeath && to > withoutBonus };
+}
+
+/**
+ * 붕괴 패널의 「잃은 것」 해금 — 이 판을 깼다면 새로 열렸을 단계 수(이미 열려 있으면 0)
+ * @param {number} level 균열 레벨 @param {number} deaths 이번 판 사망 @param {number} riftUnlocked 지금 해금
+ */
+export function lostUnlock(level, deaths, riftUnlocked) {
+  const L = Math.max(1, Math.floor(Number(level)) || 1);
+  const gain = Number(deaths) === 0 ? RIFT.unlockNoDeath : RIFT.unlockClear;
+  return Math.max(0, Math.min(RIFT.maxLevel, L + gain) - Math.max(1, Math.floor(Number(riftUnlocked)) || 1));
 }

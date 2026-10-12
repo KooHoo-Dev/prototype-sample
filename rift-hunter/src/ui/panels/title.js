@@ -76,14 +76,16 @@ export function createTitlePanel(ctx) {
     id: 'title',
     modal: true,
     el,
-    /** @param {{touch?:boolean, storageOk?:boolean, readOnly?:boolean}} [args] app 이 넘긴다(§11.1 · §11.12) */
+    /** @param {{touch?:boolean, storageOk?:boolean, readOnly?:boolean, warn?:string|null}} [args] app 이 넘긴다(§11.1 · §11.12) */
     open(args = {}) {
       err.textContent = '';
       let coarse = false;
       if (typeof args.touch === 'boolean') coarse = args.touch;
       else try { coarse = !!window.matchMedia?.('(pointer: coarse)').matches && !window.matchMedia?.('(any-pointer: fine)').matches; } catch { coarse = false; }
       touch.hidden = !coarse;
-      const warn = args.storageOk === false ? 'notice.saveBlocked' : args.readOnly ? 'notice.saveFuture' : null;
+      // app 이 넘긴 저장 안내(저장 막힘 · 다른 탭 · 미래 버전 · 봇 관전 — 저장하지 않는 세션의 이유) · 없으면 옛 인자로
+      const warn = typeof args.warn === 'string' || args.warn === null ? args.warn
+        : args.storageOk === false ? 'notice.saveBlocked' : args.readOnly ? 'notice.saveFuture' : null;
       saveWarn.textContent = warn ? t(warn) : '';
       saveWarn.hidden = !warn;
       refresh();

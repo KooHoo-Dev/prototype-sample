@@ -89,6 +89,8 @@ export class Bot {
     this.bagBlocked = false;
     this.lootIgnore = new Map();
     this.lootTry = { id: -1, since: 0, last: -1e9 };
+    /** 줍기 진척 시계(리뷰 수정 — loot.js lootTarget) — 바닥 드랍 수가 줄지 않은 채 줍기를 이어 간 시간 */
+    this.lootStall = { since: 0, last: -1e9, live: Infinity };
     this.equipSeen = { level: -1, ids: new Set() };
     this.townPlan = null;
     this.lastScene = null;

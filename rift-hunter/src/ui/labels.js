@@ -6,7 +6,7 @@
 //   면역 「면역」 · 받은 피해는 플레이어 위 작은 붉은 숫자 · 회복은 녹색 +n · DOM 풀 48 — 넘으면 가장 오래된 것을 다시 쓴다.
 // 이름표는 pointer-events 가 없다(클릭은 캔버스로 — app 이 labelHover 로 대상을 고른다). 위치 계산은 순수 함수 stackLabels.
 
-import { fmtInt } from './format.js';
+import { fmtDmg, fmtInt } from './format.js';
 import { t, tName } from './i18n.js';
 
 export const LABEL_POOL = 64;
@@ -154,8 +154,8 @@ export function createLabels({ root, settings, project }) {
   function paintNum(n) {
     let text;
     if (n.kind === 'immune') text = t('hud.immune');
-    else if (n.kind === 'heal') text = '+' + fmtInt(n.amount);
-    else text = fmtInt(n.amount);
+    else if (n.kind === 'heal') text = '+' + fmtDmg(n.amount);
+    else text = fmtDmg(n.amount);
     if (text !== n.text) { n.text = text; n.el.textContent = text; }
     const cls = 'dmg dmg-' + n.kind + (n.crit ? ' is-crit' : '');
     if (cls !== n.cls) { n.cls = cls; n.el.className = cls; }
@@ -167,8 +167,9 @@ export function createLabels({ root, settings, project }) {
   function spawnNum(kind, target, x, z, y, amount, crit) {
     if (!deps.settings?.damageNumbers) return;
     if (kind !== 'immune' && !(amount > 0)) return;
-    // 같은 대상 0.1초 안이면 합친다(같은 종류끼리)
-    if (target >= 0) {
+    // 같은 대상 0.1초 안이면 합친다(같은 종류끼리) — 최종 게이트: 플레이어가 받은 피해(-2) · 회복(-3)도. 전에는 몬스터 대상만 합쳐
+    //   떼에게 맞으면 틱마다 새 숫자가 머리 위 같은 자리(가로 흔들림 5칸)에 겹쳐 「22222」처럼 읽혔다
+    if (target >= 0 || target === -2 || target === -3) {
       for (let i = 0; i < nums.length; i++) {
         const n = nums[i];
         if (n.active && n.target === target && n.kind === kind && clock - n.born <= DMG_MERGE_SEC) {

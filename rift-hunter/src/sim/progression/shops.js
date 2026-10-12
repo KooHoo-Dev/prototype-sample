@@ -414,7 +414,7 @@ export function gambleRarity(rng, char, slot) {
 }
 
 /**
- * 도박 — 골드 priceGamble → 등급 gambleRarity → rollGear({rarity, slot}) · ilvl = riftUnlocked · flags.gambled ·
+ * 도박 — 골드 priceGamble → 등급 gambleRarity → rollGear({rarity, slot, ownClassOnly:true}) · ilvl = riftUnlocked · flags.gambled ·
  * 'invalid'(부위) · 'bagFull' · 'gold' · TRADE · SAVE{trade}
  * @param {SimCtx} ctx @param {import('../../types.js').ItemSlot} slot @returns {Result & {item?:Item, ref?:ItemRef, cost?:number}}
  */
@@ -426,7 +426,9 @@ export function gamble(ctx, slot) {
   const cost = priceGamble(ch, slot);
   if (!(ch.gold >= cost)) return fail('gold');
   const rarity = gambleRarity(ctx.rng.shop, ch, slot);
-  const item = rollGear(ctx.rng.shop, { rarity, level: PL(ch), cls: ch.cls, newId: ctx.newItemId, slot });
+  // 리뷰 수정: 주무기 · 보조도 자기 클래스 것만(ownClassOnly — 제작 · 재고와 같다). 전에는 드랍 규칙(ITEM.ownClassChance 0.85)을 타
+  //   약 15%가 낄 수 없는 다른 클래스 것으로 나왔는데, 공개 확률(gambleOdds)에는 없었다.
+  const item = rollGear(ctx.rng.shop, { rarity, level: PL(ch), cls: ch.cls, newId: ctx.newItemId, slot, ownClassOnly: true });
   if (!item.flags || typeof item.flags !== 'object') item.flags = {};
   item.flags.gambled = true;
   spendGold(ctx, cost, 'gamble');

@@ -6,7 +6,7 @@
 import { KEYBINDS, PANEL_KEYS } from '../../data/keybinds.js';
 import { createAreas, createBagGrid, createItemGrid } from '../pnlBagGrid.js';
 import { createErrorLine, createWallet, hintLine, isDown } from '../pnlCommon.js';
-import { besideBoxes, createTooltip } from '../tooltip.js';
+import { createTooltip, spanBoxes } from '../tooltip.js';
 
 /** @typedef {import('../../types.js').Panel} Panel */
 
@@ -37,12 +37,12 @@ export function createInventoryPanel(ctx) {
   const btns = w.el('div', 'btn-row btn-row-left');
   btns.appendChild(w.button('inv.sort', () => sort(), PK.sort));
   btns.appendChild(w.button('inv.lock', () => toggleLock(), PK.lock));
-  btns.appendChild(w.button('inv.area', () => areas.toggle(), PK.area));
+  btns.appendChild(w.button('inv.areaEquip', () => areas.toggle(), PK.area));
   const err = createErrorLine(ctx);
   foot.appendChild(wallet.el);
   foot.appendChild(btns);
   foot.appendChild(err.el);
-  foot.appendChild(hintLine(ctx, ['inv.equip', 'inv.unequip', 'inv.lock', 'inv.sort', 'inv.area']));
+  foot.appendChild(hintLine(ctx, ['inv.equip', 'inv.unequip', 'inv.lock', 'inv.sort', 'inv.areaEquip']));
 
   const doll = createItemGrid(ctx, {
     kind: 'equip', cols: 3, rows: 4, slots: DOLL, className: 'grid-doll',
@@ -85,7 +85,8 @@ export function createInventoryPanel(ctx) {
   function showTip() {
     const f = focused();
     if (!f.item || !el.isConnected) { tip.hide(); return; }
-    tip.show(f.item, 0, 0, { rect: besideBoxes(f.grid.rectOf(f.i), dollBox, bagBox), where: areas.index === 0 ? 'equip' : 'bag' });
+    // 패널이 화면 오른쪽에 붙는다(hud.css) — 카드는 패널 밖(왼쪽)에 · 가운데의 플레이어는 비켜서(가방도 플레이어도 덮지 않게)
+    tip.show(f.item, 0, 0, { rect: spanBoxes(f.grid.rectOf(f.i), dollBox, bagBox), clearCenter: true, where: areas.index === 0 ? 'equip' : 'bag' });
   }
 
   /** 명령 결과 — 실패면 사유 · 성공이면 지운다 @param {any} res */

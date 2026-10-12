@@ -4,7 +4,7 @@
 // 부팅 표식: 첫 프레임(타이틀이든 play 든 — 뒤에 마을이 그려진 상태)을 그린 직후 markReady · 부팅 실패면 markError(§11.11).
 
 import { markError, markReady } from './bootMarker.js';
-import { CHAR_SLOTS, CLASS_IDS, DT, PANEL_IDS } from '../core/constants.js';
+import { CHAR_SLOTS, CLASS_IDS, DT, PANEL_IDS, SAVE_KEYS } from '../core/constants.js';
 import { EV, EventBus } from '../core/events.js';
 import { hash32 } from '../core/hash.js';
 import { KEYBINDS } from '../data/keybinds.js';
@@ -50,7 +50,7 @@ const ERROR_LEN = 300;
 const NAME_MAX = 12;
 /** 지속 알림 우선순위(위가 먼저 보인다 — ui.setSticky 는 한 줄) */
 const SAVE_FUTURE_KEY = STRINGS['notice.saveFuture'] !== undefined ? 'notice.saveFuture' : 'notice.saveBlocked';
-const STICKY_ORDER = ['notice.contextLost', SAVE_FUTURE_KEY, 'notice.saveBlocked', 'notice.settingsUnsaved'];
+const STICKY_ORDER = ['notice.contextLost', 'notice.otherTab', SAVE_FUTURE_KEY, 'notice.botNoSave', 'notice.saveBlocked', 'notice.settingsUnsaved'];
 /** 패널 토글 키(§10.5-4 — 모달이 열려 있으면 ui 가 먼저 먹는다) */
 const TOGGLES = /** @type {Array<[string, PanelId]>} */ ([
   [KEYBINDS.inventory, 'inventory'], [KEYBINDS.skills, 'skills'], [KEYBINDS.character, 'character'], [KEYBINDS.map, 'map'],
@@ -91,6 +91,14 @@ export class Game {
     this.dev = false;
     this.storageOk = false;
     this.readOnly = false;
+    /** 보통 세션에서 봇을 켰다 — 그 뒤로 이 세션은 저장하지 않는다(봇은 가방을 팔고 포인트를 찍는다 · 새로 고치면 봇 전 세이브) */
+    this.botSandbox = false;
+    /** 같은 저장소를 쓰는 다른 탭이 세이브를 썼다 — 이 탭의 메모리 상태는 낡았다(쓰면 그 탭의 진행을 덮는다) */
+    this.staleTab = false;
+    /** 이 탭이 마지막으로 읽거나 쓴 계정 savedAt(없었으면 null) — 쓰기 전에 저장소의 값이 더 새로우면 다른 탭이 쓴 것(storage 이벤트는 ~1초 늦게 온다) @type {number|null} */
+    this._seenAt = null;
+    /** 저장하지 않는 세션에서 「타이틀로」 때 떼어 둔 캐릭터(칸 → 캐릭터) — 같은 세션의 계속하기 · 선택이 다시 붙인다 @type {Map<number, any>} */
+    this._memChars = new Map();
     /** @type {Settings} */
     this.settings = { ...DEFAULT_SETTINGS };
     this.seed = 1;
@@ -193,6 +201,7 @@ export class Game {
       account = r.account;
       if (r.future) this.readOnly = true;
       if (r.rebuilt && r.broken) notices.push('notice.accountRebuilt');
+      this._seenAt = this.storage.accountSavedAt();
     }
     this.seed = q.seed ?? newSeed();
     const bus = (this.bus = new EventBus());
@@ -225,6 +234,7 @@ export class Game {
     this.input = new InputCollector({
       canvas, bus, ui: this.ui, rc, keybinds: KEYBINDS, settings: this.settings,
       onAppKey: (e) => this._appKey(e), onGesture: () => this._unlockAudio(), onZoom: (s) => this.camera.zoom(s),
+      onAltBlocked: () => this._onAltBlocked(),
     });
 
     bus.on(EV.MAP_LOADED, () => {
@@ -307,7 +317,9 @@ export class Game {
   }
 
   _openTitle() {
-    this.ui.openPanel('title', { storageOk: this.storageOk, readOnly: this.readOnly, touch: this._isTouchOnly(), dev: this.dev });
+    const warn = !this.dev && !this.storageOk ? 'notice.saveBlocked'
+      : this.staleTab ? 'notice.otherTab' : this.readOnly ? SAVE_FUTURE_KEY : this.botSandbox ? 'notice.botNoSave' : null;
+    this.ui.openPanel('title', { storageOk: this.storageOk, readOnly: this.readOnly, touch: this._isTouchOnly(), dev: this.dev, warn });
   }
 
   /** @param {string} cls */
@@ -331,6 +343,7 @@ export class Game {
     if (doc && typeof doc.addEventListener === 'function') doc.addEventListener('visibilitychange', () => this._onVisibility());
     if (!w || typeof w.addEventListener !== 'function') return;
     w.addEventListener('pagehide', () => this._persistNow());
+    w.addEventListener('storage', (e) => this._onStorage(e));
     w.addEventListener('blur', () => this._onBlur());
     w.addEventListener('focus', () => { this.blurred = false; this._syncPause(); });
     const c = this.canvas;
@@ -461,7 +474,7 @@ export class Game {
         this.trans = null;
         this.bus.emit(EV.FADE, { phase: 'in', sec: 0 });
       }
-      this.input.dropEdges(1);
+      this.input.dropEdges(1, { rearm: true });
       return;
     }
     if (tr) {                                                  // 막이 걷히는 중의 새 요청(부활 막 아래에서 미리 누른 「Enter — 복귀」) — 다시 내린다
@@ -485,13 +498,17 @@ export class Game {
       this.bus.emit(EV.FADE, { phase: 'in', sec: tr.f });
     } else if (tr.phase === 'in' && tr.t >= tr.f) {
       this.trans = null;
-      this.input.dropEdges(1);                                 // 막이 걷힌 뒤 1틱 에지 버림(§10.5-7)
+      this.input.dropEdges(1, { rearm: true });                // 막이 걷힌 뒤 1틱 에지 버림 · 그때 누르고 있던 좌클릭은 다음 틱에 눌림(§10.5-7)
       if (this.sim.state.pendingTravel) this._onTravelRequest(this.sim.state.pendingTravel);
     }
   }
 
-  /** 막 아래에서: 옛 장면의 패널을 닫고 → commitTravel(맵 생성) → 한 번 그리고 셰이더 컴파일(첫 균열의 멈칫이 막 아래에서 끝난다) */
+  /**
+   * 막 아래에서: 옛 장면의 패널을 닫고 → commitTravel(맵 생성) → 한 번 그리고 셰이더 컴파일(첫 균열의 멈칫이 막 아래에서 끝난다).
+   * 막 동안 연 일시정지(포커스 잃음 · 컨텍스트 잃음 · Esc)는 정리 뒤 다시 연다 — 사유가 그대로라 PAUSED 가 다시 나지 않는다(돌아오면 「계속」 전까지 멈춤 · §11.5).
+   */
   _commit() {
+    const wantPause = !this.bot && (this.blurred || this.contextLost || this.ui.isOpen('pause'));
     if (this.ui.anyOpen()) this.ui.closeAll('code');
     this.hitstop = 0;
     let r = null;
@@ -501,6 +518,7 @@ export class Game {
       this._noteError(e, true);
     }
     this._warmup();
+    if (wantPause && this.screens.current === 'play' && this.sim.state.char && this.ui.topPanel() !== 'pause') this.ui.openPanel('pause', {});
     return r;
   }
 
@@ -521,7 +539,7 @@ export class Game {
     if (tr.phase === 'out' && this.sim.state.pendingTravel) this._commit();
     this.trans = null;
     this.bus.emit(EV.FADE, { phase: 'in', sec: 0 });
-    this.input.dropEdges(1);
+    this.input.dropEdges(1, { rearm: true });
   }
 
   // ───────────────────────── 키 · 포커스 · 가시성 · 컨텍스트 ─────────────────────────
@@ -562,6 +580,12 @@ export class Game {
   _toggle(id) {
     if (this.ui.topPanel() === id) this.ui.closePanel(id, 'key');
     else this.ui.openPanel(id, {});
+  }
+
+  /** Alt(이름표)를 누른 채 게임 키 — 조합은 건드리지 않으니(§11.5) 왜 안 나가는지 알린다(Alt 한 번 누름에 한 번 — input 이 센다) */
+  _onAltBlocked() {
+    if (!this.ui || this.bot || this.screens.current !== 'play' || !this.sim.state.char || this.ui.isModal()) return;
+    this.ui.notice('notice.altBlocked', {}, { sec: 4 });
   }
 
   _unlockAudio() {
@@ -644,8 +668,43 @@ export class Game {
 
   // ───────────────────────── 저장(§11.6) ─────────────────────────
 
-  /** 세이브를 쓰는 세션인가 */
-  persist() { return !this.dev && this.storageOk && !this.readOnly; }
+  /** 세이브를 쓰는 세션인가(개발 · 저장소 막힘 · 미래 버전 · 봇 관전 · 다른 탭이 쓴 뒤는 아니다) */
+  persist() { return !this.dev && this.storageOk && !this.readOnly && !this.botSandbox && !this.staleTab; }
+
+  /**
+   * 다른 탭의 저장(window 'storage' — 브라우저는 쓴 탭이 아닌 같은 출처의 다른 탭에만 보낸다) — 계정 · 캐릭터 키(또는 clear)면
+   * 이 탭은 더 쓰지 않는다(메모리의 낡은 상태로 그 탭의 진행을 덮지 않게) · 지속 알림 「다른 탭에서 저장했다 — 새로 고침」.
+   * 갤러리는 프로토타입끼리 출처를 공유하니 키 접두사로 거른다(설정 · 백업 · 탐침 키는 무관).
+   * @param {StorageEvent|any} e
+   */
+  _onStorage(e) {
+    if (this.dev || this.staleTab) return;
+    const key = e ? e.key : undefined;
+    if (key === undefined) return;
+    if (key !== null && key !== SAVE_KEYS.account && !String(key).startsWith(SAVE_KEYS.charPrefix)) return;
+    this._markStale();
+  }
+
+  _markStale() {
+    this.staleTab = true;
+    this.saves.clear();
+    this._sticky('notice.otherTab', true);
+  }
+
+  /**
+   * 쓰기 직전 — 저장소의 계정 savedAt 이 이 탭이 마지막으로 보거나 쓴 값보다 새로우면 다른 탭이 썼다(storage 이벤트가 오기 전의 틈 · 이벤트가 없는 환경).
+   * 캐릭터를 쓸 때는 늘 계정도 쓰고(§11.6) 계정을 쓰는 길(다시 세우기 · 삭제)도 계정을 쓰니, 계정 하나로 「마지막으로 쓴 탭」을 안다.
+   * @returns {boolean} 써도 된다
+   */
+  _mayWrite() {
+    if (!this.persist()) return false;
+    const at = this.storage.accountSavedAt();
+    if (at !== null && (this._seenAt === null || at > this._seenAt)) {
+      this._markStale();
+      return false;
+    }
+    return true;
+  }
 
   /** 프레임 끝 한 번 — 밀린 SAVE_REQUEST(force = 탭 숨김 · pagehide) @param {boolean} force */
   _flushSaves(force) {
@@ -656,20 +715,23 @@ export class Game {
     const st = this.sim.state;
     const plan = this.saves.take(this._now(), { force, hasChar: !!st.char });
     if (!plan.char && !plan.account) return;
+    if (!this._mayWrite()) return;
     let ok = true;
     if (plan.char && st.char) ok = this.storage.writeChar(st.char) && ok;
     if (plan.account || plan.char) ok = this.storage.writeAccount(st) && ok;
+    this._seenAt = this.storage.accountSavedAt();
     this._sticky('notice.saveBlocked', !ok);
   }
 
   /** 지금 바로 캐릭터 + 계정(선택 · 새 캐릭터 · 타이틀로) @param {import('../types.js').CharacterState|null} [char] */
   _saveNow(char = null) {
-    if (!this.persist()) return;
+    if (!this._mayWrite()) return;
     const st = this.sim.state;
     const ch = char ?? st.char;
     let ok = true;
     if (ch) ok = this.storage.writeChar(ch) && ok;
     ok = this.storage.writeAccount(st) && ok;
+    this._seenAt = this.storage.accountSavedAt();
     this.saves.markWritten(this._now());
     this._sticky('notice.saveBlocked', !ok);
   }
@@ -718,6 +780,15 @@ export class Game {
   _selectChar(slot) {
     const s = Number(slot);
     if (!Number.isInteger(s) || s < 0 || s >= CHAR_SLOTS) return fail('slot');
+    const mem = this._memChars.get(s);
+    if (mem && this.sim.state.account.chars[s]) {               // 저장하지 않는 세션 — 「타이틀로」 때 떼어 둔 그 캐릭터
+      this.ui.closeAll('code');
+      const lr = this.sim.loadCharacter(s, mem);
+      if (!lr.ok) return lr;
+      this._memChars.delete(s);
+      this._enterPlay();
+      return { ok: true };
+    }
     if (this.dev || !this.storageOk) return fail('invalid');
     const r = this.storage.loadChar(s);
     if (r.broken || !r.char) {
@@ -750,6 +821,7 @@ export class Game {
     let name = String((o && o.name) ?? '').trim().slice(0, NAME_MAX);
     if (!name) name = this._defaultName(/** @type {string} */ (cls));
     if (this.persist() && this.storage.hasChar(s)) this.storage.backup(charKey(s));
+    this._memChars.delete(s);
     this.ui.closeAll('code');
     const r = this.sim.newCharacter({ slot: s, cls, name });
     if (!r.ok) return r;
@@ -763,13 +835,17 @@ export class Game {
     const s = Number(slot);
     if (!Number.isInteger(s) || s < 0 || s >= CHAR_SLOTS) return fail('slot');
     if (this.persist()) this.storage.removeChar(s);
+    this._memChars.delete(s);
     return this.sim.deleteCharacter(s);
   }
 
   _enterPlay() {
     this.screens.go('play');
     this.debugPaused = false;
-    if (this.input) this.input.dropEdges(1);
+    if (this.input) {
+      this.input.releaseAll();                                  // 타이틀 · 새 캐릭터에서 뗌을 놓친 키(이름 칸이 삼킨 Shift 뗌)가 play 로 넘어가지 않게
+      this.input.dropEdges(1);
+    }
     this._syncPause();
   }
 
@@ -790,6 +866,7 @@ export class Game {
       this._saveNow();
       this.sim.unloadCharacter();
       this._saveNow(ch);
+      if (!this.persist()) this._memChars.set(ch.slot, ch);     // 저장하지 않는 세션 — 이 세션의 계속하기 · 선택이 다시 붙인다
     }
     this.screens.go('title');
     this._openTitle();
@@ -836,12 +913,20 @@ export class Game {
     if (!ch || this.screens.current !== 'play') return fail('invalid');
     const strategy = STRATEGIES.includes(/** @type {any} */ (opts && opts.strategy)) ? /** @type {any} */ (opts.strategy) : 'basic';
     const preset = Number(opts && opts.preset) === 1 ? 1 : 0;
+    const sandbox = this.persist();
+    if (sandbox) this._saveNow();                               // 봇이 손대기 전의 진행을 지금 쓴다(실제 세이브)
     try {
       this.bot = new Bot({ sim, strategy, cls: ch.cls, preset, seed: hash32(this.seed, sim.state.tick), autoCommit: false });
     } catch (e) {
       this._noteError(e, true);
       this.bot = null;
       return fail('invalid');
+    }
+    if (sandbox) {
+      // 봇은 잠기지 않은 가방 장비를 팔고 남은 스킬 포인트를 찍는다(측정 규칙) — 실제 세이브에 쓰지 않게 이 세션은 저장하지 않는다(새로 고치면 봇 전 세이브)
+      this.botSandbox = true;
+      this.saves.clear();
+      this._sticky('notice.botNoSave', true);
     }
     if (this.input) this.input.releaseAll();
     this.bus.emit(EV.BOT, { on: true });

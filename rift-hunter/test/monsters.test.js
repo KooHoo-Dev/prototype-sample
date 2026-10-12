@@ -17,7 +17,7 @@ import {
   chaseStop, monsterStats, onMonDamaged, onMonDeath, onMonHitPlayer, onMonSpawn, spawnMonster, startAttack, updateMonsters, wakePack,
 } from '../src/sim/monsters/monsters.js';
 import { attackOf, meleeHitOk, meleeStartOk } from '../src/sim/monsters/spawn.js';
-import { flowDir, updateFlow } from '../src/sim/world/flow.js';
+import { flowDir, flowDist, updateFlow } from '../src/sim/world/flow.js';
 import { isWalkable } from '../src/sim/world/nav.js';
 import { assertFiniteDeep, countEvents, makeTestCtx, makeTestMap, makeTestState } from './helpers.js';
 
@@ -522,4 +522,44 @@ test('targeting = 깨어 있고 15m 안 · 도망 아님 / 잠든 몬스터는 �
   assertFiniteDeep(s2.rift.mons);
   for (const m of s2.rift.mons) assert.ok(isWalkable(c2.map, m.pos.x, m.pos.z), `걷기 가능 ${m.id}`);
   void state;
+});
+
+// ───────────────────────── 리뷰 수정: 흐름장 밖의 깬 몬스터 ─────────────────────────
+
+/** 두 방(벽 5칸 = 10m 두께)을 긴 ㄷ자 통로(약 80m)로만 잇는 맵 — sealed 면 통로가 없다 @param {boolean} sealed */
+function detourMap(sealed) {
+  const rows = ['####################'];
+  rows.push('#....#####....######', '#.S..#####....######', '#....#####....######', '#....#####....######');
+  for (let j = 5; j <= 17; j++) rows.push(sealed ? '####################' : '##.########.########');
+  rows.push(sealed ? '####################' : '##..........########');
+  rows.push('####################');
+  return rows.join('\n');
+}
+
+test('리뷰 수정: 흐름장(maxSteps) 밖 · 벽 너머(직선 18m · 경로 약 80m)의 깬 몬스터는 먼 흐름장(FLOW.far)을 따라 돌아와 플레이어에 닿는다 — 벽에 붙어 영영 서지 않는다', () => {
+  const { ctx, state, map, p } = setup({ ascii: detourMap(false) });
+  const at = { x: 23, z: 5 };
+  const { mons: [m] } = pack(ctx, 'normal', [{ x: at.x, z: at.z }], { awake: true });
+  updateFlow(ctx.flow, map, p.pos, state.tick, true);
+  assert.equal(flowDist(ctx.flow, map, m.pos.x, m.pos.z), Infinity, '이 검사는 흐름장 밖에서 시작한다');
+  let minD = Infinity;
+  step(ctx, 30 * 50, () => {
+    updateFlow(ctx.flow, map, p.pos, state.tick);
+    minD = Math.min(minD, dist(m.pos, p.pos));
+  });
+  assert.ok(minD < 2, `플레이어에 닿지 못했다(가장 가까이 ${minD.toFixed(1)}m — 벽 앞에 섰다)`);
+  assert.equal(m.awake, true);
+});
+
+test('리뷰 수정: 어느 흐름장으로도 닿지 않는(막힌 방) 깬 몬스터는 MON.leashSec 뒤 잠든다 — 직선 목줄(36m) 안이어도', () => {
+  const { ctx, state, map, p } = setup({ ascii: detourMap(true) });
+  const { mons: [m] } = pack(ctx, 'normal', [{ x: 23, z: 5 }], { awake: true });
+  assert.ok(dist(m.pos, p.pos) < MON.leash, '직선 목줄 안');
+  let sleptAt = -1;
+  step(ctx, ticks(MON.leashSec) + 30, () => {
+    updateFlow(ctx.flow, map, p.pos, state.tick);
+    if (sleptAt < 0 && !m.awake) sleptAt = state.tick;
+  });
+  assert.ok(sleptAt > 0, '깬 채 벽 앞에 서 있다');
+  assert.ok(sleptAt - 100 >= ticks(MON.leashSec), 'leashSec 전에 잠들지 않는다');
 });

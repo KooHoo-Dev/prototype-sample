@@ -16,7 +16,8 @@ import { TOWN } from '../src/data/town.js';
 import { FIXTURES } from '../src/debug/fixtures.js';
 import { GameSim } from '../src/sim/GameSim.js';
 import { killPlayer, openRecallPortal, spawnGuardianNow } from '../src/sim/rift.js';
-import { RIFT } from '../src/data/rift.js';
+import { RIFT, riftRow } from '../src/data/rift.js';
+import { XP } from '../src/data/economy.js';
 import { nearestWalkable } from '../src/sim/world/nav.js';
 import { pickHover } from '../src/sim/pick.js';
 import { createPlayerState } from '../src/sim/state.js';
@@ -559,6 +560,66 @@ test('W1 통합: 완료 경로 — 개발 캐릭터(L10 · 프리셋 A) · 무�
     assert.equal(st.char.records[0].result, 'complete');
     assertFiniteDeep(st, cls);
   }
+});
+
+test('리뷰 수정: 수호자 처치 직후(완료 마무리 completeDelay 전)에 타이틀로(unloadCharacter) 가도 해금 · 완료 경험치 · 기록 · 최고 기록이 남는다 — 처치 틱에 정산', () => {
+  for (const wait of [0, 20]) {
+    const { sim, log } = riftSim({ seed: 5 });
+    const st = sim.state;
+    const rift = st.rift;
+    const ch = st.char;
+    const p = st.player;
+    const unlock0 = ch.riftUnlocked;
+    rift.gauge = 100;
+    rift.phase = 'guardian';
+    const at = nearestWalkable(sim.getMap(), p.pos.x + 6, p.pos.z, 4) ?? p.pos;
+    const g = spawnGuardianNow(sim.ctx, at.x, at.z);
+    g.hp = 0;
+    g.lastHit = { by: 'player', skillId: null, noProcs: true, frozen: false };
+    const xpKill0 = ch.xpTotal;
+    sim.step(NEUTRAL_INPUT);
+    assert.equal(rift.phase, 'complete');
+    assert.ok(ch.xpTotal - xpKill0 >= Math.round(XP.completeBonus * riftRow(1).xpMul), '처치 틱에 완료 경험치');
+    // 처치 틱에 이미 정산했다(탭 닫기 — pagehide 저장도 이 캐릭터를 쓴다)
+    assert.equal(ch.riftUnlocked, unlock0 + RIFT.unlockNoDeath, '처치 틱에 해금');
+    assert.ok(log.some((e) => e.name === EV.SAVE_REQUEST && e.payload.reason === 'complete'), '처치 틱에 저장 요청');
+    assert.equal(rift.summary, null, '패널은 completeDelay 뒤');
+    for (let i = 0; i < wait; i++) sim.step(NEUTRAL_INPUT);
+    const xp0 = ch.xpTotal;
+    assert.equal(sim.unloadCharacter().ok, true);
+    assert.equal(ch.riftUnlocked, unlock0 + RIFT.unlockNoDeath, `${wait}틱 뒤 타이틀로 — 해금이 사라졌다`);
+    assert.equal(ch.records.filter((r) => r.result === 'complete').length, 1, '완료 기록 하나');
+    assert.equal(ch.records.filter((r) => r.result === 'abandon').length, 0, '포기로 남지 않는다');
+    assert.ok(ch.best['1'], '최고 기록');
+    assert.equal(ch.xpTotal, xp0, '정산은 한 번(닫을 때 다시 주지 않는다)');
+  }
+});
+
+test('리뷰 수정: 완료된 균열(나가는 포털이 있다)에서 T 는 두루마리 귀환이 아니라 나가는 포털과 같다 — 두루마리 그대로 · 즉시 exit 전환', () => {
+  const { sim } = riftSim({ seed: 5 });
+  const st = sim.state;
+  const ch = st.char;
+  assert.equal(sim.debugCompleteRift().ok, true);
+  assert.ok(st.rift.summary && st.rift.portals.some((pt) => pt.kind === 'exit'));
+  const s0 = ch.scrolls;
+  sim.step(makeInput({ recallDown: true }));
+  assert.deepEqual(st.pendingTravel && { to: st.pendingTravel.to, reason: st.pendingTravel.reason }, { to: 'town', reason: 'exit' });
+  assert.equal(ch.scrolls, s0, '두루마리를 쓰지 않는다');
+  assert.deepEqual(st.rift.returnPos, { x: st.player.pos.x, z: st.player.pos.z });
+  assert.equal(sim.commitTravel().ok, true);
+  assert.equal(st.scene, 'town');
+  // 두루마리가 0 이어도 같다(「두루마리 없음」이 아니다)
+  const { sim: s2, log } = riftSim({ seed: 6 });
+  s2.state.char.scrolls = 0;
+  s2.debugCompleteRift();
+  s2.step(makeInput({ recallDown: true }));
+  assert.equal(s2.state.pendingTravel?.reason, 'exit');
+  assert.ok(!log.some((e) => e.name === EV.SKILL_FAIL && e.payload.reason === 'empty'));
+  // 완료 전(활동 중)의 T 는 그대로 두루마리 귀환
+  const { sim: s3 } = riftSim({ seed: 7 });
+  s3.step(makeInput({ recallDown: true }));
+  assert.equal(s3.state.player.act, 'recall');
+  assert.equal(s3.state.pendingTravel, null);
 });
 
 test('밸런스 게이트: 수호자 처치 직후(완료 마무리 completeDelay 전) 귀환해 마을로 가면 떠나는 commit 에서 마무리한다 — 요약 · 해금 · RIFT_COMPLETE 한 번 · 새 균열을 열어도 잃지 않는다', () => {

@@ -3,6 +3,7 @@
 // 매 프레임: 보이는(32m 안) 몬스터마다 상태 → 포즈 배열(poses.js) → 관절 행렬(rig.js FK) → 부위 행렬을 인스턴스 버퍼에 쓴다(할당 없음).
 // 가림 외곽선: 같은 지오메트리 · 같은 instanceMatrix 를 쓰는 쌍둥이 메시(GreaterDepth 재질) — 챔피언 · 정예 · 수호자만 색을 준다(나머지 검정 = 안 보임).
 // 판정과 보이는 것(§9.6): 몸 폭 = 2 × mon.r — 인스턴스 배율 = mon.r / def.radius(rank.scale 을 다시 곱하지 않는다).
+// 방향: 기록(rec)에 마지막 두 틱의 facing(fPrev · fCur · fTick)을 두고 위치와 같은 alpha 로 최단 호 보간(poses.js trackFacing) — 새 기록 · 순간이동은 끊는다.
 
 import { Color, Euler, InstancedBufferAttribute, InstancedMesh, Matrix4 } from 'three';
 import { DT } from '../../core/constants.js';
@@ -12,7 +13,7 @@ import { getMonDef } from '../../data/index.js';
 import { PART_MESHES } from './parts.js';
 import {
   actionPose, attackPhase, bipedBase, bipedBreathe, bipedFall, bipedFlail, bipedFlinch, bipedStun, bipedWalk, blobBase, blobFall, blobWalk,
-  clamp01, compileKey, ease, frac, launchArc, phaseStep, QUAD_PHASE, quadBase, quadFall, quadWalk, stepLenOf,
+  clamp01, compileKey, ease, frac, launchArc, phaseStep, QUAD_PHASE, quadBase, quadFall, quadWalk, stepLenOf, trackFacing,
 } from './poses.js';
 import { BJ, BP, FK, NJ, NP, OJ, OP, QJ, QP, RIG, makeJoints } from './rig.js';
 import { BIPED_FAMILIES, KIND_FAMILY, QUAD_FAMILIES, TEMPLATE_FALLBACK, VARIANTS } from './variants.js';
@@ -122,7 +123,7 @@ function nestBase() {
 function newRec(id) {
   return {
     id, seen: 0, fresh: true, px: 0, pz: 0, phase: frac(id * 0.6180339), amt: 0, mdx: 0, mdz: 1, lastNow: 0,
-    snap: null, hasSnap: false, shieldDown: 0, spawnAt: -1,
+    snap: null, hasSnap: false, shieldDown: 0, spawnAt: -1, fPrev: 0, fCur: 0, fTick: -1,
   };
 }
 
@@ -130,8 +131,9 @@ function newRec(id) {
  * 포즈 계산(순수에 가깝다 — 기록 rec 만 고친다). out = 포즈 배열 · 반환 = 그릴 배율(0 = 숨김)
  * @param {ReturnType<typeof compileType>} rt @param {import('../../types.js').MonsterState} m @param {any} rec
  * @param {number} now state.tick + alpha @param {number} t 실제 시간(초 — 숨쉬기 · 흔들림) @param {Float32Array} out @param {number} s 인스턴스 배율
+ * @param {number} x @param {number} z 그릴 위치 @param {number} [facing] 그릴 방향(보간 — 없으면 m.facing) · 걷기 방향(몸 기준)과 쓰러짐이 그린 몸에 맞게
  */
-export function poseMonster(rt, m, rec, now, t, out, s, x, z) {
+export function poseMonster(rt, m, rec, now, t, out, s, x, z, facing = m.facing) {
   out.set(rt.base);
   const rig = rt.rig;
   const act = m.act;
@@ -144,7 +146,7 @@ export function poseMonster(rt, m, rec, now, t, out, s, x, z) {
   let dist = Math.hypot(dx, dz);
   if (fresh || dist > TELEPORT_SNAP) dist = 0;
   rec.px = x; rec.pz = z;
-  const f = m.facing;
+  const f = facing;
   const sF = Math.sin(f), cF = Math.cos(f);
   if (dist > 1e-5) {
     const lx = (dx * cF - dz * sF) / dist, lz = (dx * sF + dz * cF) / dist;
@@ -405,7 +407,7 @@ export class MonsterInstancer {
           const m = mons[i];
           if (m.gone || (pass === 0) === m.dead) continue;
           if (drawn >= MAX_DRAWN) break;
-          if (this._drawOne(m, now, alpha, t, ct, hoverId, outlines)) drawn++;
+          if (this._drawOne(m, tick, now, alpha, t, ct, hoverId, outlines)) drawn++;
         }
       }
     }
@@ -431,7 +433,7 @@ export class MonsterInstancer {
     }
   }
 
-  _drawOne(m, now, alpha, t, ct, hoverId, outlines) {
+  _drawOne(m, tick, now, alpha, t, ct, hoverId, outlines) {
     const rec0 = this.recs.get(m.id);
     const fresh = !rec0;
     const rec = rec0 ?? newRec(m.id);
@@ -450,9 +452,10 @@ export class MonsterInstancer {
     const s0 = m.r / rt.def.radius;
     const s = s0 * (tough ? TOUGH_BODY : 1);
     const out = this.poses[rt.rig];
-    const vis = poseMonster(rt, m, rec, now, t, out, s, x, z);
+    const f = trackFacing(rec, m.facing, tick, alpha, rec.fresh || jump);
+    const vis = poseMonster(rt, m, rec, now, t, out, s, x, z, f);
     if (vis <= 0.01) return false;
-    rt.fk(rt.dims, out, x, z, m.facing, this.J, s * vis);
+    rt.fk(rt.dims, out, x, z, f, this.J, s * vis);
     // 색 · 발광
     const rank = m.rank;
     const rim = RANK_RIM[rank];

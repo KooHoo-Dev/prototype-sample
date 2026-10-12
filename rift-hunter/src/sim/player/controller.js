@@ -200,7 +200,15 @@ function handleEdges(ctx, inp) {
     }
   }
   if (inp.recallDown) {
-    if (!inRift) emitFail(ctx, RECALL, 'town');
+    // 리뷰 수정: 완료된 균열(요약 · 나가는 포털이 있다)에서 T 는 두루마리 귀환이 아니라 나가는 포털과 같다(무료 · 즉시 — GameSim.leaveRift 와 같은 규칙 ·
+    //   완료 패널의 「T — 마을로」). 전에는 패널을 닫고 누르면 두루마리 하나와 1.5초 시전을 썼고, 두루마리가 없으면 「없음」이 떴다.
+    if (inRift && st.char && st.rift.phase === 'complete' && st.rift.summary && !p.dead) {
+      if (!st.pendingTravel) {
+        if (p.act === RECALL || p.recall) cancelRecall(ctx, 'action');
+        st.rift.returnPos = { x: p.pos.x, z: p.pos.z };
+        if (requestTravel(ctx, { to: 'town', reason: 'exit' }).ok) started = true;
+      }
+    } else if (!inRift) emitFail(ctx, RECALL, 'town');
     else if (!(st.char && st.char.scrolls > 0)) emitFail(ctx, RECALL, 'empty');
     else if (p.act !== RECALL) {
       if (p.act === 'channel' && p.channel) endChannel(ctx, false);

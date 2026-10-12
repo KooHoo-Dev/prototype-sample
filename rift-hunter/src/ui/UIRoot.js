@@ -71,6 +71,8 @@ export class UIRoot {
     this.deathEnter = 0;          // 사망 패널이 뜨기 전에 누른 Enter(남은 유효 초)
     this.deadRealSec = 0;         // 사망 패널을 기다린 실제 초
     this.respawnWait = 0;         // 부활 요청 뒤 남은 기다림(초)
+    /** 지금 균열을 열 때의 해금(char.riftUnlocked) — 완료 패널이 「새로 열렸는가」를 본다(요약의 unlockedTo 는 max(지금, L + 몫)이라 이미 열린 것도 범위 안이다) @type {number|null} */
+    this.unlockAtOpen = null;
     this.completeKey = '';        // 이미 띄운 완료 패널의 판
     this.fadeEnter = 0;           // 전환 막 동안 누른 Enter(남은 유효 초)
     this.fade = { alpha: 0, from: 0, to: 0, t: 0, sec: 0 };
@@ -100,6 +102,8 @@ export class UIRoot {
     }
     this.notices = createNotices({ root });
     this.layer = layer('panel-layer');
+    // 나란히 붙은 겹쳐 보는 패널(인벤토리 · 캐릭터) — 아래에 깔린 쪽을 누르면 맨 위로(키도 그쪽으로 · 누름이 게임으로 새지 않는다)
+    this.layer.addEventListener('pointerdown', (e) => this._raiseFrom(/** @type {any} */ (e.target)), true);
     this.hitEl = layer('hit-flash');
     this.audioHint = layer('audio-hint');
     this.audioHint.textContent = t('audio.hint');
@@ -112,7 +116,7 @@ export class UIRoot {
     /** @type {Array<() => void>} */
     this._offs = [];
     const on = (name, fn) => { if (bus) this._offs.push(bus.on(name, fn)); };
-    on(EV.CHAR_LOADED, () => this._onCharLoaded());
+    on(EV.CHAR_LOADED, () => { this.unlockAtOpen = null; this._onCharLoaded(); });
     on(EV.MAP_LOADED, () => this.minimap.setMap(this.sim?.getMap?.() ?? null));
     on(EV.SCENE_CHANGED, (e) => this._onScene(e));
     on(EV.PLAYER_SPAWNED, (e) => { if (e.reason === 'portal') this._endDeathWindow(); });
@@ -120,7 +124,11 @@ export class UIRoot {
     on(EV.INTERACT, (e) => this._onInteract(e));
     on(EV.HINT, (e) => this._queueHint(e.id));
     on(EV.PLAYER_DIED, () => { this.deathWindow = true; });
-    on(EV.RIFT_OPENED, (e) => this.notices.banner(t('banner.riftOpened', { n: e.level, tileset: t('tileset.' + e.tileset) })));
+    on(EV.RIFT_OPENED, (e) => {
+      const u = this.sim?.state?.char?.riftUnlocked;
+      this.unlockAtOpen = Number.isFinite(u) ? u : null;
+      this.notices.banner(t('banner.riftOpened', { n: e.level, tileset: t('tileset.' + e.tileset) }));
+    });
     on(EV.GAUGE_FULL, () => this.notices.banner(t('banner.gaugeFull')));
     on(EV.GUARDIAN_APPEAR, (e) => {
       if (this.sim?.state?.scene !== 'rift') return;      // 마을에서 보스 배너 금지(W1 수정 4 — 부활 commit 의 플러시)
@@ -254,6 +262,20 @@ export class UIRoot {
   anyOpen() { return this.stack.length > 0; }
   /** @param {string} id */
   isOpen(id) { return this.stack.some(p => p.id === id); }
+
+  /**
+   * 누른 요소가 맨 위가 아닌 겹쳐 보는 패널 안이면 그 패널을 맨 위로(모달이 열려 있으면 아니다) — open 을 다시 부르지 않는다(포커스 · 영역 그대로)
+   * @param {any} target
+   */
+  _raiseFrom(target) {
+    if (!target || typeof target.closest !== 'function' || this.isModal()) return;
+    const el = target.closest('[data-panel]');
+    const i = this.stack.findIndex(p => p.el === el);
+    if (i < 0 || i === this.stack.length - 1 || this.stack[i].modal) return;
+    const [pnl] = this.stack.splice(i, 1);
+    this.stack.push(pnl);
+    this._restack();
+  }
 
   /** 맨 위 패널 표시(is-top) · 모달 뒤 가림 */
   _restack() {

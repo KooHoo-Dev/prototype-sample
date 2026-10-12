@@ -9,7 +9,7 @@ import { makeRng, seedRng } from '../src/core/rng.js';
 import { PATHING } from '../src/data/mapgen.js';
 import { mapFromAscii } from '../src/debug/fixtureMap.js';
 import { generateRift } from '../src/sim/world/mapgen.js';
-import { isWalkable, isWalkableR, losClear, moveCircle } from '../src/sim/world/nav.js';
+import { isWalkable, isWalkableR, losClear, moveCircle, raycastWalk } from '../src/sim/world/nav.js';
 import { findPath } from '../src/sim/world/path.js';
 
 /** @typedef {import('../src/types.js').MapData} MapData */
@@ -295,4 +295,41 @@ test('생성 균열 — 무작위 시작 · 목적지 300쌍: 끝이 몸에 맞�
     }
   }
   assert.ok(total / n < 5, `평균 ${(total / n).toFixed(2)}ms`);
+});
+
+test('벽을 눌러 r 만큼 앞에 선 자리(몸은 맞지만 시작 칸 가운데는 안 맞는다)에서도 시야 밖 목적지로 경로가 나온다(최종 게이트 — 브라우저 재현)', () => {
+  // 재현(프로덕션 빌드 · 균열 1 · seed 3280528277): 벽 너머를 눌러 벽 앞에 선 뒤 벽 너머 챔피언 구울을 누르고 있어도 path 0 · 서 있었다.
+  //   시작 칸 가운데가 몸에 맞지 않고 맞는 이웃이 대각선뿐(모서리 자르기 금지)이라 A* 가 시작 칸을 떠나지 못했다.
+  const map = generateRift(3280528277, 1);
+  const from = { x: 60.43294155881435, z: 101.59665316767452 };
+  const to = { x: 50.46778189017199, z: 99.0197059413647 };
+  assert.ok(isWalkableR(map, from.x, from.z, R), '시작점은 몸에 맞는다');
+  assert.ok(!isWalkableR(map, (Math.floor(from.x / NAV_CELL) + 0.5) * NAV_CELL, (Math.floor(from.z / NAV_CELL) + 0.5) * NAV_CELL, R), '시작 칸 가운데는 안 맞는다');
+  const path = findPath(map, from, to, { r: R });
+  assert.ok(path.length >= 2, '경로가 나온다');
+  assert.deepEqual(path[path.length - 1], to);
+  assert.ok(pathOk(map, from, path, R), '구간이 몸 반지름으로 지나간다');
+  assert.ok(follow(map, from, path).ok, '따라 걸어 닿는다');
+  // 표본: 생성 맵에서 벽을 눌러 선 자리 → 시야 밖 바닥(3m 넘게) — 빈 경로 0 · 구간 · 따라 걷기
+  const rng = makeRng(seedRng(77));
+  let n = 0;
+  for (const seed of [101, 505]) {
+    const m = generateRift(seed * 7 + 5, 5);
+    const walk = [];
+    for (let i = 0; i < m.nav.length; i++) if (m.nav[i] === 0) walk.push(i);
+    const pick = () => { for (;;) { const c = walk[rng.int(0, walk.length - 1)]; const p = { x: (c % m.nw + 0.5) * NAV_CELL, z: (Math.floor(c / m.nw) + 0.5) * NAV_CELL }; if (isWalkableR(m, p.x, p.z, R)) return p; } };
+    for (let k = 0; k < 150; k++) {
+      const a = pick();
+      const ang = rng.range(0, Math.PI * 2);
+      const stop = raycastWalk(m, a.x, a.z, a.x + Math.sin(ang) * 30, a.z + Math.cos(ang) * 30, R);
+      if (!isWalkableR(m, stop.x, stop.z, R)) continue;
+      const b = pick();
+      if (Math.hypot(b.x - stop.x, b.z - stop.z) < 3 || losClear(m, stop.x, stop.z, b.x, b.z)) continue;
+      const q = findPath(m, stop, b, { r: R });
+      n++;
+      assert.ok(q.length > 0, `${m.id}: (${stop.x.toFixed(2)}, ${stop.z.toFixed(2)}) → (${b.x.toFixed(2)}, ${b.z.toFixed(2)}) 빈 경로`);
+      assert.ok(pathOk(m, stop, q, R), `${m.id}: 구간이 벽을 뚫는다`);
+    }
+  }
+  assert.ok(n > 100, `표본 ${n}`);
 });

@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fmtCd, fmtDps, fmtInt, fmtMul, fmtNum, fmtPct, fmtRange, fmtSec, skillGlyph } from '../src/ui/format.js';
+import { fmtCd, fmtDmg, fmtDps, fmtInt, fmtMul, fmtNum, fmtPct, fmtRange, fmtSec, skillGlyph } from '../src/ui/format.js';
 import { BASIC_SKILLS, SKILL_NODES } from '../src/data/skills.js';
 import { CLASSES } from '../src/data/classes.js';
 import { has, t, tName } from '../src/ui/i18n.js';
@@ -24,6 +24,17 @@ test('fmtInt — 반올림 · 천 단위 쉼표 · 음수 · NaN/∞ 는 화면�
   assert.equal(fmtInt(Infinity), '∞');
   assert.equal(fmtInt(-Infinity), '-∞');
   assert.equal(fmtInt(/** @type {any} */ (undefined)), '—');
+});
+
+test('fmtDmg — 피해 숫자: 1 미만의 양수는 「0」이 아니라 소수 한 자리(최소 0.1) · 그 위는 fmtInt(최종 게이트 — 균열 1 몬스터 한 방 ≈ 0.3)', () => {
+  assert.equal(fmtDmg(0.31), '0.3');
+  assert.equal(fmtDmg(0.04), '0.1');
+  assert.equal(fmtDmg(0.94), '0.9');
+  assert.equal(fmtDmg(0.96), '1');
+  assert.equal(fmtDmg(12.6), '13');
+  assert.equal(fmtDmg(1234), '1,234');
+  assert.equal(fmtDmg(0), '0');
+  assert.equal(fmtDmg(NaN), fmtInt(NaN));
 });
 
 test('fmtNum — 소수 자리 · 뒤의 0 지움 · 쉼표', () => {
@@ -192,7 +203,9 @@ test('skillGlyph — 스킬 칸 아이콘 두 글자가 한 클래스 안에서 
   assert.equal(skillGlyph(''), '');
   for (const c of CLASSES) {
     const ids = [c.basic, ...SKILL_NODES.filter((n) => n.cls === c.id && n.kind === 'active').map((n) => n.id)];
-    const glyphs = ids.map((id) => skillGlyph(t((Object.prototype.hasOwnProperty.call(BASIC_SKILLS, id) ? 'skill.' : 'node.') + id + '.name')));
+    // HUD 와 같은 길 — 예외표(glyph.<id> — 다른 낱말로 읽히는 것)가 있으면 그것
+    const glyphs = ids.map((id) => (has('glyph.' + id) ? t('glyph.' + id) : skillGlyph(t((Object.prototype.hasOwnProperty.call(BASIC_SKILLS, id) ? 'skill.' : 'node.') + id + '.name'))));
+    for (const bad of ['전함', '연번', '화염']) assert.ok(!glyphs.includes(bad), `${c.id}: 「${bad}」는 다른 낱말로 읽힌다`);
     assert.equal(new Set(glyphs).size, glyphs.length, `${c.id}: ${glyphs.join(' ')}`);
     for (const g of glyphs) assert.ok(g.length >= 1 && g.length <= 2, g);
   }

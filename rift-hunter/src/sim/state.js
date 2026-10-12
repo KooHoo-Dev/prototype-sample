@@ -148,6 +148,8 @@ export function createRiftState({ level, seed, tileset, mapId, map, tick = 0 }) 
     rootLockUntil: -1,
     stats: createRunStats(),
     summary: null,
+    // 리뷰 수정: 수호자 처치 틱에 정산한 요약(해금 · 완료 경험치 · 기록이 이미 캐릭터에 들어갔다) — 패널(summary)은 completeAt 에 연다
+    settled: null,
     completeAt: null,
     guardianType: GUARDIANS[0].id,
     calmAt: null,

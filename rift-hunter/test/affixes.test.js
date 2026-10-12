@@ -9,10 +9,12 @@ import { DT } from '../src/core/constants.js';
 import { EV } from '../src/core/events.js';
 import { makeRng, seedRng } from '../src/core/rng.js';
 import { ticks } from '../src/core/time.js';
-import { STATUS } from '../src/data/combat.js';
+import { HAZARD, STATUS } from '../src/data/combat.js';
 import { getMonAffix, getMonDef } from '../src/data/index.js';
 import { MON_AFFIXES } from '../src/data/monsterAffixes.js';
+import { updateEffects } from '../src/sim/effects.js';
 import { rebuildSpace } from '../src/sim/entities.js';
+import { rootPlayer } from '../src/sim/status.js';
 import { monsterStats, onMonDamaged, onMonDeath, onMonHitPlayer, onMonSpawn, spawnMonster, updateMonsters } from '../src/sim/monsters/monsters.js';
 import { minionAffixes, rollAffixes, spawnPack } from '../src/sim/monsters/packs.js';
 import { AFFIX_HOOKS } from '../src/sim/monsters/affixHooks/index.js';
@@ -221,6 +223,56 @@ test('화염 강화: 적중에 같은 공격 30% 화염 추가(noAffix) · 죽�
   assert.equal(e.spec.noAffix, true);
   assert.ok(Math.abs(e.spec.raw - m.dmg * row.params.deathMul) < 1e-9);
   assert.ok(ctx.events.some(x => x.name === EV.AFFIX && x.payload.what === 'fireArm' && x.payload.monId === m.id));
+});
+
+test('리뷰 수정: 감옥에 묶인 동안 발밑에서 화염 강화 · 역병 덩어리가 죽어도 피할 수 있다 — 예고가 속박 끝 + 반응 + 걸어 나가는 시간(감속 속도) 뒤 · 풀린 뒤 걸어 나가면 0번 맞는다 · 묶이지 않았으면 예고 그대로', () => {
+  const row = getMonAffix('fireEnchanted');
+  for (const kind of ['fire', 'pool']) {
+    for (const k of [0, 5, 15, 30, 44]) {
+      for (const d of [0.6, 1.5, 2.5]) {
+        const { ctx, state, p } = setup({ invincible: false });
+        p.lifeMax = 1e9;
+        p.life = 1e9;
+        rootPlayer(ctx, 1.5);
+        const rootUntil = p.st.rootUntil;
+        state.tick += k;
+        const at = { x: p.pos.x + d, z: p.pos.z };
+        const m = kind === 'fire'
+          ? spawnMonster(ctx, { typeId: 'ghoul', rank: 'champion', level: 1, affixes: ['fireEnchanted'], x: at.x, z: at.z, awake: false })
+          : spawnMonster(ctx, { typeId: 'bloater', rank: 'normal', level: 1, x: at.x, z: at.z, awake: false });
+        m.pos.x = at.x; m.pos.z = at.z;
+        m.hp = 0; m.dead = true; m.deadAt = state.tick;
+        onMonDeath(ctx, m);
+        const e = state.rift.effects.find(x => x.kind === (kind === 'fire' ? 'fireDeath' : 'poisonPool'));
+        assert.ok(e, `${kind}: 효과`);
+        const out = e.shape.r + p.r - Math.hypot(p.pos.x - e.shape.x, p.pos.z - e.shape.z);
+        if (out > 0) {
+          const need = rootUntil + ticks(HAZARD.react) + Math.ceil((out / HAZARD.slowSpeed) * 30);
+          assert.ok(e.hitAt >= need - 1, `${kind} k=${k} d=${d}: 판정 ${e.hitAt} < 풀림 ${rootUntil} + 반응 + 걸어 나가기 = ${need}`);
+        } else assert.equal(e.hitAt - e.start, kind === 'fire' ? ticks(row.params.delay) : 0, '발밑이 아니면 예고 그대로');
+        // 사람: 풀리고 반응한 뒤 몸 중심 반대쪽으로 감속 속도로 걷는다 — 맞지 않는다
+        const n0 = ctx.events.length;
+        const ux = (p.pos.x - e.shape.x) / (Math.hypot(p.pos.x - e.shape.x, p.pos.z - e.shape.z) || 1);
+        const uz = (p.pos.z - e.shape.z) / (Math.hypot(p.pos.x - e.shape.x, p.pos.z - e.shape.z) || 1);
+        for (let i = 0; i < 200; i++) {
+          state.tick += 1;
+          if (state.tick >= rootUntil + ticks(HAZARD.react)) { p.pos.x += ux * HAZARD.slowSpeed * DT; p.pos.z += uz * HAZARD.slowSpeed * DT; }
+          updateEffects(ctx);
+        }
+        const hits = ctx.events.slice(n0).filter(x => x.name === EV.PLAYER_HIT);
+        assert.equal(hits.length, 0, `${kind} k=${k} d=${d}: 묶인 채 · 풀린 직후 피할 수 없이 맞았다`);
+      }
+    }
+    // 묶이지 않았으면 예고 그대로(화염 1.0초 · 웅덩이 0)
+    const { ctx, state, p } = setup({ invincible: false });
+    const m = kind === 'fire'
+      ? spawnMonster(ctx, { typeId: 'ghoul', rank: 'champion', level: 1, affixes: ['fireEnchanted'], x: p.pos.x + 1, z: p.pos.z, awake: false })
+      : spawnMonster(ctx, { typeId: 'bloater', rank: 'normal', level: 1, x: p.pos.x + 1, z: p.pos.z, awake: false });
+    m.hp = 0; m.dead = true; m.deadAt = state.tick;
+    onMonDeath(ctx, m);
+    const e = state.rift.effects.find(x => x.kind === (kind === 'fire' ? 'fireDeath' : 'poisonPool'));
+    assert.equal(e.hitAt - e.start, kind === 'fire' ? ticks(row.params.delay) : 0);
+  }
 });
 
 test('흡혈: 준 피해의 50% 회복 · 초당 최대 생명 1% 재생 · AFFIX heal 은 1초에 한 번까지', () => {

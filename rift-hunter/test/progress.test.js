@@ -7,7 +7,8 @@ import { EV } from '../src/core/events.js';
 import { ECON, XP } from '../src/data/economy.js';
 import { BASES_BY_ID, SKILL_NODES_BY_ID } from '../src/data/index.js';
 import { PRESETS } from '../src/data/presets.js';
-import { RIFT, riftRow } from '../src/data/rift.js';
+import { RIFT, earlyDmgMul, earlyHpMul, riftRow } from '../src/data/rift.js';
+import { monsterStats } from '../src/sim/monsters/spawn.js';
 import { TREE } from '../src/data/skills.js';
 import { computeStats } from '../src/sim/loot/stats.js';
 import { makeDevCharacter } from '../src/sim/progression/dev.js';
@@ -291,12 +292,23 @@ test('recordRun: 앞에 · 최근 200개 · 요약의 사본(나중에 요약을
   assert.equal(ch.records[0].seed, ECON.recordsMax + 14);
 });
 
-test('previewRift: riftRow 그대로 · 최고 기록 · 열림 여부', () => {
+test('previewRift: riftRow · 최고 기록 · 열림 여부 · (리뷰 수정) 생명 · 피해 배율 = 몬스터에 실제로 곱하는 값(표 × 첫 판 경사 — monsterStats 와 같다)', () => {
   const ch = makeTestChar({ riftUnlocked: 4, best: { 3: { timeSec: 333, deaths: 0 } } });
   const p = previewRift(ch, 3);
   const row = riftRow(3);
   assert.equal(p.monLevel, row.monLevel);
-  assert.equal(p.hpMul, row.hpMul);
+  assert.equal(p.hpMul, row.hpMul * earlyHpMul(3));
+  for (let L = 1; L <= 30; L++) {
+    const pv = previewRift(ch, L);
+    const base = monsterStats('ghoul', 'normal', 1);
+    const at = monsterStats('ghoul', 'normal', L);
+    const r1 = riftRow(1);
+    // monsterStats = 상수 × 표 × 경사 — 균열 1 의 값으로 상수를 나눠 낸다
+    const realHp = at.hpMax / (base.hpMax / (r1.hpMul * earlyHpMul(1)));
+    const realDmg = at.dmg / (base.dmg / (r1.dmgMul * earlyDmgMul(1)));
+    assert.ok(Math.abs(pv.hpMul / realHp - 1) < 1e-9, `균열 ${L} 생명 배율 ${pv.hpMul} ≠ 실제 ${realHp}`);
+    assert.ok(Math.abs(pv.dmgMul / realDmg - 1) < 1e-9, `균열 ${L} 피해 배율 ${pv.dmgMul} ≠ 실제 ${realDmg}`);
+  }
   assert.deepEqual(p.rarityMul, row.rarityMul);
   assert.deepEqual(p.best, { timeSec: 333, deaths: 0 });
   assert.equal(p.unlocked, true);

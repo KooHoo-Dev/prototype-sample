@@ -48,6 +48,12 @@ export function createLightRig(scene) {
     },
     setShadows(on) {
       player.castShadow = !!on;
+      // 끌 때는 그림자 맵(점광원 = 1024² 큐브 렌더 타깃 + 깊이 큐브)을 GPU 에서 내린다 — high 에서 내려와도 남지 않게.
+      // three 는 map 이 null 이면 다음에 그림자를 켤 때 다시 만든다(WebGLShadowMap). RenderTarget.dispose 가 depthTexture 도 해제한다.
+      if (!on && player.shadow.map) {
+        player.shadow.dispose();
+        player.shadow.map = null;
+      }
     },
     dispose() {
       rig.setPoolSize(0);

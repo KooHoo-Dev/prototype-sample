@@ -10,11 +10,12 @@ import { EV } from '../../core/events.js';
 import { turnToward, yawOf } from '../../core/math.js';
 import { ticks } from '../../core/time.js';
 import { MON_AFFIXES_BY_ID, getMonDef } from '../../data/index.js';
+import { FLOW } from '../../data/mapgen.js';
 import { MON } from '../../data/monsters.js';
 import { riftRow } from '../../data/rift.js';
 import { awakeCount, getMonster } from '../entities.js';
 import { monSpeedMul } from '../status.js';
-import { flowDir } from '../world/flow.js';
+import { createFlow, flowDir, updateFlow } from '../world/flow.js';
 import { losClear, moveCircle } from '../world/nav.js';
 import { AFFIX_HOOKS } from './affixHooks/index.js';
 import { BEHAVIORS } from './behaviors.js';
@@ -38,6 +39,21 @@ export { monsterStats, spawnMonster, startAttack, findGuardianSpot } from './spa
 const NEIGH = [];
 /** 이번 틱 팩 대표 캐시(packId → 대표 ID) — updateMonsters 가 틱마다 비운다 */
 const REP = new Map();
+/** 리뷰 수정: 먼 흐름장(FLOW.far) — ctx.flow(균열 장면마다 새로 만든다)에 묶는다 · 상태가 아니다(흐름장처럼 플레이어 자리에서 다시 만든다) */
+const FAR = new WeakMap();
+
+/**
+ * 먼 흐름장의 방향|null — 흐름장(FLOW.maxSteps) 밖의 깬 몬스터만 묻는다(그때만 만든다 · FLOW.far 의 간격 · 한도)
+ * @param {SimCtx} ctx @param {import('../../types.js').MapData} map @param {MonsterState} m
+ */
+function farFlowDir(ctx, map, m) {
+  const flow = ctx.flow;
+  if (!flow || !map) return null;
+  let far = FAR.get(flow);
+  if (!far || far.dist.length !== map.nw * map.nh) { far = createFlow(map); FAR.set(flow, far); }
+  updateFlow(far, map, ctx.state.player.pos, ctx.state.tick, false, FLOW.far);
+  return flowDir(far, map, m.pos.x, m.pos.z);
+}
 /** 겹친 두 몸을 떼어 놓을 방향(같은 자리) — 황금각 */
 const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 
@@ -146,6 +162,9 @@ function updateOne(ctx, m, tick) {
   } else {
     m.sleepAt = -1;
   }
+  // 리뷰 수정: 어느 흐름장으로도 플레이어에 닿지 않는 채 MON.leashSec 이 지나면(벽 앞 직선 추격) 잠든다 — 직선 거리 목줄과 같은 처리
+  const bb = /** @type {any} */ (m.ax.b);
+  if (bb && bb.lostSeenAt === tick && bb.lostAt >= 0 && tick - bb.lostAt >= ticks(MON.leashSec)) { bb.lostAt = -1; putToSleep(ctx, m); return; }
   m.targeting = d2 <= MON.targetingRange * MON.targetingRange && m.act !== 'flee';
 }
 
@@ -266,14 +285,19 @@ function moveOne(ctx, m, def, b, tick) {
         mx = ux; mz = uz;
         want = Math.min(spd * DT, d - stopD);
       } else {
-        const f = ctx.flow ? flowDir(ctx.flow, map, m.pos.x, m.pos.z) : null;
+        let f = ctx.flow ? flowDir(ctx.flow, map, m.pos.x, m.pos.z) : null;
+        // 리뷰 수정: 흐름장 밖(경로가 maxSteps 넘게 먼 벽 너머)이면 먼 흐름장(FLOW.far — 맵 전체 · 필요할 때만)을 따라 돌아온다
+        if (!f || (f.x === 0 && f.z === 0)) f = farFlowDir(ctx, map, m);
         if (f && (f.x !== 0 || f.z !== 0)) {
           const fl = Math.hypot(f.x, f.z);
           mx = f.x / fl; mz = f.z / fl;
           want = spd * DT;
         } else {
+          // 어느 흐름장으로도 닿지 않는다 — 직선(옛 동작) · 이 상태가 연속으로 MON.leashSec 이어지면 잠든다(8 다시 잠 — 벽 앞에 영영 깬 채 서지 않게)
           mx = ux; mz = uz;
           want = Math.min(spd * DT, d - stopD);
+          if (!(b.lostSeenAt === tick - 1 && b.lostAt >= 0)) b.lostAt = tick;
+          b.lostSeenAt = tick;
         }
       }
     } else {

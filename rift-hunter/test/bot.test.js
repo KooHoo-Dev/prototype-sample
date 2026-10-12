@@ -21,6 +21,9 @@ import { makeDevCharacter } from '../src/sim/progression/dev.js';
 import { pointsFree } from '../src/sim/progression/progress.js';
 import { makeItem } from '../src/sim/loot/rollItem.js';
 import { isWalkableR, losClear } from '../src/sim/world/nav.js';
+import { mapFromAscii } from '../src/debug/fixtureMap.js';
+import { spawnDrops } from '../src/sim/drops.js';
+import { makeTestState } from './helpers.js';
 
 /** 실제 세션 · 이벤트 기록 @param {number} seed */
 function newSim(seed = 1) {
@@ -466,4 +469,71 @@ test('줍기 — 같은 드랍을 잠깐씩 끊어 고르면(lootTryGapSec 안) 
   s2.sv.tick = giveUp - 10; assert.equal(lootTarget(s2.bot, s2.sv)?.id, 77);
   s2.sv.tick = giveUp - 10 + gap + 1; assert.equal(lootTarget(s2.bot, s2.sv)?.id, 77);
   s2.sv.tick = giveUp + gap + 5; assert.equal(lootTarget(s2.bot, s2.sv)?.id, 77, '틈 뒤 새로 세지 않았다');
+});
+
+test('리뷰 수정: 줍기 — 쫓던 드랍은 화면(sv.drops) · lootRadius 를 조금 벗어나도(lootMemoryPad 안) 계속 고른다 · 진척 시계 — 두 드랍을 번갈아 고르며 바닥 드랍이 줄지 않으면 lootGiveUpSec 뒤 버린다', () => {
+  const giveUp = Math.round(BOT_RULES.lootGiveUpSec * 30);
+  // 경계 여유: 마법 77(10m) 을 고른 뒤 화면 밖(12.5m) · 일반 88(5m) 이 보여도 77 을 놓지 않는다
+  const s = lootScene(10);
+  const other = { id: 88, kind: 'item', rarity: 'normal', gone: false, pos: { x: -5, z: 0 } };
+  s.bot.sim.state.rift.drops.push(other);
+  s.sv.drops = [s.drop, other];
+  assert.equal(lootTarget(s.bot, s.sv)?.id, 77);
+  s.sv.tick = 1; s.sv.px = -2.5; s.sv.drops = [other];
+  assert.equal(lootTarget(s.bot, s.sv)?.id, 77, '화면 밖으로 나가자 다른 드랍으로 바뀌었다');
+  s.sv.tick = 2; s.sv.px = -(BOT_RULES.lootMemoryPad + 3);
+  assert.equal(lootTarget(s.bot, s.sv)?.id, 88, 'lootRadius + pad 밖이면 놓는다');
+  // 진척 시계: 77 · 88 이 번갈아 보이고(쫓던 것은 lootRadius + pad 밖으로 — ID 시계가 계속 돌아간다) 바닥 드랍 수가 그대로면 lootGiveUpSec 뒤 버린다.
+  //   pickAt 에 다른 드랍 하나를 주우면(바닥 드랍 수가 준다) 그때부터 다시 센다
+  const alternate = (pickAt) => {
+    const t = lootScene(10);
+    const b2 = { id: 88, kind: 'item', rarity: 'magic', gone: false, pos: { x: 0, z: 10 } };
+    const gold = { id: 89, kind: 'gold', gone: false, pos: { x: 60, z: 60 } };
+    t.bot.sim.state.rift.drops.push(b2, gold);
+    for (let k = 0; k < 3 * giveUp; k++) {
+      t.sv.tick = k;
+      if (k === pickAt) gold.gone = true;
+      const phase = Math.floor(k / 6) % 2;
+      t.drop.pos.x = phase ? 40 : 10;
+      b2.pos.z = phase ? 10 : 40;
+      t.sv.drops = phase ? [b2] : [t.drop];
+      if (lootTarget(t.bot, t.sv) === null) return { at: k, notes: t.bot.notes };
+    }
+    return { at: -1, notes: t.bot.notes };
+  };
+  const a = alternate(-1);
+  assert.ok(a.at > 0 && a.at <= giveUp + 12, `번갈아 고르는 동안 포기가 오지 않았다(${a.at})`);
+  assert.ok(a.notes.includes('lootGiveUp'));
+  const p = alternate(giveUp - 30);
+  assert.ok(p.at >= 2 * giveUp - 30, `주운 뒤에도 시계를 이어 셌다(${p.at})`);
+});
+
+test('리뷰 수정: 줍기 — 벽 너머 긴 우회(직선 11m · 경로 약 80m)의 마법 드랍과 바로 닿는 일반 드랍 사이에서 번갈아 누르며 떨지 않는다(실제 GameSim · 봇) — 닿는 것을 줍는다', () => {
+  const ascii = [
+    '####################',
+    '#....####....#######',
+    '#S...####....#######',
+    '#....####....#######',
+    '#....####....#######',
+    ...Array.from({ length: 13 }, () => '##.#######.#########'),
+    '##.........#########',
+    '####################',
+  ].join('\n');
+  const map = mapFromAscii(ascii, { id: 'test:livelock', kind: 'rift', tileset: 'crypt' });
+  const { sim } = newSim(3);
+  assert.equal(sim.debugLoadState(makeTestState({ map, cls: 'warrior' }), map, map).ok, true);
+  sim.debugRevealMap();
+  const ctx = sim.ctx;
+  const [A] = spawnDrops(ctx, [{ kind: 'item', item: makeItem({ baseId: 'helm', ilvl: 1, rarity: 'magic', id: 'iA' }), amount: 0, mat: null }], 18.6, 5);
+  const [B] = spawnDrops(ctx, [{ kind: 'item', item: makeItem({ baseId: 'helm', ilvl: 1, rarity: 'normal', id: 'iB' }), amount: 0, mat: null }], 9.4, 5);
+  A.pos.x = 18.6; A.pos.z = 5; B.pos.x = 9.4; B.pos.z = 5;
+  const bot = new Bot({ sim, cls: 'warrior', seed: 5 });
+  let switches = 0, last = null, pickedB = -1;
+  for (let t = 0; t < 30 * 30; t++) {
+    const inp = tickBot(sim, bot);
+    if (inp.lmbDown && inp.hover && inp.hover.kind === 'drop' && inp.hover.id !== last) { switches++; last = inp.hover.id; }
+    if (pickedB < 0 && B.gone) pickedB = t;
+  }
+  assert.ok(pickedB >= 0 && pickedB < 30 * 10, `닿는 일반 드랍을 줍지 못했다(${pickedB})`);
+  assert.ok(switches <= 4, `두 드랍을 번갈아 눌렀다(${switches}번 바뀜)`);
 });

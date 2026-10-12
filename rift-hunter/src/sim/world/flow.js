@@ -56,25 +56,29 @@ export function createFlow(map) {
 
 /**
  * 갱신(다익스트라) 했으면 true — 플레이어 칸이 FLOW.recenterCells 넘게(체비쇼프) 바뀌었거나 ticks(FLOW.everySec) 지났거나 force · 처음이면
+ * opts(리뷰 수정 · 선택): {maxSteps, everySec, recenterCells} — 먼 흐름장(FLOW.far — 흐름장 밖의 깬 몬스터가 쓰는 맵 전체 거리장)처럼 다른 한도로
  * @param {FlowField} flow @param {MapData} map @param {Vec2} pos @param {number} tick @param {boolean} [force]
+ * @param {{maxSteps?:number, everySec?:number, recenterCells?:number}|null} [opts]
  */
-export function updateFlow(flow, map, pos, tick, force = false) {
+export function updateFlow(flow, map, pos, tick, force = false, opts = null) {
   if (!flow || !map || !map.nav || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return false;
   const u = Math.floor(pos.x / NAV_CELL), v = Math.floor(pos.z / NAV_CELL);
   const n = map.nw * map.nh;
+  const every = opts?.everySec ?? FLOW.everySec;
+  const recenter = opts?.recenterCells ?? FLOW.recenterCells;
   const due = force || flow.builtAt < 0 || flow.dist.length !== n || tick < flow.builtAt
-    || tick - flow.builtAt >= ticks(FLOW.everySec)
-    || Math.max(Math.abs(u - flow.cx), Math.abs(v - flow.cz)) > FLOW.recenterCells;
+    || tick - flow.builtAt >= ticks(every)
+    || Math.max(Math.abs(u - flow.cx), Math.abs(v - flow.cz)) > recenter;
   if (!due) return false;
-  build(flow, map, pos);
+  build(flow, map, pos, opts?.maxSteps ?? FLOW.maxSteps);
   flow.cx = u;
   flow.cz = v;
   flow.builtAt = tick;
   return true;
 }
 
-/** @param {FlowField} flow @param {MapData} map @param {Vec2} pos */
-function build(flow, map, pos) {
+/** @param {FlowField} flow @param {MapData} map @param {Vec2} pos @param {number} maxSteps */
+function build(flow, map, pos, maxSteps) {
   const { nw, nh, nav } = map;
   const n = nw * nh;
   if (flow.dist.length !== n) flow.dist = new Uint16Array(n);
@@ -89,7 +93,8 @@ function build(flow, map, pos) {
   }
   const near = nearWallOf(map);
   const ORTH = FLOW.orthCost, DIAG = FLOW.diagCost, WALL = FLOW.wallCost;
-  const maxD = FLOW.maxSteps * ORTH;
+  // dist 는 Uint16(UNREACHED 0xffff) — 한도를 그 아래로 자른다
+  const maxD = Math.min(UNREACHED - DIAG - WALL - 1, Math.max(0, Math.floor(maxSteps)) * ORTH);
   const B = DIAG + WALL + 1;
   while (BUCKETS.length < B) BUCKETS.push([]);
   for (let b = 0; b < BUCKETS.length; b++) BUCKETS[b].length = 0;

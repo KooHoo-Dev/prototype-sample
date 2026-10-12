@@ -9,6 +9,8 @@ const BIG_MAX = 2;
 const BIG_SEC = 6;
 const BANNER_SEC = 2.5;
 const BANNER_FADE = 0.3;
+/** 배너와 HUD 위 묶음 사이(px) */
+const BANNER_GAP = 10;
 /** 같은 문면이 이 초 안에 다시 오면 새 줄 대신 시간을 늘린다 */
 const DEDUP_SEC = 1.5;
 
@@ -37,6 +39,23 @@ export function createNotices({ root }) {
   const bigWait = [];
   let bannerLeft = 0;
   let bannerTotal = 0;
+  /** @type {Element|null} */
+  let hudTop = null;
+
+  /**
+   * 배너 자리 — HUD 위 묶음(대상 프레임 · 게이지 · 수호자 바)의 실제 아래끝 + 여백(21% 보다 위로는 올리지 않는다).
+   * 리뷰 수정: 대상 프레임이 떠 있으면 수호자 바가 아래로 밀려 21% 의 배너가 수호자 체력 바와 % 를 덮었다. 묶음의 높이는 판 중에 바뀌니 배너가 떠 있는 동안 매 프레임.
+   */
+  function placeBanner() {
+    if (!hudTop || !hudTop.isConnected) hudTop = root.querySelector('.hud-top');
+    let y = 0;
+    if (hudTop && typeof hudTop.getBoundingClientRect === 'function') {
+      const r = hudTop.getBoundingClientRect();
+      const base = typeof root.getBoundingClientRect === 'function' ? root.getBoundingClientRect().top : 0;
+      if (r.height > 0) y = Math.round(r.bottom - base + BANNER_GAP);
+    }
+    banner.style.top = y > 0 ? `max(21%, ${y}px)` : '';
+  }
 
   const api = {
     layer,
@@ -74,6 +93,7 @@ export function createNotices({ root }) {
       if (!text) return;
       banner.textContent = text;
       banner.hidden = false;
+      placeBanner();
       banner.style.opacity = '1';
       bannerLeft = sec;
       bannerTotal = sec;
@@ -111,6 +131,7 @@ export function createNotices({ root }) {
       }
       if (bigWait.length && bigs.length < BIG_MAX) flushBig();
       if (bannerLeft > 0) {
+        placeBanner();
         bannerLeft -= dt;
         const since = bannerTotal - bannerLeft;
         const a = bannerLeft <= 0 ? 0 : Math.min(1, since / BANNER_FADE, bannerLeft / BANNER_FADE);

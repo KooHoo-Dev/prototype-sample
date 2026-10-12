@@ -1,7 +1,8 @@
 // OWNER: P8 — 계약 §6.14 · §9.1 · §9.5 · §9.6
 // 플레이어 리그(전사 · 마법사 · 장비 외형) · 몬스터(템플릿 5 · 변형 10 + 수호자 2 — 부위마다 InstancedMesh) · NPC 4 · 바닥 아이템 · 빛기둥 · 시체 · 가림 외곽선.
 // 매 프레임 상태를 읽어 그린다(§9.1) — 이벤트는 순간에만(MON_SPAWNED 솟아오름 · PLAYER_SPAWNED 보간 끊기). sim 상태를 고치지 않는다.
-// 위치 = lerp(prevPos, pos, alpha) · 시각 진행 = state.tick + alpha(틱) · 실제 시간(dtReal)은 숨쉬기 · 맥동 · 흔들림 같은 장식에만.
+// 위치 = lerp(prevPos, pos, alpha) · 방향 = 마지막 두 틱의 facing 을 같은 alpha 로 최단 호 보간(poses.js trackFacing — sim 은 prev 를 주지 않는다)
+// 시각 진행 = state.tick + alpha(틱) · 실제 시간(dtReal)은 숨쉬기 · 맥동 · 흔들림 같은 장식에만.
 // 내부 파일: view/actors/ — rig(FK · IK) · poses(포즈 순수 함수) · variants(변형 표) · parts(부위 지오메트리) · monsters(인스턴싱) · player(리그) · gear(장비 외형) · drops · materials
 
 import * as THREE from 'three';
@@ -101,9 +102,11 @@ export class ActorLayer {
     const jump = Math.hypot(p.pos.x - p.prevPos.x, p.pos.z - p.prevPos.z) > TELEPORT_SNAP;
     const px = jump ? p.pos.x : p.prevPos.x + (p.pos.x - p.prevPos.x) * a;
     const pz = jump ? p.pos.z : p.prevPos.z + (p.pos.z - p.prevPos.z) * a;
-    const op = this.poser.pose(this.pose, p, this._cls, this._style, now, t, px, pz);
+    // 방향도 위치와 같은 alpha 로(마지막 두 틱의 facing · 최단 호 — 30Hz 계단 회전 없음) · 순간이동 · PLAYER_SPAWNED 는 끊는다
+    const pf = this.poser.facing(p.facing, state.tick, a, jump);
+    const op = this.poser.pose(this.pose, p, this._cls, this._style, now, t, px, pz, pf);
     const d = CHAR_DIMS[this._cls];
-    fkBiped(d, this.pose, px, pz, p.facing, this.player.J, 1);
+    fkBiped(d, this.pose, px, pz, pf, this.player.J, 1);
     if (this._style === 'twoHand' && !p.dead) leftHandToGrip(this.player.J, d, GRIP_LEFT);
     this.player.apply();
     this._setOpacity(op);

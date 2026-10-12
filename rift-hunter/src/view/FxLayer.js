@@ -130,6 +130,8 @@ export class FxLayer {
     this._skill = new Map();
     /** @type {Map<string, any>} */
     this._mon = new Map();
+    /** @type {WeakMap<object, {fPrev:number, fCur:number, fTick:number}>} 몬스터마다 그린 방향 보간 기록(fx/actors.js — 몸과 같은 trackFacing) */
+    this.monFace = new WeakMap();
     this._pt = [0, 0];
     this._fallPt = [0, 0, 0];
 

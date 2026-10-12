@@ -495,6 +495,7 @@
  * @property {number} rootLockUntil     감옥 속박 중 · 직후 — 새 바닥 위협이 플레이어 발밑에 시작하지 않는다(§5.9 · -1 = 없음)
  * @property {RunStats} stats
  * @property {RunSummary|null} summary  완료 · 붕괴 때 만든 요약(패널이 읽는다)
+ * @property {RunSummary|null} settled  수호자 처치 틱에 정산한 완료 요약 — completeAt 에 summary 로 옮긴다(리뷰 수정 · 계약 §3 RiftState)
  * @property {number|null} completeAt   요약 패널을 띄울 틱
  * @property {string} guardianType      채울 때 정한 수호자 ID(GUARDIANS 키)
  * @property {number|null} calmAt       사망 뒤 몬스터를 재울 틱(§5.10 · W1 수정: DEATH.calmSec 0 이면 사망한 틱에 재우고 늘 null)

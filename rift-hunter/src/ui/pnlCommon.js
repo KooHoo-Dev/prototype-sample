@@ -54,12 +54,16 @@ export function numRow(label, before, after, moreIsGood = true) {
  */
 export function costRows(t, char, goldDelta, matDelta = {}) {
   const gold = Math.max(0, Number(char?.gold) || 0);
-  const rows = [numRow(t('inv.gold'), gold, gold + goldDelta)];
+  // 최종 게이트: 모자라면 「후」에 음수(골드 12 → −3) 대신 모자란 양(「3 모자람」 · 붉게) — 재화가 음수로 보이지 않는다(QUALITY §3)
+  const row = (label, have, after) => (Math.round(after) < 0
+    ? { label, before: fmtInt(have), after: t('shop.lack', { n: fmtInt(-Math.round(after)) }), dir: -1 }
+    : numRow(label, have, after));
+  const rows = [row(t('inv.gold'), gold, gold + goldDelta)];
   for (const m of MATERIAL_IDS) {
     const d = Number(matDelta[m]) || 0;
     if (!d) continue;
     const have = Math.max(0, Number(char?.materials?.[m]) || 0);
-    rows.push(numRow(t('mat.' + m), have, have + d));
+    rows.push(row(t('mat.' + m), have, have + d));
   }
   return rows;
 }

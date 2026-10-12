@@ -106,6 +106,16 @@ export function fmtMul(v, d = 2) {
 }
 
 /**
+ * 피해 숫자(떠오르는 숫자) — 정수로 반올림하되, 0보다 크고 1 미만이면 소수 한 자리(최소 0.1).
+ * 최종 게이트: 균열 1~4 는 첫 판 경사(피해 ×0.03~×0.10)로 몬스터 한 방이 0.3 안팎이라 「0」이 떠오르는데 생명은 줄었다.
+ * @param {number} v @returns {string}
+ */
+export function fmtDmg(v) {
+  if (typeof v === 'number' && v > 0 && v < 0.95) return fmtNum(Math.max(0.1, v), 1);
+  return fmtInt(v);
+}
+
+/**
  * 스킬 칸 아이콘 글자(두 글자) — 여러 낱말이면 낱말마다 첫 글자(「지면 강타」 → 「지강」), 한 낱말이면 앞 두 글자(「지진」).
  * 한 글자만 쓰면 같은 클래스 안에서 겹쳤다(지면 강타 · 지진 → 「지」 · 마력 화살 · 마력 보호막 → 「마」 — 화면 패스).
  * @param {string} name @returns {string}

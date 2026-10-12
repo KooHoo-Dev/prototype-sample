@@ -46,6 +46,11 @@
 .panel-layer > * { grid-area: 1 / 1; position: relative; z-index: 1; }
 .panel-layer > .is-top { z-index: 2; }
 .panel-layer.has-modal { background: rgba(4, 3, 6, 0.38); pointer-events: auto; }
+/* 겹쳐 보는 패널(비모달 — 게임이 계속 돈다)은 한쪽 반에 붙인다: 화면 가운데의 플레이어를 가리지 않고 인벤토리 + 캐릭터를 나란히 본다(리뷰 수정 · 폭은 panels.css) */
+.panel-layer > [data-panel="inventory"] { justify-self: end; }
+.panel-layer > [data-panel="character"] { justify-self: start; }
+/* 나란히 놓인 쪽은 아래에 깔려도 보이고 눌린다(누르면 맨 위로 — UIRoot._raiseFrom · 누름이 게임으로 새지 않게) */
+.panel-layer:not(.has-modal) > .is-under:is([data-panel="inventory"], [data-panel="character"]) { pointer-events: auto; filter: brightness(0.8); }
 .hit-flash { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0;
   box-shadow: inset 0 0 0 3px rgba(255, 64, 40, 0.85), inset 0 0 18px rgba(200, 20, 10, 0.35); }
 .audio-hint { position: absolute; left: 14px; bottom: 22px; z-index: 2; font-size: 11px; color: var(--ui-dim); pointer-events: none; }
@@ -165,6 +170,8 @@
 .consum-cd { position: absolute; inset: 0; background: conic-gradient(rgba(0, 0, 0, 0.7) calc(var(--cd, 0) * 1turn), transparent 0); }
 .consum-key, .consum-n { position: relative; }
 .consum.is-empty .consum-n { color: var(--bad); }
+.consum.is-free { border-color: var(--good); }
+.consum.is-free .consum-n { color: var(--good); font-size: 11px; letter-spacing: -0.5px; }
 
 .skillbar { display: flex; gap: 6px; padding-bottom: 6px; }
 .slot { position: relative; width: 50px; height: 50px; border: 2px solid #5a4a3a; border-radius: 6px; overflow: hidden; background: #15121a; box-sizing: border-box; }
@@ -309,7 +316,7 @@
 .death-lost { color: var(--bad); font-size: 13px; margin-top: 8px; }
 .sum-head { margin-top: 10px; font-size: 12px; color: var(--ui-dim); text-align: left; }
 .sum-table { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; text-align: left; }
-.sum-row { display: grid; grid-template-columns: 96px 1fr; gap: 10px; font-size: 13px; }
+.sum-row { display: grid; grid-template-columns: 116px 1fr; gap: 10px; font-size: 13px; }   /* 「그중 더 나은 장비」가 한 줄에 */
 .sum-row.is-bad .sum-value { color: var(--bad); }
 .sum-label { color: var(--ui-dim); }
 .sum-value { font-variant-numeric: tabular-nums; }

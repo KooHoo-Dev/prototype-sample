@@ -96,6 +96,28 @@ test('빛 장치 — 풀 크기 = maxLights − 1(플레이어 빛 포함 maxLig
   assert.equal(points(), 0);
 });
 
+test('빛 장치 — 그림자를 끄면(high → medium · low) 플레이어 빛의 그림자 맵을 해제하고 비운다 · 다시 켜면 three 가 새로 만든다(리뷰 view-perf)', () => {
+  const scene = new THREE.Scene();
+  const rig = createLightRig(scene);
+  rig.setShadows(true);
+  assert.equal(rig.player.castShadow, true);
+  // three(WebGLShadowMap)가 첫 그림자 렌더에서 만드는 것과 같은 모양 — 점광원 = 큐브 렌더 타깃 + 깊이 큐브
+  const map = new THREE.WebGLCubeRenderTarget(16);
+  map.depthTexture = new THREE.CubeDepthTexture(16, THREE.UnsignedIntType);
+  rig.player.shadow.map = map;
+  let disposed = 0;
+  map.addEventListener('dispose', () => disposed++);
+  rig.setShadows(false);
+  assert.equal(rig.player.castShadow, false);
+  assert.equal(disposed, 1, '렌더 타깃 dispose(WebGLTextures 가 색 · 깊이 텍스처를 GPU 에서 내린다)');
+  assert.equal(rig.player.shadow.map, null, 'map 을 비워 다음에 켤 때 새로 만들게');
+  rig.setShadows(false);
+  assert.equal(disposed, 1, '이미 비었으면 아무것도 안 한다');
+  rig.setShadows(true);
+  assert.equal(rig.player.castShadow, true);
+  rig.dispose();
+});
+
 // ───────────────────────── 지오메트리 ─────────────────────────
 
 test('MapData → 지오메트리: 바닥 병합 메시 하나 · 벽 인스턴스 수 = 벽 타일 수(crypt · cavern · town)', () => {

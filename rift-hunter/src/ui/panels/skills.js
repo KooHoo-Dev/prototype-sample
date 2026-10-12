@@ -11,7 +11,7 @@ import { describeSkill } from '../../sim/player/skills.js';
 import { canLearn, pointsFree, previewLearn } from '../../sim/progression/progress.js';
 import { fmtDps, fmtInt, fmtNum } from '../format.js';
 import { createErrorLine, createTradeBox, hintLine, isDown } from '../pnlCommon.js';
-import { nodeStatRows, skillLayout } from '../pnlLogic.js';
+import { nodeStatRows, skillExtraRows, skillLayout } from '../pnlLogic.js';
 
 /** @typedef {import('../../types.js').Panel} Panel */
 
@@ -189,6 +189,11 @@ export function createSkillsPanel(ctx) {
       const a = target === id ? (pv.rankBefore > 0 ? describeSkill(pv.statsBefore, id, pv.rankBefore) : null) : describeSkill(pv.statsBefore, target, /** @type {number} */ (tRank));
       const b = pv.ok ? (target === id ? describeSkill(pv.statsAfter, id, pv.rankAfter) : describeSkill(pv.statsAfter, target, /** @type {number} */ (tRank))) : null;
       for (const r of skillRows(a, b)) rows.push(r);
+      // 동작 수치(버프 · 흡수 · 화상 · 튕김 · 상태 · 변형 patch) — 피해 · 비용 · 재사용이 그대로인 노드도 랭크 효과가 숫자로 보이게
+      const dash = '—';
+      for (const r of skillExtraRows(a, b)) {
+        rows.push({ label: t(r.key), before: r.before ? t(r.key + '.v', r.before) : dash, after: pv.ok ? (r.after ? t(r.key + '.v', r.after) : dash) : dash, dir: pv.ok ? r.dir : 0 });
+      }
     }
     for (const r of nodeStatRows(id, pv.rankBefore, pv.ok ? pv.rankAfter : pv.rankBefore)) {
       if (r.key) rows.push({ label: '', before: t(r.key, { v: r.before }), after: pv.ok ? t(r.key, { v: r.after }) : '—', dir: pv.ok && Number(r.after) > Number(r.before) ? 1 : 0 });

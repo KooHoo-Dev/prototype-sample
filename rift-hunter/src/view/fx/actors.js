@@ -3,10 +3,12 @@
 //   공격 예고(행의 telegraph 'glow' = 손 빛 · 시전 대상 빛기둥 / 'aimLine' = 궁수 붉은 조준선).
 // 플레이어: 회오리 바람 고리(반지름 = 스킬 radius — §9.6 고리가 정본) · 돌진 먼지 자취(폭 = 스킬 width) · 귀환 빛기둥 · 버프 고리 · 마력 보호막 구체 ·
 //   속박 쇠사슬 · 감속 서리 · 시전 손 빛.
-// 위치 = lerp(prevPos, pos, alpha)(순간이동이면 pos) · 진행 = 틱 · 장식 시간 L.time. 할당 없음(색은 캐시 · 수치는 표).
+// 위치 = lerp(prevPos, pos, alpha)(순간이동이면 pos) · 방향 = 몸(actors/monsters.js)과 같은 facing 보간(trackFacing — 몸에 붙는 균열 · 포신 · 손 빛이 몸과 같이 돈다)
+// 진행 = 틱 · 장식 시간 L.time. 할당 없음(색은 캐시 · 수치는 표 · 방향 기록은 몬스터마다 처음 한 번).
 
 import { CAM_AZIMUTH, CAM_ELEVATION } from '../../core/constants.js';
 import { ticks } from '../../core/time.js';
+import { newFacingTrack, trackFacing } from '../actors/poses.js';
 import { hash01 } from './decals.js';
 import { AFFIX_AURA, AURA, CAP, MON_TELE, PLAYER_FX, STATUS_FX, col } from './style.js';
 
@@ -35,6 +37,11 @@ export function drawMonsterFx(L, rift, tick, now, a) {
     const x = jump ? m.pos.x : m.prevPos.x + (m.pos.x - m.prevPos.x) * a;
     const z = jump ? m.pos.z : m.prevPos.z + (m.pos.z - m.prevPos.z) * a;
     if (L.far(x, z)) continue;
+    // 그린 몸과 같은 방향(몬스터 객체마다 기록 — 균열이 닫혀 몬스터가 사라지면 같이 사라진다)
+    let tr = L.monFace.get(m);
+    const fresh = !tr;
+    if (fresh) { tr = newFacingTrack(); L.monFace.set(m, tr); }
+    const f = trackFacing(tr, m.facing, tick, a, fresh || jump);
     const vanish = m.act === 'vanish';
     const st = m.st;
     if (!vanish && st) statusFx(L, m, x, z, tick, now);
@@ -43,10 +50,10 @@ export function drawMonsterFx(L, rift, tick, now, a) {
       for (let k = 0; k < affs.length; k++) {
         const style = Object.prototype.hasOwnProperty.call(AFFIX_AURA, affs[k]) ? AFFIX_AURA[affs[k]] : null;
         if (!style || (vanish && style !== 'phase')) continue;
-        aura(L, style, m, x, z, tick, now);
+        aura(L, style, m, x, z, tick, now, f);
       }
     }
-    if (!vanish && (m.act === 'windup' || m.act === 'cast') && m.actId) teleFx(L, m, x, z, now);
+    if (!vanish && (m.act === 'windup' || m.act === 'cast') && m.actId) teleFx(L, m, x, z, now, f);
   }
 }
 
@@ -110,8 +117,9 @@ function statusFx(L, m, x, z, tick, now) {
 /**
  * 속성 오라 하나(§9.7) — 모양 이름(AFFIX_AURA 의 값)으로 갈린다
  * @param {import('../FxLayer.js').FxLayer} L @param {string} style @param {import('../../types.js').MonsterState} m
+ * @param {number} x @param {number} z 그린 위치 @param {number} tick @param {number} now @param {number} f 그린 방향(보간)
  */
-function aura(L, style, m, x, z, tick, now) {
+function aura(L, style, m, x, z, tick, now, f) {
   const h = m.height, r = m.r, t = L.time, ph = m.id * 1.37;
   const q = L.q;
   switch (style) {
@@ -246,7 +254,7 @@ function aura(L, style, m, x, z, tick, now) {
       const k = A.k * (0.7 + 0.3 * Math.sin(t * 4 + ph));
       L.segs.mark('aura:cracks');
       for (let j = 0; j < A.n; j++) {
-        let ang = m.facing + (j / A.n) * TAU + 0.4;
+        let ang = f + (j / A.n) * TAU + 0.4;
         let px = x + Math.sin(ang) * r * 1.04, pz = z + Math.cos(ang) * r * 1.04, py = h * 0.15;
         for (let s = 1; s <= 4; s++) {
           ang += (hash01(m.id + j, s) - 0.5) * 0.36;
@@ -273,7 +281,7 @@ function aura(L, style, m, x, z, tick, now) {
     case 'barrel': {
       // 몰타르 — 등에 비스듬히 선 포신 + 포구의 주황 빛
       const A = AURA.barrel;
-      const back = m.facing + Math.PI, el = 0.87;
+      const back = f + Math.PI, el = 0.87;
       const bx = x + Math.sin(back) * r * 0.55, bz = z + Math.cos(back) * r * 0.55, by = h * 0.82;
       L.barrels.mark('aura:barrel');
       L.barrels.addEuler(bx, by, bz, -el, back, 0, 0.1, 0.1, 0.55, col(A.color));
@@ -286,7 +294,7 @@ function aura(L, style, m, x, z, tick, now) {
 }
 
 /** 공격 예고(행의 telegraph) — 'glow' = 손 빛(+ 시전 대상 빛기둥) · 'aimLine' = 궁수 붉은 조준선 */
-function teleFx(L, m, x, z, now) {
+function teleFx(L, m, x, z, now, f) {
   const info = L.monInfo(m.typeId);
   const atk = info ? info.atk[m.actId] : null;
   if (!atk) return;
@@ -295,7 +303,7 @@ function teleFx(L, m, x, z, now) {
   if (atk.telegraph === 'glow') {
     const hex = atk.type === 'fire' ? MON_TELE.glowFire : atk.type === 'cold' ? MON_TELE.glowCold : atk.type === 'lightning' ? MON_TELE.glowLightning : MON_TELE.glowPhys;
     const c = col(hex);
-    const fx = Math.sin(m.facing), fz = Math.cos(m.facing);
+    const fx = Math.sin(f), fz = Math.cos(f);
     L.glyphs.pushC(x + fx * r * 0.9, h * 0.72, z + fz * r * 0.9, (0.3 + 0.6 * u) * Math.max(1, h / 1.8), c, 0.5 + 0.45 * u);
     if (atk.kind === 'cast' && m.aim) {
       L.pillars.mark('tele:cast');

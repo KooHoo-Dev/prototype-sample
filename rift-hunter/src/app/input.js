@@ -1,6 +1,9 @@
 // OWNER: P9 — 계약 §11.5 · §10.5 · §3.2
 // 입력 수집기 — event.code 로만(한글 IME) · Ctrl/Meta/Alt + 다른 키 조합은 건드리지 않는다(기본 동작도 막지 않는다) · Alt 단독은 기본 동작을 막는다(메뉴 포커스).
 // 에지(…Down)는 다음 frame() 이 가져갈 때까지 모은다 · frame() 이 InputFrame 을 만들고 에지를 비운다 · dropEdges(1) = 다음 한 틱의 에지를 버린다(패널 닫힘 · 막 걷힘).
+//   · 막 걷힘(rearm)은 그 버린 틱에 아직 누르고 있던 좌클릭을 다음 틱의 누름으로 다시 낸다 — 장면이 바뀌어 의도가 비었으니(§10.5-7 「누르고 있던 버튼은 눌림으로」) · 막 동안 눌렀다 뗀 클릭은 그대로 버린다.
+// 뗌(keyup)은 창의 캡처 단계에서 먼저 눌림을 푼다 — 어떤 처리기(이름 칸)가 전파를 막아도 Shift · 스킬 키 · Alt 가 눌린 채 남지 않는다.
+// 마우스 이벤트의 shiftKey 로도 제자리(Shift)를 읽는다 — Alt 를 누른 채 누른 Shift 는 조합이라 keydown 이 버려진다(Shift+클릭은 키 조합이 아니다) · false 면 남은 Shift 눌림을 바로잡는다.
 // 키 처리 순서(§10.5): 텍스트 칸 포커스 → ui 만 / ui.handleKey(e) 먼저(true 면 게임 입력이 아니다) / app 키(onAppKey — Escape · 토글 · Enter 복귀) / 게임 키.
 //   · 모달이 먹은 「누르고 있는」 게임 키(스킬 · Shift)는 눌림으로 남긴다(에지 없이) — 모달이 닫힌 뒤 「눌림」으로 잡힌다(QUALITY §1).
 //   · 겹쳐 보는 패널이 자기 keys 로 먹은 키는 뗄 때까지 게임 입력이 아니다(스킬 창에서 Digit1 을 누른 채 닫아도 스킬이 나가지 않게).
@@ -43,10 +46,11 @@ function isTextField(el) {
 export class InputCollector {
   /**
    * @param {{canvas:any, bus:any, ui:any, rc:any, keybinds?:typeof KEYBINDS, settings?:import('../types.js').Settings|null,
-   *   win?:any, doc?:any, pick?:typeof pickHover, onAppKey?:((e:KeyboardEvent) => boolean)|null, onGesture?:(() => void)|null, onZoom?:((steps:number) => void)|null}} deps
+   *   win?:any, doc?:any, pick?:typeof pickHover, onAppKey?:((e:KeyboardEvent) => boolean)|null, onGesture?:(() => void)|null, onZoom?:((steps:number) => void)|null,
+   *   onAltBlocked?:((code:string) => void)|null}} deps onAltBlocked = Alt 를 누른 채 게임 키(조합이라 버렸다 — Alt 한 번 누름에 한 번)
    *   win · doc 를 null 로 주면 리스너를 달지 않는다(테스트는 handle* 를 직접 부른다)
    */
-  constructor({ canvas, bus, ui, rc, keybinds = KEYBINDS, settings = null, win = undefined, doc = undefined, pick = pickHover, onAppKey = null, onGesture = null, onZoom = null }) {
+  constructor({ canvas, bus, ui, rc, keybinds = KEYBINDS, settings = null, win = undefined, doc = undefined, pick = pickHover, onAppKey = null, onGesture = null, onZoom = null, onAltBlocked = null }) {
     this.canvas = canvas;
     this.bus = bus;
     this.ui = ui;
@@ -57,6 +61,7 @@ export class InputCollector {
     this.onAppKey = onAppKey;
     this.onGesture = onGesture;
     this.onZoom = onZoom;
+    this.onAltBlocked = onAltBlocked;
     this.win = win === undefined ? (typeof window !== 'undefined' ? window : null) : win;
     this.doc = doc === undefined ? (typeof document !== 'undefined' ? document : null) : doc;
 
@@ -78,6 +83,12 @@ export class InputCollector {
     this.recallDown = false;
     /** 에지를 버릴 남은 틱 */
     this.drop = 0;
+    /** 버림이 끝난 틱에 누르고 있던 좌클릭을 누름으로 다시 낸다(막 걷힘) */
+    this.rearm = false;
+    /** 마지막 마우스 이벤트의 shiftKey(Alt 를 누른 채 누른 Shift — keydown 은 조합이라 버려진다) */
+    this.mouseShift = false;
+    /** 이번 Alt 누름에서 「Alt 를 떼고」를 이미 알렸다 */
+    this._altNoticed = false;
     this.wheelAcc = 0;
     this.gestured = false;
     this._slot = new Array(SKILL_BAR).fill(false);
@@ -99,6 +110,7 @@ export class InputCollector {
       this._offs.push(() => target.removeEventListener(type, fn, opt));
     };
     on(w, 'keydown', (e) => this.handleKeyDown(e));
+    on(w, 'keyup', (e) => this.releaseKey(e && e.code), true);   // 캡처 — 처리기가 전파를 막아도 눌림을 푼다
     on(w, 'keyup', (e) => this.handleKeyUp(e));
     on(w, 'mousemove', (e) => this.handleMouseMove(e));
     on(w, 'mousedown', (e) => this.handleMouseDown(e));
@@ -133,6 +145,7 @@ export class InputCollector {
 
   /** @param {boolean} on */
   _setAlt(on) {
+    if (!on) this._altNoticed = false;
     if (this.alt === on) return;
     this.alt = on;
     if (this.ui && typeof this.ui.setLabels === 'function') this.ui.setLabels(on);
@@ -141,6 +154,19 @@ export class InputCollector {
 
   /** @param {string} code */
   _isHoldKey(code) { return this.kb.skill.includes(code) || this.kb.stand.includes(code); }
+
+  /** 게임 키(조합이면 버려지는 것 — 스킬 · 제자리 제외 포션 · 귀환) @param {string} code */
+  _isGameKey(code) { return this.kb.skill.includes(code) || code === this.kb.potion || code === this.kb.recall; }
+
+  /** 뗌 — 눌림 · 겹친 패널이 먹은 키 · Alt 를 푼다(캡처 단계 · handleKeyUp 도 부른다 — 두 번 불러도 같다) @param {string} code */
+  releaseKey(code) {
+    if (typeof code !== 'string') return false;
+    const was = this.held.delete(code);
+    this.captured.delete(code);
+    if (this.kb.stand.includes(code)) this.mouseShift = false;
+    if (this.kb.labels.includes(code)) this._setAlt(false);
+    return was;
+  }
 
   /** @param {KeyboardEvent} e */
   handleKeyDown(e) {
@@ -156,7 +182,14 @@ export class InputCollector {
       this.ui.handleKey(e);
       return;
     }
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      // 조합은 건드리지 않는다(§11.5) — Alt(이름표)만 누른 채 게임 키면 왜 안 나가는지 한 번 알린다
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.repeat && this.alt && this._isGameKey(code) && !this._altNoticed && this.onAltBlocked) {
+        this._altNoticed = true;
+        this.onAltBlocked(code);
+      }
+      return;
+    }
     this._gesture();
     if (this.captured.has(code)) { e.preventDefault(); return; }
     const modal = this.ui.isModal();
@@ -192,11 +225,9 @@ export class InputCollector {
   /** 뗌은 조합 · 포커스와 무관하게 늘 눌림을 푼다 @param {KeyboardEvent} e */
   handleKeyUp(e) {
     const code = e.code;
-    const was = this.held.delete(code);
-    this.captured.delete(code);
+    const was = this.releaseKey(code);
     if (this.kb.labels.includes(code)) {
       e.preventDefault();
-      this._setAlt(false);
       this.ui.handleKey(e);
       return;
     }
@@ -233,12 +264,29 @@ export class InputCollector {
     try { return t.closest(INTERACTIVE) !== null; } catch { return false; }
   }
 
+  /**
+   * 마우스 이벤트의 수식키 상태 — Shift 는 제자리(키 조합이 아니라 Shift+클릭) · 놓친 뗌 바로잡기(false 면 남은 Shift 눌림 · Alt 이름표를 푼다)
+   * @param {MouseEvent} e
+   */
+  _mods(e) {
+    if (!e) return;
+    if (typeof e.shiftKey === 'boolean') {
+      this.mouseShift = e.shiftKey;
+      if (!e.shiftKey) for (const c of this.kb.stand) this.held.delete(c);
+    }
+    if (e.altKey === false && this.alt) this._setAlt(false);
+  }
+
   /** @param {MouseEvent} e */
-  handleMouseMove(e) { this._pos(e); }
+  handleMouseMove(e) {
+    this._pos(e);
+    this._mods(e);
+  }
 
   /** @param {MouseEvent} e */
   handleMouseDown(e) {
     this._pos(e);
+    this._mods(e);
     if (SIDE_BUTTONS.includes(e.button)) { e.preventDefault(); return; }
     this._gesture();
     if (this._typing(e) && isTextField(e.target)) return;
@@ -300,8 +348,14 @@ export class InputCollector {
     this.recallDown = false;
   }
 
-  /** 다음 n 틱의 에지를 버린다(누르고 있는 것은 그대로) @param {number} [n] */
-  dropEdges(n = 1) { this.drop = Math.max(this.drop, n | 0); }
+  /**
+   * 다음 n 틱의 에지를 버린다(누르고 있는 것은 그대로) · rearm(막 걷힘)이면 버림이 끝난 다음 틱에 아직 누르고 있는 좌클릭을 누름으로 다시 낸다
+   * @param {number} [n] @param {{rearm?:boolean}} [o]
+   */
+  dropEdges(n = 1, { rearm = false } = {}) {
+    this.drop = Math.max(this.drop, n | 0);
+    if (rearm) this.rearm = true;
+  }
 
   /** 눌린 키 · 버튼 전부 놓기(포커스 잃음 · 탭 숨김) */
   releaseAll() {
@@ -309,6 +363,8 @@ export class InputCollector {
     this.captured.clear();
     this.lmb = false;
     this.rmb = false;
+    this.rearm = false;
+    this.mouseShift = false;
     this.clearEdges();
     this._setAlt(false);
   }
@@ -352,13 +408,16 @@ export class InputCollector {
     if (this.drop > 0) {
       this.drop--;
       this.clearEdges();
+    } else if (this.rearm) {
+      this.rearm = false;
+      if (this.lmb) this.lmbDown = true;                       // 막 내내 · 막 동안 누르기 시작해 아직 누르고 있다 — 새 장면의 첫 누름
     }
     const cursor = this.cursor();
     const hover = cursor ? this.hover(state, map) : null;
     const s = this._slot;
     s[0] = this.rmb;
     for (let i = 0; i < this.kb.skill.length && i + 1 < s.length; i++) s[i + 1] = this.held.has(this.kb.skill[i]);
-    let shift = false;
+    let shift = this.mouseShift;
     for (const c of this.kb.stand) if (this.held.has(c)) shift = true;
     const f = makeInput({
       cursor, hover, lmb: this.lmb, lmbDown: this.lmbDown, slot: s, slotDown: this.slotDown, shift,

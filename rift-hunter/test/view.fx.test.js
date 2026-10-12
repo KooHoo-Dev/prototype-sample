@@ -624,3 +624,28 @@ test('고정 상태 15개 · 여러 프레임 — 예외 0 · 쓴 버퍼에 NaN 
     }
   }
 });
+
+test('몸에 붙는 오라(몰타르 포신)는 그린 몸과 같은 방향 보간으로 돈다(리뷰 view-perf — 몸만 alpha 로 돌고 포신이 30Hz 로 끊기지 않게)', () => {
+  const { fx } = makeLayer('high');
+  const st = riftState();
+  const ctx = makeTestCtx(st);
+  const p = st.player.pos;
+  const m = addTestMonster(ctx, { typeId: 'ghoul', rank: 'elite', x: p.x + 3, z: p.z });
+  m.affixes = ['mortar'];
+  /** 포신 자리(몸 중심에서 등 쪽) → 그린 방향 */
+  const drawn = () => {
+    const s = fx.barrels.spans.find((sp) => sp.tag === 'aura:barrel');
+    assert.ok(s, '포신');
+    const e = fx.barrels.mat, o = s.i * 16;
+    return angleDiff(0, Math.atan2(e[o + 12] - m.pos.x, e[o + 14] - m.pos.z) - Math.PI);
+  };
+  m.facing = 0;
+  fx.update(st, 1, 1 / 60, null);
+  assert.ok(Math.abs(drawn()) < 1e-4, `시작 ${drawn()}`);
+  st.tick += 1; m.facing = 0.6;
+  fx.update(st, 0.5, 1 / 60, null);
+  assert.ok(Math.abs(drawn() - 0.3) < 1e-4, `틱 사이 가운데 0.3 (${drawn()})`);
+  fx.update(st, 1, 1 / 60, null);
+  assert.ok(Math.abs(drawn() - 0.6) < 1e-4, `틱 끝 = sim 값 (${drawn()})`);
+  fx.dispose();
+});

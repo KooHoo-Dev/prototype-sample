@@ -382,6 +382,23 @@ test('도박 확률: 10만 회 굴림 vs gambleOdds — 칸마다 4σ 안 · 확
   }
 });
 
+test('리뷰 수정: 주무기 · 보조 도박은 자기 클래스 것만 나온다(ownClassOnly — 공개 확률에 없는 「낄 수 없는 것」이 없다 · 제작 · 재고와 같다)', () => {
+  for (const cls of ['warrior', 'mage']) {
+    const { ctx, ch } = setup({ cls });
+    ch.riftUnlocked = 8;
+    for (const slot of ['mainHand', 'offhand']) {
+      for (let k = 0; k < 200; k++) {
+        ch.gold = 1e9;
+        const r = gamble(ctx, slot);
+        assert.equal(r.ok, true);
+        assert.equal(r.item.slot, slot);
+        assert.equal(r.item.cls, cls, `${cls} ${slot} 도박에서 ${r.item.cls} 것이 나왔다`);
+        ch.bag[r.ref.idx] = null;
+      }
+    }
+  }
+});
+
 test('gamble: 그 부위 가격 차감 · ilvl = 해금 최고 · flags.gambled · 부위 · gold/bagFull/invalid 이면 아무것도 바뀌지 않는다', () => {
   const { ctx, ch, state } = setup();
   ch.riftUnlocked = 3;

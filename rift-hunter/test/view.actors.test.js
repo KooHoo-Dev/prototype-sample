@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { EventBus } from '../src/core/events.js';
+import { EV, EventBus } from '../src/core/events.js';
 import { ticks } from '../src/core/time.js';
 import { BASES } from '../src/data/items.js';
 import { GUARDIANS_BY_ID, MONSTERS_BY_ID, RANKS_BY_ID, getMonDef } from '../src/data/index.js';
@@ -17,7 +17,7 @@ import { MAX_DRAWN, MonsterInstancer, compileType, poseMonster } from '../src/vi
 import { PART_MESHES } from '../src/view/actors/parts.js';
 import { CharRig, PLAYER_GAIT, PlayerPoser, deadYawOffset, leftHandToGrip, playerLook, styleOf } from '../src/view/actors/player.js';
 import { CAM_AZIMUTH } from '../src/core/constants.js';
-import { SWING_AT, attackPhase, bipedBase, bipedWalk, footCycle, phaseStep, quadBase, quadWalk, stepLenOf } from '../src/view/actors/poses.js';
+import { FACING_GAP_MAX, SWING_AT, attackPhase, bipedBase, bipedWalk, footCycle, newFacingTrack, phaseStep, quadBase, quadWalk, stepLenOf, trackFacing, wrapAngle } from '../src/view/actors/poses.js';
 import { BJ, BP, QJ, fkBiped, fkQuad, ikLeg, makeJoints, pointOf, posOf } from '../src/view/actors/rig.js';
 import { VARIANTS } from '../src/view/actors/variants.js';
 import { addTestMonster, makeTestCtx, makeTestState } from './helpers.js';
@@ -657,4 +657,80 @@ test('view.actors: 쓰러진 플레이어는 화면 가로로 눕는다(화면 �
     assert.ok(Math.abs(P[BP.RYAW] - off) < 1e-6, '쓰러짐이 끝나면 보정이 다 들어간다');
     assert.ok(P[BP.RPITCH] < -1.3, '누웠다');
   }
+});
+
+// ── 방향 보간(리뷰 view-perf: facing 이 30Hz 틱마다 최대 34°씩 끊겨 돌았다 — 위치만 alpha 로 보간했다) ──
+
+/** 루트 관절 행렬의 yaw(Ry · Rx · Rz — +Z 축의 수평 방향) */
+const yawOf = (J0) => Math.atan2(J0.elements[8], J0.elements[10]);
+const near = (a, b, eps = 1e-5) => Math.abs(wrapAngle(a - b)) < eps;
+
+test('view.actors: trackFacing — 마지막 두 틱을 alpha 로 최단 호 보간 · ±π 를 넘어 돈다 · 끊기(snap · 틱 공백 · 틱 밖 변경)', () => {
+  const r = newFacingTrack();
+  assert.equal(trackFacing(r, 0.2, 100, 0.5, false), 0.2, '첫 값은 그대로(보간할 이전 틱 없음)');
+  assert.ok(near(trackFacing(r, 0.8, 101, 0, false), 0.2), 'alpha 0 = 직전 틱');
+  assert.ok(near(trackFacing(r, 0.8, 101, 0.5, false), 0.5), 'alpha 0.5 = 가운데(같은 틱의 다음 프레임)');
+  assert.ok(near(trackFacing(r, 0.8, 101, 1, false), 0.8), 'alpha 1 = 지금 틱(sim 값)');
+  // 최단 호: 3.0 → −3.0 은 π 를 지나 0.28 rad 만 돈다(반대로 6 rad 돌지 않는다)
+  trackFacing(r, 3.0, 200, 1, true);
+  const mid = trackFacing(r, -3.0, 201, 0.5, false);
+  assert.ok(near(mid, Math.PI), `±π 를 넘는 가운데 ${mid}`);
+  // 틱이 FACING_GAP_MAX 넘게 비면(컬링 · 장면 전환) 끊는다 · 그 안이면 보간
+  trackFacing(r, 0, 300, 1, true);
+  assert.ok(near(trackFacing(r, 1, 300 + FACING_GAP_MAX + 1, 0.2, false), 1), '긴 공백 뒤는 지금 값');
+  trackFacing(r, 0, 400, 1, true);
+  assert.ok(near(trackFacing(r, 1, 402, 0.5, false), 0.5), '두 틱 공백(느린 프레임)은 보간');
+  // snap · 같은 틱인데 값이 바뀜(틱 밖의 명령) → 지금 값
+  assert.ok(near(trackFacing(r, 2, 403, 0.3, true), 2), 'snap');
+  assert.ok(near(trackFacing(r, -1, 403, 0.3, false), -1), '같은 틱에서 바뀐 값');
+  assert.ok(Number.isNaN(trackFacing(r, NaN, 404, 0.5, false)), 'NaN 은 기록을 더럽히지 않고 그대로 낸다');
+  assert.ok(near(trackFacing(r, -1, 404, 1, false), -1), 'NaN 뒤 기록은 그대로');
+});
+
+test('view.actors: 플레이어 · 몬스터의 그린 방향은 틱 사이에서 alpha 로 돈다(30Hz 계단 회전 없음) · 순간이동 · PLAYER_SPAWNED 는 끊는다', () => {
+  const rc = fakeRc();
+  const bus = new EventBus();
+  const layer = new ActorLayer({ rc, bus, settings: { quality: 'low' } });
+  const st = makeTestState({ scene: 'rift' });
+  const p = st.player;
+  p.pos.x = p.prevPos.x = 10; p.pos.z = p.prevPos.z = 10;
+  p.act = 'idle'; p.dead = false;
+  const drawn = () => yawOf(layer.player.J[0]) - layer.pose[BP.RYAW];
+  st.tick = 500; p.facing = 0;
+  layer.update(st, 1, 0, null);
+  assert.ok(near(drawn(), 0), `시작 ${drawn()}`);
+  // 한 틱에 turnRate 상한(18 rad/s × DT = 0.6 rad)만큼 돌았다 — 그 틱 사이의 프레임은 가운데를 그린다
+  st.tick = 501; p.facing = 0.6;
+  layer.update(st, 0.25, 0, null);
+  assert.ok(near(drawn(), 0.15), `alpha 0.25 → 0.15 (${drawn()})`);
+  layer.update(st, 0.75, 0, null);
+  assert.ok(near(drawn(), 0.45), `alpha 0.75 → 0.45 (${drawn()})`);
+  layer.update(st, 1, 0, null);
+  assert.ok(near(drawn(), 0.6), '틱 끝 = sim 값');
+  // 순간이동(위치 점프 > 2.5m)은 끊는다
+  st.tick = 502; p.facing = 2.0; p.prevPos.x = 10; p.pos.x = 16;
+  layer.update(st, 0.1, 0, null);
+  assert.ok(near(drawn(), 2.0), `순간이동은 바로 (${drawn()})`);
+  // PLAYER_SPAWNED(장면 · 부활)는 끊는다
+  p.prevPos.x = p.pos.x;
+  st.tick = 503; p.facing = -1.0;
+  bus.emit(EV.PLAYER_SPAWNED, { x: p.pos.x, z: p.pos.z, facing: -1.0, reason: 'debug' });
+  layer.update(st, 0.1, 0, null);
+  assert.ok(near(drawn(), -1.0), `PLAYER_SPAWNED 뒤 바로 (${drawn()})`);
+  layer.dispose();
+
+  // 몬스터(인스턴서 기록): 새 기록은 그대로 · 다음 틱은 보간 · 순간이동은 끊는다
+  const group = new THREE.Group();
+  const inst = new MonsterInstancer(group, makeInstanceMaterials());
+  const m = mon('ghoul', { id: 3, x: 10, z: 10, facing: 1.0 });
+  const mDrawn = () => yawOf(inst.J[0]) - inst.poses.biped[BP.RYAW];
+  inst.update({ mons: [m] }, 700, 0.5, 0, { x: 10, z: 10 }, null, true);
+  assert.ok(near(mDrawn(), 1.0), `새 기록은 sim 값 (${mDrawn()})`);
+  m.facing = 1.4;
+  inst.update({ mons: [m] }, 701, 0.5, 0, { x: 10, z: 10 }, null, true);
+  assert.ok(near(mDrawn(), 1.2), `몬스터 alpha 0.5 → 1.2 (${mDrawn()})`);
+  m.facing = -2.0; m.prevPos.x = 10; m.pos.x = 14;
+  inst.update({ mons: [m] }, 702, 0.5, 0, { x: 10, z: 10 }, null, true);
+  assert.ok(near(mDrawn(), -2.0), `몬스터 순간이동은 바로 (${mDrawn()})`);
+  inst.dispose();
 });

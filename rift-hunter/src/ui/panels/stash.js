@@ -32,7 +32,7 @@ export function createStashPanel(ctx) {
   const foot = el.appendChild(w.el('div', 'panel-foot'));
   const err = createErrorLine(ctx);
   foot.appendChild(err.el);
-  foot.appendChild(hintLine(ctx, ['inv.toStash', 'inv.sort', 'inv.lock', 'inv.area']));
+  foot.appendChild(hintLine(ctx, ['inv.toStash', 'inv.sort', 'inv.lock', 'inv.areaStash']));
 
   const stash = createItemGrid(ctx, {
     kind: 'stash', cols: STASH_COLS, rows: Math.ceil(STASH_SIZE / STASH_COLS), upgrades: true,

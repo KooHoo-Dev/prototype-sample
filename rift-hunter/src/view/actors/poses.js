@@ -36,6 +36,40 @@ export function towardArr(out, b, t) {
   return out;
 }
 
+// ───────────────────────── 방향(facing) 보간 ─────────────────────────
+// sim 은 facing 의 직전 틱 값을 주지 않는다(prevPos 만 — §5.12). 위치는 lerp(prevPos, pos, alpha)로 화면 주사율에 맞춰 움직이는데
+// 방향을 틱 값 그대로 그리면 돌아서는 동안 30Hz 로 최대 turnRate × DT(플레이어 0.6 rad ≈ 34°)씩 끊겨 돈다 —
+// view 가 엔티티마다 마지막 두 틱의 facing 을 기억해 위치와 같은 alpha 로 최단 호 보간한다(sim 계약은 그대로).
+
+/** 이만큼 넘게 틱이 비면(컬링 · 장면 전환 뒤 다시 보임) 보간하지 않고 지금 값으로 — 루프의 한 프레임 최대 step(5)보다 크게 */
+export const FACING_GAP_MAX = 6;
+
+/** 각도를 [−π, π) 로 @param {number} a */
+export function wrapAngle(a) { return a - 2 * PI * Math.floor((a + PI) / (2 * PI)); }
+
+/** 방향 보간 기록 — 필드는 엔티티 기록(rec · PlayerPoser)에 섞어 둔다 @returns {{fPrev:number, fCur:number, fTick:number}} */
+export function newFacingTrack() { return { fPrev: 0, fCur: 0, fTick: -1 }; }
+
+/**
+ * 이번 프레임의 sim facing 을 받아 기록을 넘기고 그릴 방향을 낸다(할당 없음).
+ * 틱이 바뀌면 fPrev ← fCur · fCur ← facing. 보간을 끊는 경우(snap — 위치 순간이동 · PLAYER_SPAWNED · 새 기록)와
+ * 틱이 FACING_GAP_MAX 넘게 비었거나 거꾸로 갔을 때 · 같은 틱인데 값이 바뀌었을 때(틱 밖의 명령 — 디버그 · 고정 상태)는 지금 값으로 끊는다.
+ * 그린 각도 = fPrev + wrap(fCur − fPrev) × alpha — alpha ≈ 1(디버그 step 뒤)이면 sim 값 그대로라 정지 화면은 같은 틱이면 같은 그림이다.
+ * @param {{fPrev:number, fCur:number, fTick:number}} rec @param {number} facing sim 값 @param {number} tick state.tick @param {number} alpha 0..1 @param {boolean} snap
+ * @returns {number}
+ */
+export function trackFacing(rec, facing, tick, alpha, snap) {
+  if (!Number.isFinite(facing)) return facing;
+  const gap = tick - rec.fTick;
+  if (snap || rec.fTick < 0 || gap < 0 || gap > FACING_GAP_MAX || (gap === 0 && facing !== rec.fCur)) {
+    rec.fPrev = facing; rec.fCur = facing; rec.fTick = tick;
+    return facing;
+  }
+  if (gap > 0) { rec.fPrev = rec.fCur; rec.fCur = facing; rec.fTick = tick; }
+  const d = wrapAngle(rec.fCur - rec.fPrev);
+  return d === 0 ? rec.fCur : rec.fPrev + d * alpha;
+}
+
 /**
  * 부분 포즈 → 완전한 배열. partial = {이름: 값(절대)} · {'+이름': 값(base 에 더함)}
  * @param {Float32Array} base @param {Record<string, number>} partial @param {Record<string, number>} index

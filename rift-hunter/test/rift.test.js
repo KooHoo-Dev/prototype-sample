@@ -90,10 +90,17 @@ test('수호자 처치 → complete · 남은 몬스터는 경험치 · 드랍 �
   const others = [addTestMonster(ctx, { x: 30, z: 30 }), addTestMonster(ctx, { x: 32, z: 30, rank: 'elite' })];
   const haz = { id: 900, kind: 'plague', owner: 'mon', srcId: others[0].id, packId: -1, cancelOnSrcDeath: false, hostile: true, shape: circle(0, 0, 2), start: state.tick, hitAt: state.tick + 30, end: state.tick + 180, tickT: 15, nextTickAt: state.tick + 45, resolved: false, spec: null, tickSpec: {}, from: null };
   rift.effects.push(haz);
+  rift.ticksIn = 300 * 30;
   kill(g);
   resolveDeaths(ctx);
   assert.equal(rift.phase, 'complete');
   assert.equal(rift.completeAt, state.tick + ticks(RIFT.completeDelay));
+  // 리뷰 수정: 보상은 처치 틱에 정산한다(해금 · 기록 · 최고 기록) — 패널(summary)만 completeAt 에
+  assert.ok(rift.settled && rift.settled.result === 'complete', '처치 틱에 정산');
+  assert.equal(ch.riftUnlocked, unlockAfter(ch, 1, 0));
+  assert.equal(ch.records[0]?.result, 'complete');
+  assert.ok(ch.best['1'] && ch.best['1'].timeSec === 300);
+  assert.equal(rift.summary, null, '패널은 completeDelay 뒤');
   assert.equal(haz.end, state.tick, '남은 적대 위협 지움');
   assert.ok(others.every(m => m.hp === 0 && m.flags.noXp && m.flags.noDrops && m.flags.noGauge));
   state.tick += 1;
@@ -107,9 +114,11 @@ test('수호자 처치 → complete · 남은 몬스터는 경험치 · 드랍 �
   updateRift(ctx);
   assert.equal(rift.summary, null);
   state.tick = rift.completeAt;
-  rift.ticksIn = 300 * 30;
+  const rec0 = ch.records.length;
   updateRift(ctx);
   const s = rift.summary;
+  assert.equal(s, rift.settled, '정산한 요약 그대로');
+  assert.equal(ch.records.length, rec0, '기록을 두 번 넣지 않는다');
   assert.ok(s && s.result === 'complete' && s.level === 1 && s.cls === ch.cls && s.timeSec === 300 && s.noDeath === true);
   assert.equal(s.unlockedTo, unlockAfter(ch, 1, 0));
   assert.equal(s.record, true, '이 레벨의 첫 완료');

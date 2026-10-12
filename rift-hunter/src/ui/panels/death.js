@@ -7,6 +7,7 @@
 import { tName } from '../i18n.js';
 import { fmtInt } from '../format.js';
 import { repairCost } from '../../sim/progression/inventory.js';
+import { lostUnlock } from '../pnlLogic.js';
 import { renderSummary } from './riftComplete.js';
 
 /** @typedef {import('../../types.js').Panel} Panel */
@@ -70,8 +71,9 @@ export function createDeathPanel(ctx) {
     if (showSum) renderSummary(table, r.summary, t, w);
     else table.textContent = '';
     lost.hidden = !collapsed;
-    // 잃은 것: 수호자 보장 드랍 · 해금 — 이번 판을 깼다면 열렸을 단계(사망이 있었으니 +1)
-    lost.textContent = t('death.lost', { n: r && r.deaths === 0 ? 2 : 1 });
+    // 잃은 것: 수호자 보장 드랍 · 해금 — 이번 판을 깼다면 새로 열렸을 단계(이미 열려 있으면 잃은 해금이 없다 · pnlLogic.lostUnlock)
+    const gain = lostUnlock(r?.level ?? r?.summary?.level ?? 1, r?.deaths ?? 1, ch?.riftUnlocked ?? 1);
+    lost.textContent = gain > 0 ? t('death.lost', { n: gain }) : t('death.lostNoUnlock');
     go.textContent = t(collapsed ? 'death.toTown' : 'death.respawn');
   }
 

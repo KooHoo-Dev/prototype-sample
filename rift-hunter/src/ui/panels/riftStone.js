@@ -86,8 +86,17 @@ export function createRiftStonePanel(ctx) {
       return r;
     };
     kv(t('riftStone.monLevel', { n: pv.monLevel }));
-    kv(t('riftStone.hp', { v: fmtMul(pv.hpMul).slice(1) }));
-    kv(t('riftStone.dmg', { v: fmtMul(pv.dmgMul).slice(1) }));
+    // 최종 게이트: 균열 1~4 는 첫 판 경사로 피해 ×0.03~×0.10 이라 소수 둘째 자리로는 단계 차이가 안 보였다 — 0.1 아래는 셋째 자리까지 ·
+    //   앞 레벨보다 몇 % 오르는지 한 줄(previewRift 의 배율은 몬스터에 실제로 곱하는 값 — 첫 판 경사 포함)
+    const mulDigits = (v) => (v < 0.1 ? 3 : 2);
+    kv(t('riftStone.hp', { v: fmtMul(pv.hpMul, mulDigits(pv.hpMul)).slice(1) }));
+    kv(t('riftStone.dmg', { v: fmtMul(pv.dmgMul, mulDigits(pv.dmgMul)).slice(1) }));
+    if (L > 1) {
+      const prev = previewRift(ch, L - 1);
+      const pct = (a, b) => (b > 0 ? Math.round((a / b - 1) * 100) : 0);
+      const sign = (n) => (n >= 0 ? '+' : '−') + Math.abs(n) + '%';
+      kv(t('riftStone.step', { n: L - 1, h: sign(pct(pv.hpMul, prev.hpMul)), d: sign(pct(pv.dmgMul, prev.dmgMul)) }));
+    }
     kv(t('riftStone.affixes', { a: pv.champAffixes, b: pv.eliteAffixes }));
     kv(t('riftStone.ilvl', { n: pv.ilvl }));
     const rr = kv(t('riftStone.rarity'));

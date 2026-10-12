@@ -112,6 +112,11 @@
 
 /* ── 인벤토리 ── */
 .pnl-inv .two-col { align-items: stretch; }
+/* 화면 오른쪽 반에 붙는다(hud.css) — 1280 폭에서 왼쪽 끝이 플레이어(가운데)보다 오른쪽이게 590px 안: 칸 46 · 42 · 간격 10 */
+.pnl-inv { padding: 14px 16px; max-width: calc(50vw - 30px); }
+.pnl-inv .two-col { gap: 10px; }
+.pnl-inv .grid-doll { grid-template-columns: repeat(3, 46px); grid-auto-rows: 46px; }
+.pnl-inv .area-bag .grid { grid-template-columns: repeat(var(--cols, 8), 42px); grid-auto-rows: 42px; }
 
 /* ── 스킬 트리 ── */
 .pnl-skills { width: 1000px; }
@@ -155,7 +160,7 @@
 .skill-actions { margin-top: 8px; font-size: 11px; color: var(--ui-dim); }
 
 /* ── 캐릭터 시트 ── */
-.pnl-char { width: 620px; }
+.pnl-char { width: min(620px, calc(50vw - 50px)); }   /* 화면 왼쪽 반에 붙는다(hud.css) — 플레이어(가운데)를 가리지 않게 */
 .char-head { display: flex; gap: 12px; align-items: baseline; margin-bottom: 8px; font-size: 14px; }
 .char-head b { color: #ffe2b0; font-size: 16px; }
 .char-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px; }
@@ -209,7 +214,8 @@
 .rift-detail { font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
 .rift-detail h3 { margin: 0 0 4px; font-size: 18px; color: #c8a0ff; }
 .rift-kv { display: flex; justify-content: space-between; gap: 10px; }
-.rift-kv > span:first-child { color: var(--ui-dim); }
+.rift-kv > span:first-child { color: var(--ui-dim); flex: none; white-space: nowrap; }   /* 최종 게이트: 긴 값(등급 보정 넷)에 라벨이 「등급 보 / 정」으로 접혔다 */
+.rift-kv > span:last-child { text-align: right; }
 .rift-note { margin-top: 6px; font-size: 12px; color: var(--ui-dim); }
 .rift-warn { font-size: 12px; color: var(--ui-accent); }
 .rift-open { margin-top: 8px; }

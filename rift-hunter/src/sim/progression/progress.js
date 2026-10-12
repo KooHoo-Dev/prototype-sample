@@ -7,7 +7,7 @@ import { EV } from '../../core/events.js';
 import { LEVEL_CAP } from '../../core/constants.js';
 import { GUARDIANS_BY_ID, MONSTERS_BY_ID, RANKS_BY_ID, SKILL_NODES_BY_ID } from '../../data/index.js';
 import { ECON, XP } from '../../data/economy.js';
-import { RIFT, riftRow } from '../../data/rift.js';
+import { RIFT, earlyDmgMul, earlyHpMul, riftRow } from '../../data/rift.js';
 import { TREE } from '../../data/skills.js';
 import { computeStats } from '../loot/stats.js';
 import { syncSummary } from './character.js';
@@ -290,14 +290,15 @@ export function recordRun(ctx, summary) {
 }
 
 /**
- * 균열석 미리보기(순수) — riftRow 그대로 · 최고 기록 · 열림 여부
+ * 균열석 미리보기(순수) — riftRow · 최고 기록 · 열림 여부. hpMul · dmgMul 은 몬스터에 실제로 곱하는 배율이다(표 × 첫 판 경사 earlyHpMul · earlyDmgMul —
+ * monsterStats 와 같다 · 리뷰 수정: 전에는 표 값만 보여 균열 1~11 의 위험이 실제와 최대 34배 달랐다)
  * @param {CharacterState|null} char @param {number} level @returns {import('../../types.js').RiftPreview}
  */
 export function previewRift(char, level) {
   const row = riftRow(level);
   return {
     level: row.level, monLevel: row.monLevel, ilvl: row.ilvl,
-    hpMul: row.hpMul, dmgMul: row.dmgMul, goldMul: row.goldMul, xpMul: row.xpMul,
+    hpMul: row.hpMul * earlyHpMul(row.level), dmgMul: row.dmgMul * earlyDmgMul(row.level), goldMul: row.goldMul, xpMul: row.xpMul,
     rarityMul: { ...row.rarityMul },
     champAffixes: row.champAffixes, eliteAffixes: row.eliteAffixes,
     best: char?.best?.[String(row.level)] ?? null,

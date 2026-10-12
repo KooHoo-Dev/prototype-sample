@@ -11,7 +11,7 @@ import { BASIC_SKILLS } from '../data/skills.js';
 import { skillReady } from '../sim/player/skills.js';
 import { pointsFree, xpReq } from '../sim/progression/progress.js';
 import { fmtCd, fmtInt, skillGlyph } from './format.js';
-import { t, tName } from './i18n.js';
+import { has, t, tName } from './i18n.js';
 
 /** 몸 흔들림 · 깜빡임 길이(초) */
 const HIT_SHAKE_SEC = 0.2;
@@ -239,7 +239,7 @@ export function createHud({ root, sim }) {
           const br = node ? `br-${node.cls}-${node.branch}` : 'br-basic';
           setClass(s.el, 'slot ' + br);
           const nm = skillName(id);
-          setText(s.icon, skillGlyph(nm));
+          setText(s.icon, has('glyph.' + id) ? t('glyph.' + id) : skillGlyph(nm));   // 규칙대로 줄이면 다른 낱말로 읽히는 것은 예외(strings glyph.<id>)
           s.el.title = nm;
         }
       }
@@ -310,6 +310,10 @@ export function createHud({ root, sim }) {
       if (mon && (mon.dead || mon.gone)) mon = null;
       if (mon && mon.id === rift.guardianId) mon = null;      // 수호자는 위의 대형 체력 바가 보인다(겹쳐 두 번 그리지 않는다)
       if (!mon && hv && hv.kind === 'object' && typeof hv.id === 'string') obj = rift.portals?.find(pt => pt.id === hv.id) ?? null;
+    } else if (state.scene === 'town') {
+      // 마을: 마우스 아래 NPC · 시설의 이름만(대장장이 · 잡화상 · 도박꾼 · 신비술사 · 보관함 · 균열석 · 마을 포털 — 리뷰 수정 · 장식은 이름이 없다)
+      const hv = p.hover;
+      if (hv && hv.kind === 'object' && typeof hv.id === 'string' && has('npc.' + hv.id)) obj = { townId: hv.id };
     }
     targetMon = mon;
     if (!mon && !obj) {
@@ -321,7 +325,7 @@ export function createHud({ root, sim }) {
     if (obj) {
       lastTargetId = -1;
       setClass(target, 'target is-object');
-      setText(tName_, t(obj.kind === 'exit' ? 'hud.portal.exit' : 'hud.portal.recall'));
+      setText(tName_, obj.townId ? t('npc.' + obj.townId) : t(obj.kind === 'exit' ? 'hud.portal.exit' : 'hud.portal.recall'));
       setText(tRank, '');
       if (tAff.childElementCount) tAff.textContent = '';
       setHidden(tBar, true);
@@ -456,8 +460,12 @@ export function createHud({ root, sim }) {
       }
       if (resBlink > 0) resBlink -= dt;
       resOrb.classList.toggle('is-blink', resBlink > 0);
-      setText(scrollN, String(ch.scrolls ?? 0));
-      scroll.classList.toggle('is-empty', !(ch.scrolls > 0));
+      // 최종 게이트: 완료된 균열(요약 · 나가는 포털)에서 T 는 두루마리가 아니라 무료 · 즉시 「마을로」다(controller.handleEdges 와 같은 조건)
+      const freeExit = state.scene === 'rift' && state.rift?.phase === 'complete' && !!state.rift.summary && !p.dead;
+      setText(scrollN, freeExit ? t('hud.scroll.exit') : String(ch.scrolls ?? 0));
+      scroll.classList.toggle('is-empty', !freeExit && !(ch.scrolls > 0));
+      scroll.classList.toggle('is-free', freeExit);
+      if (scroll.title !== (freeExit ? t('hud.scroll.exitTip') : t('hud.scroll'))) scroll.title = freeExit ? t('hud.scroll.exitTip') : t('hud.scroll');
 
       drawSkills(state, stats);
       drawIcons(state, stats);

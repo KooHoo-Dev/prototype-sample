@@ -109,7 +109,8 @@ export function closePortals(ctx, kind) {
 }
 
 /**
- * 균열 닫기 — 활동 중(active · guardian)이었으면 기록 abandon(recordRun) · RIFT_CLOSED{reason} · rift = null · ctx.riftMap = null · 마을 포털 끔
+ * 균열 닫기 — 활동 중(active · guardian)이었으면 기록 abandon(recordRun) · 완료 단계면 정산(settleComplete — 이미 했으면 아무것도 안 한다) ·
+ * RIFT_CLOSED{reason} · rift = null · ctx.riftMap = null · 마을 포털 끔
  * @param {SimCtx} ctx @param {'collapse'|'newRift'|'quit'|'debug'} reason
  */
 export function closeRift(ctx, reason) {
@@ -117,6 +118,8 @@ export function closeRift(ctx, reason) {
   const rift = st.rift;
   if (!rift) return;
   if ((rift.phase === 'active' || rift.phase === 'guardian') && st.char) recordRun(ctx, makeSummary(ctx, 'abandon'));
+  // 리뷰 수정: 완료 단계인데 아직 정산하지 않았으면(처치 틱 정산 전의 상태를 불러온 경우 등) 닫기 전에 정산한다 — 「타이틀로」 · 새 균열 · 디버그 모두
+  if (rift.phase === 'complete' && st.char) settleComplete(ctx);
   ctx.emit(EV.RIFT_CLOSED, { reason });
   st.rift = null;
   ctx.riftMap = null;
@@ -310,6 +313,7 @@ export function resolveDeaths(ctx) {
   const tick = st.tick;
   const ch = st.char;
   const mons = rift.mons;
+  let completed = false;
   for (let i = 0, n = mons.length; i < n; i++) {
     const m = mons[i];
     if (m.gone || m.dead || m.hp > 0) continue;
@@ -365,8 +369,11 @@ export function resolveDeaths(ctx) {
       id: m.id, typeId: m.typeId, rank: m.rank, x: m.pos.x, z: m.pos.z, facing: m.facing,
       launch: m.launch ? { x: m.launch.x, z: m.launch.z } : null, byPlayer, elite: ELITE_RANKS.has(m.rank),
     });
-    if (m.id === rift.guardianId && (rift.phase === 'active' || rift.phase === 'guardian')) completeGuardian(ctx, m);
+    if (m.id === rift.guardianId && (rift.phase === 'active' || rift.phase === 'guardian')) { completeGuardian(ctx, m); completed = true; }
   }
+  // 리뷰 수정: 수호자를 쓰러뜨린 그 틱에 보상을 정산한다(같은 틱의 다른 처치까지 센 뒤) — completeDelay 는 패널 · 나가는 포털 연출에만 쓴다.
+  //   전에는 completeAt(+1.5초) 전에 「타이틀로」 · 탭 닫기(pagehide 저장)를 하면 해금 · 완료 경험치 · 기록이 사라졌다.
+  if (completed && rift.phase === 'complete') settleComplete(ctx);
 }
 
 /**
@@ -467,7 +474,28 @@ export function spawnGuardianNow(ctx, x, z) {
 }
 
 /**
- * 완료 마무리(completeAt 틱 · 디버그) — 완료 경험치(round(XP.completeBonus × xpMul(L))) → 요약 → completeRun(P6 — 해금 · 최고 기록 · 기록 · 저장) →
+ * 완료 정산(수호자 처치 틱 — resolveDeaths 가 그 호출 끝에 부른다 · 리뷰 수정) — 완료 경험치(round(XP.completeBonus × xpMul(L))) → 요약 →
+ * completeRun(P6 — 해금 · 최고 기록 · 기록 · SAVE_REQUEST{char, complete}) → rift.settled = 요약. 패널(rift.summary)은 completeAt 에 finishRift 가 연다.
+ * 이미 정산했거나(settled) 요약이 있으면(옛 상태 · 고정 상태) 아무것도 하지 않는다 → 그 요약
+ * @param {SimCtx} ctx @returns {RunSummary|null}
+ */
+export function settleComplete(ctx) {
+  const st = ctx.state;
+  const rift = st.rift;
+  if (!rift || rift.phase !== 'complete') return null;
+  if (rift.settled) return rift.settled;
+  if (rift.summary) return rift.summary;
+  const ch = st.char;
+  const bonus = Math.round(XP.completeBonus * riftRow(rift.level).xpMul);
+  if (ch && bonus > 0) noteXp(ctx, grantXp(ctx, bonus, 'complete'));
+  const summary = makeSummary(ctx, 'complete');
+  rift.settled = summary;
+  if (ch) completeRun(ctx, summary);
+  return summary;
+}
+
+/**
+ * 완료 마무리(completeAt 틱 · 디버그 · 떠나는 commit) — 정산(settleComplete — 처치 틱에 이미 했으면 그 요약) → rift.summary(패널) →
  * RIFT_COMPLETE → 나가는 포털(수호자 자리 + exitPortalOffset 의 걷기 가능 점) PORTAL_OPENED · SAVE_REQUEST{char, complete}
  * @param {SimCtx} ctx
  */
@@ -475,13 +503,10 @@ export function finishRift(ctx) {
   const st = ctx.state;
   const rift = st.rift;
   if (!rift || rift.phase !== 'complete' || rift.summary) return;
-  const ch = st.char;
-  const bonus = Math.round(XP.completeBonus * riftRow(rift.level).xpMul);
-  if (ch && bonus > 0) noteXp(ctx, grantXp(ctx, bonus, 'complete'));
-  const summary = makeSummary(ctx, 'complete');
+  const summary = settleComplete(ctx);
+  if (!summary) return;
   rift.summary = summary;
   rift.completeAt = null;
-  if (ch) completeRun(ctx, summary);
   ctx.emit(EV.RIFT_COMPLETE, { summary });
   const pos = exitPortalSpot(ctx);
   const portal = { id: 'portal:' + ctx.nextId(), kind: /** @type {'exit'} */ ('exit'), pos, r: RIFT.portalR, born: st.tick };

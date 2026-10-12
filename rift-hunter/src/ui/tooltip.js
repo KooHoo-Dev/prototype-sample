@@ -119,6 +119,27 @@ export function besideBoxes(cell, ...boxes) {
 }
 
 /**
+ * 격자 상자들 전체(칸의 세로 · 상자들의 가로를 모두 합친다) — 화면 한쪽에 붙은 겹쳐 보는 패널(인벤토리)은 카드를 패널 밖에 둔다(가방을 덮지 않게).
+ * @param {{left:number, right:number, top:number, bottom:number}|null|undefined} cell
+ * @param {...(Element|null|undefined)} boxes
+ */
+export function spanBoxes(cell, ...boxes) {
+  if (!cell) return cell;
+  let left = cell.left;
+  let right = cell.right;
+  for (const b of boxes) {
+    const r = b?.getBoundingClientRect?.();
+    if (!r || !(r.width > 0)) continue;
+    left = Math.min(left, r.left);
+    right = Math.max(right, r.right);
+  }
+  return { left, right, top: cell.top, bottom: cell.bottom, width: right - left, height: cell.bottom - cell.top };
+}
+
+/** 화면 가운데(플레이어) 양옆으로 비워 둘 폭(px) — opts.clearCenter */
+const CENTER_CLEAR = 44;
+
+/**
  * 떠 있는 툴팁
  * @param {{root:HTMLElement, sim?:any, bus?:any, settings?:any, ui?:any, t:(k:string, p?:Object) => string}} ctx
  * @returns {{show:(item:Item|null, x:number, y:number, opts?:Object) => void, hide:() => void, refresh:() => void, dispose:() => void, el:HTMLElement, advanced:() => boolean}}
@@ -185,6 +206,11 @@ export function createTooltip(ctx) {
       if (w <= right) x = r.right + GAP;
       else if (w <= left) x = r.left - GAP - w;
       else x = right >= left ? vw - EDGE - w : EDGE;            // 어느 쪽도 모자라면 넓은 쪽 끝에 붙인다
+      // 게임이 도는 겹쳐 보는 패널(인벤토리)의 카드는 화면 가운데의 플레이어를 덮지 않는다 — 가운데에 걸치면 그 왼쪽(또는 오른쪽)으로 비킨다
+      if (cur.opts.clearCenter) {
+        const c0 = vw / 2 - CENTER_CLEAR, c1 = vw / 2 + CENTER_CLEAR;
+        if (x < c1 && x + w > c0) x = x + w / 2 < vw / 2 && c0 - w >= EDGE ? c0 - w : c1 + w <= vw - EDGE ? c1 : x;
+      }
       y = r.top;
       if (x < r.right && x + w > r.left) y = r.bottom + GAP;     // 칸을 덮게 되면 칸 아래로
     } else {

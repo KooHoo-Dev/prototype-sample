@@ -16,7 +16,7 @@ import { getMonDef } from '../../data/index.js';
 import { MON } from '../../data/monsters.js';
 import { PACK_PLACE } from '../../data/packs.js';
 import { monsterHitPlayer } from '../combat.js';
-import { canStartHazard, spawnEffect } from '../effects.js';
+import { canStartHazard, rootSafeDelay, spawnEffect } from '../effects.js';
 import { getMonster } from '../entities.js';
 import { applyStun } from '../status.js';
 import { isWalkableR, moveCircle, nearestWalkable, raycastWalk } from '../world/nav.js';
@@ -296,7 +296,7 @@ function chargeStep(ctx, mon, atk) {
 const charger = {
   /**
    * 거리 minRange..range(5~11m) · 시야 · charge 준비면 돌진 예비(방향 고정 · 시작 틱에 효과 chargeLine — 적대 · spec null 표시 전용 ·
-   * 선 길이 min(maxLen, 거리 + overshoot)(벽 앞에서 자른 표식) · 폭 2r · cancelOnSrcDeath) → 판정 틱부터 act charge. 그 밖에는 gore(근접)
+   * 선 길이 = 몸 중심이 가는 거리 min(maxLen, 거리 + overshoot)(벽 앞에서 자른다) + r(몸 앞 — 판정과 같은 끝) · 폭 2r · cancelOnSrcDeath) → 판정 틱부터 act charge. 그 밖에는 gore(근접)
    * @param {SimCtx} ctx @param {MonsterState} mon @param {MonsterDef} def
    */
   think(ctx, mon, def) {
@@ -313,7 +313,9 @@ const charger = {
       const fx = Math.sin(facing), fz = Math.cos(facing);
       const ex = mon.pos.x + fx * len, ez = mon.pos.z + fz * len;
       const stop = raycastWalk(ctx.map, mon.pos.x, mon.pos.z, ex, ez, mon.r);
-      const shown = Math.min(len, Math.hypot(stop.x - mon.pos.x, stop.z - mon.pos.z) + mon.r);
+      // 리뷰 수정: 표식은 몸 앞까지(멈추는 몸 중심 + r) — 판정(chargeStep)은 몸 중심의 경로 선분 ↔ 플레이어 중심 ≤ r + p.r 이라 끝에 반지름 r 만큼 더 맞혔다
+      //   (전에는 벽이 없으면 몸 중심이 멈추는 자리에서 선이 끝나 선 끝 바깥 0.6~0.78m 까지 맞았다 · QUALITY §2 ≤ 0.35m)
+      const shown = Math.min(len, Math.hypot(stop.x - mon.pos.x, stop.z - mon.pos.z)) + mon.r;
       const shape = line(mon.pos.x, mon.pos.z, facing, shown, mon.r * 2);
       if (canStartHazard(ctx, -1, p.pos.x, p.pos.z, { srcId: mon.id, shape })) {
         const delay = startAttack(ctx, mon, ch.id, { facing, aim: { x: ex, z: ez }, lockAim: true });
@@ -394,9 +396,11 @@ const bloater = {
     const burst = attackOfKind(def, 'explode');
     const pr = burst?.params;
     if (!burst || !pr || !(pr.poolR > 0)) return;
+    const shape = circle(mon.pos.x, mon.pos.z, pr.poolR);
+    // 리뷰 수정: 감옥에 묶인 플레이어 발밑이면 웅덩이가 풀린 뒤 + 반응 + 걸어 나가는 시간 뒤에 놓인다(rootSafeDelay — 묶인 채 틱 피해를 받지 않게)
     spawnEffect(ctx, {
-      kind: FX.poisonPool, owner: 'mon', srcId: mon.id, packId: mon.packId, hostile: true, shape: circle(mon.pos.x, mon.pos.z, pr.poolR),
-      delay: 0, dur: pr.poolSec ?? 0, tick: pr.poolTick ?? 0, spec: null,
+      kind: FX.poisonPool, owner: 'mon', srcId: mon.id, packId: mon.packId, hostile: true, shape,
+      delay: rootSafeDelay(ctx, shape, 0), dur: pr.poolSec ?? 0, tick: pr.poolTick ?? 0, spec: null,
       tickSpec: { srcId: mon.id, via: 'hazard', raw: mon.dmg * (pr.poolMulPerSec ?? 0) * (pr.poolTick ?? 0), type: burst.type, level: mon.level },
       cancelOnSrcDeath: false,
     });

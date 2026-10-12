@@ -5,6 +5,7 @@
 
 import { RARITIES } from '../../core/constants.js';
 import { fmtInt, fmtSec } from '../format.js';
+import { completeBadges } from '../pnlLogic.js';
 
 /** @typedef {import('../../types.js').Panel} Panel */
 
@@ -89,11 +90,11 @@ export function createRiftCompletePanel(ctx) {
     shown = s;
     if (!s) { table.textContent = ''; return; }
     h.textContent = t('complete.title', { n: s.level });
-    // 이번 판이 해금을 올렸을 때만(이미 더 높이 열려 있으면 새로 열린 것이 없다)
-    const raised = s.unlockedTo >= s.level + 1 && s.unlockedTo <= s.level + (s.noDeath ? 2 : 1);
+    // 이번 판이 해금을 실제로 올렸을 때만 — 균열을 열 때의 해금(UIRoot 가 RIFT_OPENED 에 적는다)과 비교(pnlLogic.completeBadges)
+    const b = completeBadges(s, Number.isFinite(ui?.unlockAtOpen) ? ui.unlockAtOpen : null);
     unlock.textContent = t('complete.unlock', { n: s.unlockedTo });
-    unlock.hidden = !raised;
-    bonus.hidden = !(raised && s.noDeath);
+    unlock.hidden = !b.raised;
+    bonus.hidden = !b.bonus;
     record.hidden = !s.record;
     renderSummary(table, s, t, w);
   }

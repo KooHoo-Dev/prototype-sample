@@ -3,6 +3,7 @@
 // spec null 은 판정 없는 표시 전용(돌진 선 · 역병의 예고 부분) · 첫 지속 판정 = hitAt + tickT(웅덩이가 놓이는 틱에 바로 맞지 않는다).
 // 끝난 것 · 취소된 것(end ≤ tick 이고 resolved 이거나 end ≤ hitAt)은 건드리지 않는다 — 판정 전에 취소된 예고가 같은 틱에 맞히지 않는다.
 
+import { TICK_HZ } from '../core/constants.js';
 import { EV } from '../core/events.js';
 import { overlaps } from '../core/shapes.js';
 import { ticks } from '../core/time.js';
@@ -175,6 +176,26 @@ export function canStartHazard(ctx, packId, x, z, { jail = false, count = 1, src
   const c = Number.isFinite(count) && count > 0 ? count : 1;
   if (nearCount && inProgress + c > HAZARD.maxNear) return false;
   return true;
+}
+
+/**
+ * 리뷰 수정 — 위협 간격(H1~H4)의 예외인 사망 위협(화염 강화 폭발 · 역병 덩어리 웅덩이)도 「묶인 채 맞는」 일이 없게 예고를 늘린다.
+ * 플레이어가 묶여 있고(tick < player.st.rootUntil) 그 원이 플레이어 몸과 겹치면 →
+ *   max(delay, 남은 속박(초) + HAZARD.react + (원 r + 몸 r − 중심 거리) / HAZARD.slowSpeed) — 풀린 뒤에도 H5 처럼 걸어 나갈 시간이 있다.
+ * 그 밖에는 delay 그대로(원이 아닌 모양도 그대로).
+ * @param {SimCtx} ctx @param {Shape} shape @param {number} delay 초 @returns {number} 초
+ */
+export function rootSafeDelay(ctx, shape, delay) {
+  const st = ctx.state;
+  const p = st.player;
+  const d0 = Number.isFinite(delay) && delay > 0 ? delay : 0;
+  if (!p || p.dead || !st.rift || !shape || shape.type !== 'circle') return d0;
+  const tick = st.tick;
+  const rootUntil = p.st?.rootUntil ?? -1;
+  if (!(rootUntil > tick) || !overlaps(shape, p.pos.x, p.pos.z, p.r)) return d0;
+  const out = Math.max(0, shape.r + p.r - Math.hypot(p.pos.x - shape.x, p.pos.z - shape.z));
+  const need = (rootUntil - tick) / TICK_HZ + HAZARD.react + out / HAZARD.slowSpeed;
+  return Math.max(d0, need);
 }
 
 /** 플레이어를 묶는 예고인가(판정 spec 의 onHit.rootSec) @param {Effect} e */

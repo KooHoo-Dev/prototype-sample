@@ -4,6 +4,8 @@
 //   빛 = 반구광 + 해(마을만) + 플레이어 머리 위 점광원 + 맵 빛 풀(maxLights − 1 — WorldLayer 가 가까운 빛을 배정).
 //   화질: settings 객체(app 이 필드만 바꾼다)의 quality 가 바뀌면 render() 가 setQuality 를 부른다(SETTINGS_CHANGED 를 기다리지 않는다).
 //   antialias 는 만들 때만 정해진다(화질을 low ↔ 그 밖으로 바꿔도 다음 부팅부터).
+//   devicePixelRatio 는 실행 중에도 바뀐다(창을 다른 배율의 모니터로 옮김 · 브라우저 확대 Ctrl +/−) — render() · resize() 가 매번 값을 보고
+//   바뀌었으면 픽셀 비율을 다시 맞춘다(리스너 없음 · 창 크기가 그대로인 확대도 잡힌다).
 // WebGL 을 만들지 못하면 throw(app 이 잡는다).
 // rc 에 계약 밖 필드: lights(LightRig) · quality(지금 화질 ID) · setAtmosphere(tileset) — P7 내부(WorldLayer · CameraRig)만 쓴다.
 
@@ -56,6 +58,16 @@ export function createRenderContext(canvas, settings) {
   const ray = new THREE.Raycaster();
   const rayOut = { ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0 };
   let cssW = 1, cssH = 1;
+  /** 픽셀 비율을 마지막으로 맞춘 devicePixelRatio(바뀌었는지만 본다 — 매 프레임 비용은 비교 하나) */
+  let syncedDpr = -1;
+  const readDpr = () => (typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1);
+  /** 픽셀 비율 = min(devicePixelRatio, QUALITY[q].pixelRatio)(상한 2 · §9.2) — 다를 때만 setPixelRatio(캔버스 버퍼를 다시 잡는다) */
+  const syncPixelRatio = () => {
+    const dpr = readDpr();
+    syncedDpr = dpr;
+    const want = Math.min(dpr, QUALITY[rc.quality]?.pixelRatio ?? 1, 2);
+    if (renderer.getPixelRatio() !== want) renderer.setPixelRatio(want);
+  };
 
   /** @type {RenderContext & {lights:any, quality:string, setAtmosphere:(ts:string) => void}} */
   const rc = {
@@ -63,6 +75,7 @@ export function createRenderContext(canvas, settings) {
     resize(w, h) {
       cssW = Math.max(1, Math.floor(w) || 1);
       cssH = Math.max(1, Math.floor(h) || 1);
+      if (readDpr() !== syncedDpr) syncPixelRatio();
       renderer.setSize(cssW, cssH, false);
       camera.aspect = cssW / cssH;
       camera.updateProjectionMatrix();
@@ -71,8 +84,7 @@ export function createRenderContext(canvas, settings) {
       const id = QUALITY[q] ? q : 'medium';
       const Q = QUALITY[id];
       rc.quality = id;
-      const dpr = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
-      renderer.setPixelRatio(Math.min(dpr, Q.pixelRatio, 2));
+      syncPixelRatio();
       lights.setPoolSize(Q.maxLights - 1);
       renderer.shadowMap.enabled = !!Q.shadows;
       lights.setShadows(!!Q.shadows);
@@ -83,6 +95,7 @@ export function createRenderContext(canvas, settings) {
     render() {
       const want = settings?.quality;
       if (want && want !== rc.quality && QUALITY[want]) rc.setQuality(want);
+      else if (readDpr() !== syncedDpr) syncPixelRatio();
       renderer.render(scene, camera);
     },
     dispose() {

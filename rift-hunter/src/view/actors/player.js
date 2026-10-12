@@ -10,7 +10,8 @@ import { BASES_BY_ID, getSkillDef } from '../../data/index.js';
 import { weaponVisual } from '../../sim/loot/stats.js';
 import { CHAR_DIMS, charParts } from './gear.js';
 import {
-  actionPose, attackPhase, bipedBase, bipedBreathe, bipedFall, bipedWalk, clamp01, compileKey, ease, frac, phaseStep, stepLenOf,
+  actionPose, attackPhase, bipedBase, bipedBreathe, bipedFall, bipedWalk, clamp01, compileKey, ease, frac, newFacingTrack, phaseStep, stepLenOf,
+  trackFacing,
 } from './poses.js';
 import { BJ, BP, fkBiped, makeJoints } from './rig.js';
 import { BIPED_FAMILIES } from './variants.js';
@@ -186,9 +187,19 @@ export class PlayerPoser {
     this.lastNow = 0;
     this.fresh = true;
     this._ph = { stage: 0, u: 0, r: 0 };
+    /** 그린 방향 보간(마지막 두 틱의 facing — poses.js trackFacing) */
+    this.face = newFacingTrack();
   }
 
-  reset() { this.fresh = true; }
+  reset() { this.fresh = true; this.face.fTick = -1; }
+
+  /**
+   * 그릴 방향 — 마지막 두 틱의 facing 을 alpha 로 최단 호 보간(위치 보간과 같은 alpha). snap = 보간 끊기(순간이동)
+   * @param {number} facing sim 값 @param {number} tick state.tick @param {number} alpha @param {boolean} snap @returns {number}
+   */
+  facing(facing, tick, alpha, snap) {
+    return trackFacing(this.face, facing, tick, alpha, snap || this.fresh);
+  }
 
   _base(cls, style) {
     const byCls = this.bases[cls] ?? (this.bases[cls] = {});
@@ -212,8 +223,9 @@ export class PlayerPoser {
    * 플레이어 포즈 — out(BP) · 반환 = 투명도(순간이동 0.1초 전후)
    * @param {Float32Array} out @param {import('../../types.js').PlayerState} p @param {string} cls @param {string} style
    * @param {number} now state.tick + alpha @param {number} t 실제 시간 @param {number} x @param {number} z 보간 위치
+   * @param {number} [facing] 그릴 방향(facing() — 없으면 p.facing) · 걷기 방향(몸 기준)과 누운 방향이 그린 몸에 맞게
    */
-  pose(out, p, cls, style, now, t, x, z) {
+  pose(out, p, cls, style, now, t, x, z, facing = p.facing) {
     const d = CHAR_DIMS[cls];
     const base = this._base(cls, style);
     out.set(base);
@@ -221,7 +233,7 @@ export class PlayerPoser {
     this.lastNow = now;
     let dist = Math.hypot(x - this.px, z - this.pz);
     if (this.fresh || dist > 2.5) dist = 0;
-    const f = p.facing, sF = Math.sin(f), cF = Math.cos(f);
+    const f = facing, sF = Math.sin(f), cF = Math.cos(f);
     if (dist > 1e-5) {
       const dx = x - this.px, dz = z - this.pz;
       const lx = (dx * cF - dz * sF) / dist, lz = (dx * sF + dz * cF) / dist;
