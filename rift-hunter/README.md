@@ -7,7 +7,9 @@
 
 ## 바로 해 보기
 
-dev 서버(`npm.cmd --prefix rift-hunter run dev`)를 띄운 뒤 주소창에 — 몇 시간 하지 않아도 균열 10 · 정예 속성 · 전설을 볼 수 있다. 이 주소들은 **개발 세션**이라 세이브를 읽지도 쓰지도 않는다(좌상단 「개발 세션 — 저장 안 됨」).
+**갤러리(설치 없이)**: https://koohoo-dev.github.io/prototype-sample/rift-hunter/ — 아래 표의 쿼리(`?class=…` 등)를 이 주소 뒤에 그대로 붙여도 된다. 예: [전사 균열 10](https://koohoo-dev.github.io/prototype-sample/rift-hunter/?class=warrior&level=18&rift=10) · [정예 속성 12](https://koohoo-dev.github.io/prototype-sample/rift-hunter/?fixture=riftAffixes) · [봇 관전](https://koohoo-dev.github.io/prototype-sample/rift-hunter/?class=warrior&level=24&rift=18&bot=1) · [분석 패널](https://koohoo-dev.github.io/prototype-sample/rift-hunter/?analytics=1). 공개 빌드에도 디버그 API(`window.__game`)와 개발용 쿼리가 들어 있다 — 싱글 · 로컬 저장 게임이라 그대로 둔다.
+
+**로컬**: dev 서버(`npm.cmd --prefix rift-hunter run dev`)를 띄운 뒤 주소창에 — 몇 시간 하지 않아도 균열 10 · 정예 속성 · 전설을 볼 수 있다. 이 주소들은 **개발 세션**이라 세이브를 읽지도 쓰지도 않는다(좌상단 「개발 세션 — 저장 안 됨」).
 
 | 주소 | 무엇 |
 |---|---|
